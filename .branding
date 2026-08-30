@@ -1,0 +1,64 @@
+{
+  "name": "WhatsMine",
+  "updated": "2026-06-19",
+  "description": "Brand identity for WhatsMine. Source of truth for the name and color palette. Tailwind tokens in tailwind.config.js are derived from the scales below.",
+  "palette": {
+    "primary": "#467235",
+    "amber": "#FFBF00",
+    "lightYellow": "#FFF78D",
+    "darkGreen": "#283F24"
+  },
+  "roles": {
+    "brand": "#467235",
+    "accent": "#FFBF00",
+    "highlight": "#FFF78D",
+    "secondary": "#283F24",
+    "surface": "#f7faec",
+    "danger": "#f04e2e"
+  },
+  "scales": {
+    "brand": {
+      "50": "#f2f8ec",
+      "100": "#dfeecf",
+      "200": "#c0dca6",
+      "300": "#9bc476",
+      "400": "#76a84e",
+      "500": "#5a8b38",
+      "600": "#467235",
+      "700": "#38592a",
+      "800": "#2f4a25",
+      "900": "#283f24",
+      "950": "#162610"
+    },
+    "accent": {
+      "50": "#fffdeb",
+      "100": "#fffbc4",
+      "200": "#fff78d",
+      "300": "#ffe24a",
+      "400": "#ffcf1f",
+      "500": "#ffbf00",
+      "600": "#e29400",
+      "700": "#bb6c02",
+      "800": "#985308",
+      "900": "#7c450b",
+      "950": "#482400"
+    },
+    "secondary": {
+      "50": "#eef2ec",
+      "100": "#d3ddce",
+      "200": "#b3c4ab",
+      "300": "#8da583",
+      "400": "#6c8760",
+      "500": "#4f6b43",
+      "600": "#3d5534",
+      "700": "#32462b",
+      "800": "#283f24",
+      "900": "#20321d",
+      "950": "#121d10"
+    },
+    "surface": {
+      "DEFAULT": "#f7faec",
+      "subtle": "#eef4dd"
+    }
+  }
+}

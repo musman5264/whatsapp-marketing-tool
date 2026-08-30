@@ -1,0 +1,93 @@
+# docker-compose.queues.yml
+#
+# Overlay for running all named queue workers as separate containers.
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.queues.yml up -d
+#
+# Each service uses the same app image but runs a different queue.
+
+version: "3.9"
+
+x-queue-defaults: &queue-defaults
+  image: ${APP_IMAGE:-app}
+  restart: unless-stopped
+  depends_on:
+    - redis
+    - db
+  env_file: .env
+  volumes:
+    - .:/var/www/html:cached
+    - ./storage:/var/www/html/storage
+
+services:
+  queue-default:
+    <<: *queue-defaults
+    command: php artisan queue:work redis --queue=default --sleep=3 --tries=3 --max-time=3600
+    deploy:
+      replicas: 2
+
+  queue-whatsapp:
+    <<: *queue-defaults
+    command: php artisan queue:work redis --queue=whatsapp --sleep=2 --tries=3 --max-time=3600
+    deploy:
+      replicas: 3
+
+  queue-broadcast:
+    <<: *queue-defaults
+    command: php artisan queue:work redis --queue=broadcast --sleep=3 --tries=2 --max-time=3600
+    deploy:
+      replicas: 2
+
+  queue-ai:
+    <<: *queue-defaults
+    command: php artisan queue:work redis --queue=ai --sleep=3 --tries=3 --max-time=600
+    deploy:
+      replicas: 2
+
+  queue-social:
+    <<: *queue-defaults
+    command: php artisan queue:work redis --queue=social --sleep=5 --tries=3 --max-time=3600
+    deploy:
+      replicas: 2
+
+  queue-leads:
+    <<: *queue-defaults
+    command: php artisan queue:work redis --queue=leads --sleep=5 --tries=2 --max-time=1800
+    deploy:
+      replicas: 1
+
+  queue-automation:
+    <<: *queue-defaults
+    command: php artisan queue:work redis --queue=automation --sleep=3 --tries=3 --max-time=1800
+    deploy:
+      replicas: 2
+
+  reverb:
+    <<: *queue-defaults
+    command: php artisan reverb:start --host=0.0.0.0 --port=8080
+    ports:
+      - "8080:8080"
+    restart: unless-stopped
+
+  # WhatsApp Web (QR / personal number) engine — unofficial, against WhatsApp ToS.
+  # Only needed if you enable the WhatsApp Web channel. The free `waha` image is
+  # single-session (one linked number per deployment); swap to `devlikeapro/waha-plus`
+  # for multi-session (one linked number per workspace).
+  # After it is up, configure it in Admin → Integrations → WhatsApp Web with
+  # base URL http://waha:3000 and the WAHA_API_KEY below.
+  waha:
+    image: devlikeapro/waha:latest
+    restart: unless-stopped
+    environment:
+      - WAHA_API_KEY=${WAHA_API_KEY:-}
+      - WHATSAPP_DEFAULT_ENGINE=NOWEB
+      - WAHA_PRINT_QR=false
+    volumes:
+      - waha-sessions:/app/.sessions
+    # Reachable from the app containers at http://waha:3000 on the compose network.
+    # Expose a host port only if you need to hit the WAHA dashboard directly.
+    # ports:
+    #   - "3000:3000"
+
+volumes:
+  waha-sessions:

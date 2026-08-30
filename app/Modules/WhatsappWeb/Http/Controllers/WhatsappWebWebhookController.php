@@ -1,0 +1,98 @@
+<?php
+
+namespace App\Modules\WhatsappWeb\Http\Controllers;
+
+use App\Http\Controllers\Concerns\FlushesWebhookResponse;
+use App\Http\Controllers\Controller;
+use App\Modules\Integrations\Services\CredentialResolver;
+use App\Modules\WhatsappWeb\Jobs\ProcessWahaEventJob;
+use App\Modules\WhatsappWeb\Models\WhatsappWebSession;
+use App\Services\WebhookIdempotencyService;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
+
+/**
+ * POST /webhooks/whatsapp-web/{token} — inbound events from the WAHA engine.
+ * Public route; authenticity is the per-session token plus an optional HMAC
+ * signature (WAHA `X-Webhook-Hmac`, keyed by the configured webhook secret).
+ */
+class WhatsappWebWebhookController extends Controller
+{
+    use FlushesWebhookResponse;
+
+    public function receive(Request $request, string $token): JsonResponse
+    {
+        $session = WhatsappWebSession::findByWebhookToken($token);
+        if (! $session) {
+            Log::warning('whatsapp_web.webhook.unknown_token', [
+                'ip' => $request->ip(),
+                'token_hash' => hash('sha256', $token),
+            ]);
+            abort(403, 'Invalid webhook token');
+        }
+
+        $secret = CredentialResolver::system()->whatsappWeb()?->webhookSecret();
+        if ($secret) {
+            $this->verifyHmac($request, $secret);
+        } elseif (app()->environment('production')) {
+            Log::critical('whatsapp_web.webhook.no_secret', ['session' => $session->session_name]);
+            abort(401, 'Webhook secret not configured');
+        } else {
+            Log::warning('whatsapp_web.webhook.unsigned', ['session' => $session->session_name]);
+        }
+
+        $payload = $request->all();
+        $event = (string) ($payload['event'] ?? '');
+        $eventId = $this->eventKey($payload);
+
+        if ($eventId !== null
+            && ! app(WebhookIdempotencyService::class)->isNewEvent('whatsapp_web', $eventId)) {
+            return response()->json(['status' => 'ok']);
+        }
+
+        Log::info('whatsapp_web.webhook.received', [
+            'session' => $session->session_name,
+            'event' => $event,
+        ]);
+
+        return $this->flushWebhookOkThen(
+            fn () => ProcessWahaEventJob::dispatch($payload, $session->id)->onQueue('whatsapp')
+        );
+    }
+
+    /** @param array<string,mixed> $payload */
+    private function eventKey(array $payload): ?string
+    {
+        $event = (string) ($payload['event'] ?? '');
+        $p = $payload['payload'] ?? [];
+
+        $id = $p['id']['_serialized'] ?? $p['id'] ?? null;
+        if (is_string($id) && $id !== '') {
+            // ack transitions must each be processed, so fold the ack level in.
+            $suffix = $event === 'message.ack' ? ':'.($p['ack'] ?? '') : '';
+
+            return $event.':'.$id.$suffix;
+        }
+
+        if ($event === 'session.status') {
+            return $event.':'.($p['status'] ?? '').':'.($payload['session'] ?? '');
+        }
+
+        return null; // fail-open: let the job decide
+    }
+
+    private function verifyHmac(Request $request, string $secret): void
+    {
+        $received = (string) $request->header('X-Webhook-Hmac', '');
+        $expected = hash_hmac('sha256', $request->getContent(), $secret);
+
+        if (! hash_equals($expected, $received)) {
+            Log::warning('whatsapp_web.webhook.signature_mismatch', [
+                'ip' => $request->ip(),
+                'received' => substr($received, 0, 16).'…',
+            ]);
+            abort(401, 'Invalid signature');
+        }
+    }
+}
