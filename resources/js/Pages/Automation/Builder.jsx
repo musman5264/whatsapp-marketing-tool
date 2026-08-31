@@ -1159,6 +1159,7 @@ function SubflowFields({ d, set }) {
 function AIReplyFields({ d, set }) {
     const { t } = useTranslation();
     const { chatbots = [] } = useResources();
+    const sendReply = d.send_reply !== false;
     return (
         <>
             <Field label={t('automation.field_chatbot_optional')}>
@@ -1170,7 +1171,17 @@ function AIReplyFields({ d, set }) {
             <Field label={d.chatbot_id ? t('automation.field_prompt_optional') : t('automation.field_prompt_instructions_required')}>
                 <textarea className={textareaCls} rows={5} value={d.prompt ?? ''} onChange={e => set('prompt', e.target.value)} placeholder={t('automation.placeholder_ai_prompt')} />
             </Field>
-            <ChannelSelect d={d} set={set} />
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: '#374151', cursor: 'pointer' }}>
+                <input type="checkbox" checked={sendReply} onChange={e => set('send_reply', e.target.checked)} />
+                {t('automation.ai_send_reply')}
+            </label>
+            <Field label={t('automation.ai_save_to_variable')}>
+                <input className={inputCls} value={d.variable ?? ''} onChange={e => set('variable', e.target.value.replace(/[^\w]/g, ''))} placeholder="ai_reply" />
+                <p style={{ fontSize: 10, color: '#94a3b8', marginTop: 3 }}>
+                    {t('automation.ai_variable_hint')}
+                </p>
+            </Field>
+            {sendReply && <ChannelSelect d={d} set={set} />}
         </>
     );
 }

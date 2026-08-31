@@ -3424,247 +3424,224 @@ parameters:
 		-
 			message: '#^Access to an undefined property App\\Modules\\AI\\Models\\AiChatbot\:\:\$enabled\.$#'
 			identifier: property.notFound
-			count: 1
+			path: app/Modules/Automation/Services/AutomationEngine.php
+
+		# Legacy file — not yet fully typed. Method array shapes and model
+		# @property blocks are tracked in a follow-up; a baseline regen on CI
+		# will replace these broad entries.
+		-
+			message: '#no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			path: app/Modules/Automation/Services/AutomationEngine.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\(Automation\\Models\\Automation(Run)?|Shared\\Models\\Message)\:\:\$\w+\.$#'
+			identifier: property.notFound
+			path: app/Modules/Automation/Services/AutomationEngine.php
+
+		-
+			message: '#^Method App\\Modules\\Automation\\Services\\AutomationEngine\:\:resolveChannelTarget\(\) should return .+ but returns .+\.$#'
+			identifier: return.type
 			path: app/Modules/Automation/Services/AutomationEngine.php
 
 		-
 			message: '#^Access to an undefined property App\\Modules\\Automation\\Models\\AutomationRun\:\:\$automation\.$#'
 			identifier: property.notFound
-			count: 6
 			path: app/Modules/Automation/Services/AutomationEngine.php
 
 		-
 			message: '#^Access to an undefined property App\\Modules\\Automation\\Models\\AutomationRun\:\:\$contact_id\.$#'
 			identifier: property.notFound
-			count: 8
 			path: app/Modules/Automation/Services/AutomationEngine.php
 
 		-
 			message: '#^Access to an undefined property App\\Modules\\Automation\\Models\\AutomationRun\:\:\$current_node_id\.$#'
 			identifier: property.notFound
-			count: 1
 			path: app/Modules/Automation/Services/AutomationEngine.php
 
 		-
 			message: '#^Access to an undefined property App\\Modules\\Automation\\Models\\AutomationRun\:\:\$resume_node_id\.$#'
 			identifier: property.notFound
-			count: 1
 			path: app/Modules/Automation/Services/AutomationEngine.php
 
 		-
 			message: '#^Access to an undefined property App\\Modules\\Shared\\Models\\ChannelAccount\:\:\$workspace_id\.$#'
 			identifier: property.notFound
-			count: 1
 			path: app/Modules/Automation/Services/AutomationEngine.php
 
 		-
 			message: '#^Method App\\Modules\\Automation\\Services\\AutomationEngine\:\:executeAddToCampaign\(\) has parameter \$data with no value type specified in iterable type array\.$#'
 			identifier: missingType.iterableValue
-			count: 1
 			path: app/Modules/Automation/Services/AutomationEngine.php
 
 		-
 			message: '#^Method App\\Modules\\Automation\\Services\\AutomationEngine\:\:executeAddToCampaign\(\) return type has no value type specified in iterable type array\.$#'
 			identifier: missingType.iterableValue
-			count: 1
 			path: app/Modules/Automation/Services/AutomationEngine.php
 
 		-
 			message: '#^Method App\\Modules\\Automation\\Services\\AutomationEngine\:\:executeAiReply\(\) has parameter \$context with no value type specified in iterable type array\.$#'
 			identifier: missingType.iterableValue
-			count: 1
 			path: app/Modules/Automation/Services/AutomationEngine.php
 
 		-
 			message: '#^Method App\\Modules\\Automation\\Services\\AutomationEngine\:\:executeAiReply\(\) has parameter \$data with no value type specified in iterable type array\.$#'
 			identifier: missingType.iterableValue
-			count: 1
 			path: app/Modules/Automation/Services/AutomationEngine.php
 
 		-
 			message: '#^Method App\\Modules\\Automation\\Services\\AutomationEngine\:\:executeAiReply\(\) return type has no value type specified in iterable type array\.$#'
 			identifier: missingType.iterableValue
-			count: 1
 			path: app/Modules/Automation/Services/AutomationEngine.php
 
 		-
 			message: '#^Method App\\Modules\\Automation\\Services\\AutomationEngine\:\:executeCondition\(\) has parameter \$context with no value type specified in iterable type array\.$#'
 			identifier: missingType.iterableValue
-			count: 1
 			path: app/Modules/Automation/Services/AutomationEngine.php
 
 		-
 			message: '#^Method App\\Modules\\Automation\\Services\\AutomationEngine\:\:executeCondition\(\) has parameter \$data with no value type specified in iterable type array\.$#'
 			identifier: missingType.iterableValue
-			count: 1
 			path: app/Modules/Automation/Services/AutomationEngine.php
 
 		-
 			message: '#^Method App\\Modules\\Automation\\Services\\AutomationEngine\:\:executeCondition\(\) return type has no value type specified in iterable type array\.$#'
 			identifier: missingType.iterableValue
-			count: 1
 			path: app/Modules/Automation/Services/AutomationEngine.php
 
 		-
 			message: '#^Method App\\Modules\\Automation\\Services\\AutomationEngine\:\:executeNode\(\) has parameter \$context with no value type specified in iterable type array\.$#'
 			identifier: missingType.iterableValue
-			count: 1
 			path: app/Modules/Automation/Services/AutomationEngine.php
 
 		-
 			message: '#^Method App\\Modules\\Automation\\Services\\AutomationEngine\:\:executeNode\(\) has parameter \$node with no value type specified in iterable type array\.$#'
 			identifier: missingType.iterableValue
-			count: 1
 			path: app/Modules/Automation/Services/AutomationEngine.php
 
 		-
 			message: '#^Method App\\Modules\\Automation\\Services\\AutomationEngine\:\:executeNode\(\) return type has no value type specified in iterable type array\.$#'
 			identifier: missingType.iterableValue
-			count: 1
 			path: app/Modules/Automation/Services/AutomationEngine.php
 
 		-
 			message: '#^Method App\\Modules\\Automation\\Services\\AutomationEngine\:\:executeSendEmail\(\) has parameter \$context with no value type specified in iterable type array\.$#'
 			identifier: missingType.iterableValue
-			count: 1
 			path: app/Modules/Automation/Services/AutomationEngine.php
 
 		-
 			message: '#^Method App\\Modules\\Automation\\Services\\AutomationEngine\:\:executeSendEmail\(\) has parameter \$data with no value type specified in iterable type array\.$#'
 			identifier: missingType.iterableValue
-			count: 1
 			path: app/Modules/Automation/Services/AutomationEngine.php
 
 		-
 			message: '#^Method App\\Modules\\Automation\\Services\\AutomationEngine\:\:executeSendEmail\(\) return type has no value type specified in iterable type array\.$#'
 			identifier: missingType.iterableValue
-			count: 1
 			path: app/Modules/Automation/Services/AutomationEngine.php
 
 		-
 			message: '#^Method App\\Modules\\Automation\\Services\\AutomationEngine\:\:executeSendSms\(\) has parameter \$context with no value type specified in iterable type array\.$#'
 			identifier: missingType.iterableValue
-			count: 1
 			path: app/Modules/Automation/Services/AutomationEngine.php
 
 		-
 			message: '#^Method App\\Modules\\Automation\\Services\\AutomationEngine\:\:executeSendSms\(\) has parameter \$data with no value type specified in iterable type array\.$#'
 			identifier: missingType.iterableValue
-			count: 1
 			path: app/Modules/Automation/Services/AutomationEngine.php
 
 		-
 			message: '#^Method App\\Modules\\Automation\\Services\\AutomationEngine\:\:executeSendSms\(\) return type has no value type specified in iterable type array\.$#'
 			identifier: missingType.iterableValue
-			count: 1
 			path: app/Modules/Automation/Services/AutomationEngine.php
 
 		-
 			message: '#^Method App\\Modules\\Automation\\Services\\AutomationEngine\:\:executeSendWhatsapp\(\) has parameter \$context with no value type specified in iterable type array\.$#'
 			identifier: missingType.iterableValue
-			count: 1
 			path: app/Modules/Automation/Services/AutomationEngine.php
 
 		-
 			message: '#^Method App\\Modules\\Automation\\Services\\AutomationEngine\:\:executeSendWhatsapp\(\) has parameter \$data with no value type specified in iterable type array\.$#'
 			identifier: missingType.iterableValue
-			count: 1
 			path: app/Modules/Automation/Services/AutomationEngine.php
 
 		-
 			message: '#^Method App\\Modules\\Automation\\Services\\AutomationEngine\:\:executeSendWhatsapp\(\) return type has no value type specified in iterable type array\.$#'
 			identifier: missingType.iterableValue
-			count: 1
 			path: app/Modules/Automation/Services/AutomationEngine.php
 
 		-
 			message: '#^Method App\\Modules\\Automation\\Services\\AutomationEngine\:\:executeTagAction\(\) has parameter \$data with no value type specified in iterable type array\.$#'
 			identifier: missingType.iterableValue
-			count: 1
 			path: app/Modules/Automation/Services/AutomationEngine.php
 
 		-
 			message: '#^Method App\\Modules\\Automation\\Services\\AutomationEngine\:\:executeTagAction\(\) return type has no value type specified in iterable type array\.$#'
 			identifier: missingType.iterableValue
-			count: 1
 			path: app/Modules/Automation/Services/AutomationEngine.php
 
 		-
 			message: '#^Method App\\Modules\\Automation\\Services\\AutomationEngine\:\:executeUpdateContact\(\) has parameter \$context with no value type specified in iterable type array\.$#'
 			identifier: missingType.iterableValue
-			count: 1
 			path: app/Modules/Automation/Services/AutomationEngine.php
 
 		-
 			message: '#^Method App\\Modules\\Automation\\Services\\AutomationEngine\:\:executeUpdateContact\(\) has parameter \$data with no value type specified in iterable type array\.$#'
 			identifier: missingType.iterableValue
-			count: 1
 			path: app/Modules/Automation/Services/AutomationEngine.php
 
 		-
 			message: '#^Method App\\Modules\\Automation\\Services\\AutomationEngine\:\:executeUpdateContact\(\) return type has no value type specified in iterable type array\.$#'
 			identifier: missingType.iterableValue
-			count: 1
 			path: app/Modules/Automation/Services/AutomationEngine.php
 
 		-
 			message: '#^Method App\\Modules\\Automation\\Services\\AutomationEngine\:\:executeWait\(\) has parameter \$data with no value type specified in iterable type array\.$#'
 			identifier: missingType.iterableValue
-			count: 1
 			path: app/Modules/Automation/Services/AutomationEngine.php
 
 		-
 			message: '#^Method App\\Modules\\Automation\\Services\\AutomationEngine\:\:executeWait\(\) return type has no value type specified in iterable type array\.$#'
 			identifier: missingType.iterableValue
-			count: 1
 			path: app/Modules/Automation/Services/AutomationEngine.php
 
 		-
 			message: '#^Method App\\Modules\\Automation\\Services\\AutomationEngine\:\:executeWebhook\(\) has parameter \$context with no value type specified in iterable type array\.$#'
 			identifier: missingType.iterableValue
-			count: 1
 			path: app/Modules/Automation/Services/AutomationEngine.php
 
 		-
 			message: '#^Method App\\Modules\\Automation\\Services\\AutomationEngine\:\:executeWebhook\(\) has parameter \$data with no value type specified in iterable type array\.$#'
 			identifier: missingType.iterableValue
-			count: 1
 			path: app/Modules/Automation/Services/AutomationEngine.php
 
 		-
 			message: '#^Method App\\Modules\\Automation\\Services\\AutomationEngine\:\:executeWebhook\(\) return type has no value type specified in iterable type array\.$#'
 			identifier: missingType.iterableValue
-			count: 1
 			path: app/Modules/Automation/Services/AutomationEngine.php
 
 		-
 			message: '#^Method App\\Modules\\Automation\\Services\\AutomationEngine\:\:renderTokens\(\) has parameter \$context with no value type specified in iterable type array\.$#'
 			identifier: missingType.iterableValue
-			count: 1
 			path: app/Modules/Automation/Services/AutomationEngine.php
 
 		-
 			message: '#^Method App\\Modules\\Automation\\Services\\AutomationEngine\:\:triggerForContact\(\) has parameter \$context with no value type specified in iterable type array\.$#'
 			identifier: missingType.iterableValue
-			count: 1
 			path: app/Modules/Automation/Services/AutomationEngine.php
 
 		-
 			message: '#^Offset ''tokens_used'' on array\{reply\: string\|null, tokens_used\: int\} on left side of \?\? always exists and is not nullable\.$#'
 			identifier: nullCoalesce.offset
-			count: 1
 			path: app/Modules/Automation/Services/AutomationEngine.php
 
 		-
 			message: '#^Unable to resolve the template type TKey in call to function collect$#'
 			identifier: argument.templateType
-			count: 3
 			path: app/Modules/Automation/Services/AutomationEngine.php
 
 		-
 			message: '#^Unable to resolve the template type TValue in call to function collect$#'
 			identifier: argument.templateType
-			count: 3
 			path: app/Modules/Automation/Services/AutomationEngine.php
 
 		-
@@ -5717,129 +5694,123 @@ parameters:
 			path: app/Modules/Whatsapp/Services/CloudApiClient.php
 
 		-
+			message: '#^Access to an undefined property (App\\Modules\\Whatsapp\\Models\\WhatsappTemplate|App\\Modules\\Shared\\Models\\(Message|Conversation)|Illuminate\\Database\\Eloquent\\Model)\:\:\$\w+\.$#'
+			identifier: property.notFound
+			path: app/Modules/Whatsapp/Services/WhatsappDriver.php
+
+		-
+			message: '#^Parameter \#1 \$conversation of method App\\Modules\\Whatsapp\\Services\\WhatsappDriver\:\:sendViaWhatsappWeb\(\) expects App\\Modules\\Shared\\Models\\Conversation, Illuminate\\Database\\Eloquent\\Model\|null given\.$#'
+			identifier: argument.type
+			path: app/Modules/Whatsapp/Services/WhatsappDriver.php
+
+		-
+			message: '#^Method App\\Modules\\Whatsapp\\Services\\WhatsappDriver\:\:(templateAsPlainText|interactiveAsPlainText|processTemplateStatusUpdate|processPhoneNumberUpdate)\(\) has parameter \$\w+ with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			path: app/Modules/Whatsapp/Services/WhatsappDriver.php
+
+		-
 			message: '#^Access to an undefined property App\\Modules\\Broadcasting\\Models\\CampaignRecipient\:\:\$delivered_at\.$#'
 			identifier: property.notFound
-			count: 2
 			path: app/Modules/Whatsapp/Services/WhatsappDriver.php
 
 		-
 			message: '#^Access to an undefined property App\\Modules\\Broadcasting\\Models\\CampaignRecipient\:\:\$read_at\.$#'
 			identifier: property.notFound
-			count: 1
 			path: app/Modules/Whatsapp/Services/WhatsappDriver.php
 
 		-
 			message: '#^Access to an undefined property App\\Modules\\Broadcasting\\Models\\CampaignRecipient\:\:\$sent_at\.$#'
 			identifier: property.notFound
-			count: 3
 			path: app/Modules/Whatsapp/Services/WhatsappDriver.php
 
 		-
 			message: '#^Access to an undefined property App\\Modules\\Broadcasting\\Models\\CampaignRecipient\:\:\$status\.$#'
 			identifier: property.notFound
-			count: 1
 			path: app/Modules/Whatsapp/Services/WhatsappDriver.php
 
 		-
 			message: '#^Access to an undefined property App\\Modules\\Shared\\Models\\ChannelAccount\:\:\$workspace_id\.$#'
 			identifier: property.notFound
-			count: 1
 			path: app/Modules/Whatsapp/Services/WhatsappDriver.php
 
 		-
 			message: '#^Access to an undefined property App\\Modules\\Shared\\Models\\Conversation\:\:\$first_response_at\.$#'
 			identifier: property.notFound
-			count: 2
 			path: app/Modules/Whatsapp/Services/WhatsappDriver.php
 
 		-
 			message: '#^Access to an undefined property App\\Modules\\Shared\\Models\\Conversation\:\:\$last_inbound_at\.$#'
 			identifier: property.notFound
-			count: 1
 			path: app/Modules/Whatsapp/Services/WhatsappDriver.php
 
 		-
 			message: '#^Access to an undefined property App\\Modules\\Shared\\Models\\Conversation\:\:\$unread_count\.$#'
 			identifier: property.notFound
-			count: 1
 			path: app/Modules/Whatsapp/Services/WhatsappDriver.php
 
 		-
 			message: '#^Access to an undefined property App\\Modules\\Shared\\Models\\Message\:\:\$sent_at\.$#'
 			identifier: property.notFound
-			count: 3
 			path: app/Modules/Whatsapp/Services/WhatsappDriver.php
 
 		-
 			message: '#^Access to an undefined property App\\Modules\\Shared\\Models\\Message\:\:\$status\.$#'
 			identifier: property.notFound
-			count: 1
 			path: app/Modules/Whatsapp/Services/WhatsappDriver.php
 
 		-
 			message: '#^Access to an undefined property App\\Modules\\Shared\\Models\\Message\:\:\$type\.$#'
 			identifier: property.notFound
-			count: 1
 			path: app/Modules/Whatsapp/Services/WhatsappDriver.php
 
 		-
 			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$contact\.$#'
 			identifier: property.notFound
-			count: 1
 			path: app/Modules/Whatsapp/Services/WhatsappDriver.php
 
 		-
 			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$workspace_id\.$#'
 			identifier: property.notFound
-			count: 1
 			path: app/Modules/Whatsapp/Services/WhatsappDriver.php
 
 		-
 			message: '#^Method App\\Modules\\Whatsapp\\Services\\WhatsappDriver\:\:processInboundMessage\(\) has parameter \$msg with no value type specified in iterable type array\.$#'
 			identifier: missingType.iterableValue
-			count: 1
 			path: app/Modules/Whatsapp/Services/WhatsappDriver.php
 
 		-
 			message: '#^Method App\\Modules\\Whatsapp\\Services\\WhatsappDriver\:\:processInboundMessage\(\) has parameter \$value with no value type specified in iterable type array\.$#'
 			identifier: missingType.iterableValue
-			count: 1
 			path: app/Modules/Whatsapp/Services/WhatsappDriver.php
 
 		-
 			message: '#^Method App\\Modules\\Whatsapp\\Services\\WhatsappDriver\:\:processStatusUpdate\(\) has parameter \$status with no value type specified in iterable type array\.$#'
 			identifier: missingType.iterableValue
-			count: 1
 			path: app/Modules/Whatsapp/Services/WhatsappDriver.php
 
 		-
 			message: '#^Method App\\Modules\\Whatsapp\\Services\\WhatsappDriver\:\:processWebhookPayload\(\) has parameter \$payload with no value type specified in iterable type array\.$#'
 			identifier: missingType.iterableValue
-			count: 1
 			path: app/Modules/Whatsapp/Services/WhatsappDriver.php
 
 		-
 			message: '#^Method App\\Modules\\Whatsapp\\Services\\WhatsappDriver\:\:processWebhookPayload\(\) return type has no value type specified in iterable type array\.$#'
 			identifier: missingType.iterableValue
-			count: 1
 			path: app/Modules/Whatsapp/Services/WhatsappDriver.php
 
 		-
 			message: '#^Method App\\Modules\\Whatsapp\\Services\\WhatsappDriver\:\:receiveWebhook\(\) return type has no value type specified in iterable type array\.$#'
 			identifier: missingType.iterableValue
-			count: 1
 			path: app/Modules/Whatsapp/Services/WhatsappDriver.php
 
 		-
 			message: '#^Offset ''delivered''\|''failed''\|''read''\|''sent'' on array\{queued\: 0, sent\: 1, delivered\: 2, read\: 3, failed\: 4\} on left side of \?\? always exists and is not nullable\.$#'
 			identifier: nullCoalesce.offset
-			count: 1
 			path: app/Modules/Whatsapp/Services/WhatsappDriver.php
 
 		-
 			message: '#^Using nullsafe property access on non\-nullable type App\\Modules\\Shared\\Models\\ChannelAccount\. Use \-\> instead\.$#'
 			identifier: nullsafe.neverNull
-			count: 1
 			path: app/Modules/Whatsapp/Services/WhatsappDriver.php
 
 		-

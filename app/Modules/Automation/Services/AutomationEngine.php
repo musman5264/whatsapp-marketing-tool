@@ -531,6 +531,33 @@ class AutomationEngine
         $workspaceId = $run->automation->workspace_id;
         $userMessage = (string) ($context['message_body'] ?? '');
 
+        // The customer's last inbound might be a media message with no text.
+        // For a voice note we transcribe it with the AI provider; other media
+        // gets a short description so the model still has something to answer.
+        if (trim($userMessage) === '' && ! empty($context['message_id'])) {
+            $inbound = Message::query()->whereKey($context['message_id'])->first();
+            if ($inbound instanceof Message && $inbound->direction === 'in') {
+                if ($inbound->type === 'audio') {
+                    $audioUrl = (string) ($inbound->payload['audio']['link']
+                        ?? $inbound->payload['link']
+                        ?? $inbound->payload['audio']['url'] ?? '');
+                    $transcript = $audioUrl !== ''
+                        ? app(\App\Modules\AI\Services\TranscriptionService::class)->transcribe($workspaceId, $audioUrl)
+                        : null;
+                    $userMessage = $transcript
+                        ?: '[The customer sent a voice note that could not be transcribed — ask them to type their question.]';
+                    if ($transcript) {
+                        $context['voice_transcript'] = $transcript;
+                    }
+                } else {
+                    $userMessage = match ($inbound->type) {
+                        'image', 'video', 'document' => "[The customer sent a {$inbound->type} with no caption. Acknowledge it and ask how you can help.]",
+                        default => (string) ($inbound->body ?? ''),
+                    };
+                }
+            }
+        }
+
         if (! empty($data['chatbot_id'])) {
             $bot = AiChatbot::where('id', $data['chatbot_id'])
                 ->where('workspace_id', $workspaceId)
@@ -568,13 +595,37 @@ class AutomationEngine
             return ['status' => 'skipped', 'message' => 'AI returned no reply.'];
         }
 
+        // Always expose the generated text as variables the next node can use:
+        //   {{response}}, {{ai_reply}}, {{last_ai_reply}}  +  a custom {{variable}}
+        $var = trim((string) ($data['variable'] ?? '')) ?: null;
+        $ctxUpdate = [
+            'response' => $reply,
+            'ai_reply' => $reply,
+            'last_ai_reply' => $reply,
+        ];
+        if ($var) {
+            $ctxUpdate[$var] = $reply;
+        }
+
+        // "send_reply" defaults to true so existing flows keep working. Set it
+        // false in the node to only generate + save the variable (no message).
+        $shouldSend = ($data['send_reply'] ?? true) !== false;
+        if (! $shouldSend) {
+            return [
+                'status' => 'ok',
+                'message' => 'AI reply generated → {{response}}'.($var ? " / {{{$var}}}" : ''),
+                'output' => ['reply' => $reply, 'tokens_used' => $tokens],
+                'context_update' => $ctxUpdate,
+            ];
+        }
+
         $send = $this->sendTextViaChannel($run, $data['channel'] ?? 'whatsapp', $reply, 'bot');
 
         return [
             'status' => $send['status'] ?? 'ok',
             'message' => ($send['status'] ?? 'ok') === 'ok' ? 'AI reply sent.' : $send['message'],
             'output' => ['reply' => $reply, 'tokens_used' => $tokens],
-            'context_update' => ['last_ai_reply' => $reply],
+            'context_update' => $ctxUpdate,
         ];
     }
 
@@ -667,12 +718,25 @@ class AutomationEngine
             return (string) ($contact->{$matches[1]} ?? '');
         }, $template);
 
-        // Context tokens: {{context.key}}
-        $template = preg_replace_callback('/\{\{\s*context\.(\w+)\s*\}\}/', function ($matches) use ($context) {
-            return (string) ($context[$matches[1]] ?? '');
+        // Context tokens: {{context.key}} AND bare {{key}} that matches a context var
+        // (Ask Question / AI Reply save their answers under a bare name).
+        $template = preg_replace_callback('/\{\{\s*(?:context\.)?([a-zA-Z_]\w*)\s*\}\}/', function ($matches) use ($context) {
+            $key = $matches[1];
+            if (array_key_exists($key, $context)) {
+                return (string) $context[$key];
+            }
+
+            // Leave known-prefix tokens for the passes above (already handled) but
+            // never re-inject; and leave a genuinely unknown token to be stripped.
+            return $matches[0];
         }, $template);
 
-        return $template;
+        // Strip any token that never resolved — a real customer must never receive
+        // a literal "{{response}}". Collapse the whitespace a removed token leaves.
+        $template = preg_replace('/\{\{\s*[\w.]+\s*\}\}/', '', $template);
+        $template = preg_replace('/[ \t]{2,}/', ' ', (string) $template);
+
+        return trim((string) $template);
     }
 
     // ─── Existing helpers ────────────────────────────────────────────────────
@@ -1636,6 +1700,15 @@ class AutomationEngine
             return ['status' => 'skipped', 'message' => 'Contact not found.'];
         }
         $channel = in_array($channel, ['whatsapp', 'messenger', 'instagram', 'sms'], true) ? $channel : 'whatsapp';
+
+        // A text message whose body is empty (usually every token was unresolved,
+        // e.g. {{response}} before an AI Reply ran) must not be delivered.
+        if (in_array($type, ['text', 'template'], true)
+            && trim((string) $body) === ''
+            && empty($payload['template'] ?? null)
+            && empty($payload['interactive'] ?? null)) {
+            return ['status' => 'skipped', 'message' => 'Nothing to send — the message body was empty after filling variables (check that every {{token}} is produced earlier in the flow).'];
+        }
 
         if ($channel === 'sms') {
             return $this->dispatchSms($run, $contact, $body ?? '', $sentBy);
