@@ -2,7 +2,6 @@
 
 namespace App\Modules\WhatsappWeb\Http\Controllers;
 
-use App\Http\Controllers\Concerns\FlushesWebhookResponse;
 use App\Http\Controllers\Controller;
 use App\Modules\Integrations\Services\CredentialResolver;
 use App\Modules\WhatsappWeb\Jobs\ProcessWahaEventJob;
@@ -19,7 +18,7 @@ use Illuminate\Support\Facades\Log;
  */
 class WhatsappWebWebhookController extends Controller
 {
-    use FlushesWebhookResponse;
+
 
     public function receive(Request $request, string $token): JsonResponse
     {
@@ -59,16 +58,20 @@ class WhatsappWebWebhookController extends Controller
             'event' => $event,
         ]);
 
-        // TEMP: dump the raw payload of inbound message events so we can see how
-        // WAHA delivers @lid (Linked ID) contacts. Remove once the normalizer
-        // handles them.
-        if (in_array($event, ['message', 'message.any'], true)) {
-            Log::info('whatsapp_web.webhook.raw_message', ['payload' => $payload['payload'] ?? $payload]);
+        // Dispatch BEFORE flushing the response. Dispatch to the database queue is
+        // a single fast INSERT; doing it post-flush (after fastcgi_finish_request)
+        // proved unreliable on this host — the job silently never landed.
+        try {
+            ProcessWahaEventJob::dispatch($payload, $session->id)->onQueue('whatsapp');
+        } catch (\Throwable $e) {
+            Log::error('whatsapp_web.webhook.dispatch_failed', [
+                'session' => $session->session_name,
+                'event' => $event,
+                'error' => $e->getMessage(),
+            ]);
         }
 
-        return $this->flushWebhookOkThen(
-            fn () => ProcessWahaEventJob::dispatch($payload, $session->id)->onQueue('whatsapp')
-        );
+        return response()->json(['status' => 'ok']);
     }
 
     /** @param array<string,mixed> $payload */
