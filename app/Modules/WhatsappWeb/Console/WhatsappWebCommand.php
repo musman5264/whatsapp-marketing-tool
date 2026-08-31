@@ -84,8 +84,15 @@ class WhatsappWebCommand extends Command
                 $engines->adapter()->startSession($row->session_name, $webhookUrl);
                 $this->info('startSession() OK');
 
+                // Raw check — what does GET /api/sessions/{name} actually return from here?
+                $creds2 = CredentialResolver::system()->whatsappWeb();
+                $hh = $creds2->apiKey() ? ['X-Api-Key' => $creds2->apiKey()] : [];
+                $raw = Http::withHeaders($hh)->timeout(20)->get($creds2->baseUrl().'/api/sessions/'.$row->session_name);
+                $this->line('raw GET /api/sessions/'.$row->session_name.' -> HTTP '.$raw->status());
+                $this->line('  body: '.mb_substr($raw->body(), 0, 300));
+
                 $st = $engines->adapter()->getStatus($row->session_name);
-                $this->info('engine status: '.$st);
+                $this->info('adapter getStatus(): '.$st);
             } catch (\Throwable $e) {
                 $this->error(get_class($e).': '.$e->getMessage());
                 $this->line('  at '.$e->getFile().':'.$e->getLine());
