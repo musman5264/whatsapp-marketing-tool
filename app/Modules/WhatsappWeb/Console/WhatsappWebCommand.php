@@ -132,6 +132,17 @@ class WhatsappWebCommand extends Command
 
                 $st = $engines->adapter()->getStatus($row->session_name);
                 $this->info('adapter getStatus(): '.$st);
+
+                if ($st === 'active') {
+                    $me = null;
+                    try {
+                        $me = $engines->adapter()->getMe($row->session_name);
+                    } catch (\Throwable) {
+                    }
+                    app(\App\Modules\WhatsappWeb\Services\SessionProvisioner::class)
+                        ->markActive($row, $me['phone_e164'] ?? null, $me['push_name'] ?? null);
+                    $this->info('marked session + channel account ACTIVE');
+                }
             } catch (\Throwable $e) {
                 $this->error(get_class($e).': '.$e->getMessage());
                 $this->line('  at '.$e->getFile().':'.$e->getLine());
