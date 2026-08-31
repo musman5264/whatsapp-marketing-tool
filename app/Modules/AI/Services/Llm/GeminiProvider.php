@@ -10,17 +10,22 @@ class GeminiProvider implements LlmProviderInterface
 
     /** Models Google retired on v1beta → the current model to use instead. */
     private const RETIRED = [
-        'gemini-1.5-flash' => 'gemini-2.0-flash',
-        'gemini-1.5-flash-latest' => 'gemini-2.0-flash',
+        'gemini-1.5-flash' => 'gemini-2.5-flash',
+        'gemini-1.5-flash-latest' => 'gemini-2.5-flash',
+        'gemini-1.5-flash-8b' => 'gemini-2.5-flash-lite',
         'gemini-1.5-pro' => 'gemini-2.5-pro',
         'gemini-1.5-pro-latest' => 'gemini-2.5-pro',
-        'gemini-1.0-pro' => 'gemini-2.0-flash',
-        'gemini-pro' => 'gemini-2.0-flash',
+        'gemini-1.0-pro' => 'gemini-2.5-flash',
+        'gemini-pro' => 'gemini-2.5-flash',
+        'gemini-2.0-flash' => 'gemini-2.5-flash',
+        'gemini-2.0-flash-lite' => 'gemini-2.5-flash-lite',
+        'gemini-2.0-flash-exp' => 'gemini-2.5-flash',
+        'gemini-2.0-pro' => 'gemini-2.5-pro',
     ];
 
     public function __construct(
         private readonly string $apiKey,
-        private readonly string $chatModel = 'gemini-2.0-flash',
+        private readonly string $chatModel = 'gemini-2.5-flash',
         private readonly string $embedModel = 'text-embedding-004',
     ) {}
 

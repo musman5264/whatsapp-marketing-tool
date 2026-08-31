@@ -32,15 +32,13 @@ class ModelCatalog
 
         'gemini' => [
             'chat' => [
-                'gemini-2.0-flash',
-                'gemini-2.0-flash-lite',
                 'gemini-2.5-flash',
                 'gemini-2.5-flash-lite',
                 'gemini-2.5-pro',
-                'gemini-1.5-flash-latest',
-                'gemini-1.5-pro-latest',
+                'gemini-flash-latest',
+                'gemini-pro-latest',
             ],
-            'embed' => ['text-embedding-004', 'gemini-embedding-001'],
+            'embed' => ['gemini-embedding-001', 'text-embedding-004'],
         ],
 
         // OpenRouter — OpenAI-compatible gateway. We surface the ":free" tier only;

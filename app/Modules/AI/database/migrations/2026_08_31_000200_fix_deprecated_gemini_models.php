@@ -5,18 +5,24 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 /**
- * Google retired gemini-1.5-flash / gemini-1.5-pro / gemini-1.0-pro on the v1beta
- * API — saved configs pointing at them now 404. Repoint them at current models.
+ * Google keeps retiring Gemini models on the v1beta API (1.5-*, then 2.0-*).
+ * Repoint any saved config that points at a retired model to a current one.
+ * GeminiProvider also rewrites retired ids at request time as a safety net.
  */
 return new class extends Migration
 {
     private const MAP = [
-        'gemini-1.5-flash' => 'gemini-2.0-flash',
-        'gemini-1.5-flash-latest' => 'gemini-2.0-flash',
+        'gemini-1.5-flash' => 'gemini-2.5-flash',
+        'gemini-1.5-flash-latest' => 'gemini-2.5-flash',
+        'gemini-1.5-flash-8b' => 'gemini-2.5-flash-lite',
         'gemini-1.5-pro' => 'gemini-2.5-pro',
         'gemini-1.5-pro-latest' => 'gemini-2.5-pro',
-        'gemini-1.0-pro' => 'gemini-2.0-flash',
-        'gemini-pro' => 'gemini-2.0-flash',
+        'gemini-1.0-pro' => 'gemini-2.5-flash',
+        'gemini-pro' => 'gemini-2.5-flash',
+        'gemini-2.0-flash' => 'gemini-2.5-flash',
+        'gemini-2.0-flash-lite' => 'gemini-2.5-flash-lite',
+        'gemini-2.0-flash-exp' => 'gemini-2.5-flash',
+        'gemini-2.0-pro' => 'gemini-2.5-pro',
     ];
 
     public function up(): void

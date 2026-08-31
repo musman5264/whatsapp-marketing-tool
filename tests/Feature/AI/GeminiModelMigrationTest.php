@@ -27,8 +27,8 @@ class GeminiModelMigrationTest extends TestCase
         $provider = new GeminiProvider('key', 'gemini-1.5-flash');
         $resp = $provider->chat([['role' => 'user', 'content' => 'hi']]);
 
-        $this->assertSame('gemini-2.0-flash', $resp->model);
-        Http::assertSent(fn ($r) => str_contains($r->url(), '/models/gemini-2.0-flash:generateContent'));
+        $this->assertSame('gemini-2.5-flash', $resp->model);
+        Http::assertSent(fn ($r) => str_contains($r->url(), '/models/gemini-2.5-flash:generateContent'));
         Http::assertNotSent(fn ($r) => str_contains($r->url(), 'gemini-1.5-flash'));
     }
 
@@ -48,20 +48,22 @@ class GeminiModelMigrationTest extends TestCase
     }
 
     #[Test]
-    public function the_data_migration_repoints_stored_configs(): void
+    public function the_data_migrations_repoint_stored_configs(): void
     {
         $ctx = $this->createWorkspaceContext();
-        $config = AiProviderConfig::create([
-            'workspace_id' => $ctx['workspace']->id,
-            'provider' => 'gemini',
-            'credentials' => ['api_key' => 'k'],
-            'default_model_chat' => 'gemini-1.5-flash',
-            'enabled' => true,
+        $legacy = AiProviderConfig::create([
+            'workspace_id' => $ctx['workspace']->id, 'provider' => 'gemini',
+            'credentials' => ['api_key' => 'k'], 'default_model_chat' => 'gemini-1.5-flash', 'enabled' => true,
+        ]);
+        $v20 = AiProviderConfig::create([
+            'workspace_id' => $ctx['workspace']->id + 1, 'provider' => 'gemini',
+            'credentials' => ['api_key' => 'k'], 'default_model_chat' => 'gemini-2.0-flash', 'enabled' => true,
         ]);
 
-        // re-run just this migration's transform
         (require base_path('app/Modules/AI/database/migrations/2026_08_31_000200_fix_deprecated_gemini_models.php'))->up();
+        (require base_path('app/Modules/AI/database/migrations/2026_09_01_000100_repoint_gemini_2_0_models.php'))->up();
 
-        $this->assertSame('gemini-2.0-flash', $config->fresh()->default_model_chat);
+        $this->assertSame('gemini-2.5-flash', $legacy->fresh()->default_model_chat);
+        $this->assertSame('gemini-2.5-flash', $v20->fresh()->default_model_chat);
     }
 }

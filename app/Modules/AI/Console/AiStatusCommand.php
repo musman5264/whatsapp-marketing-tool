@@ -7,20 +7,28 @@ use App\Modules\AI\Services\Llm\CloudflareProvider;
 use App\Modules\AI\Services\Llm\LlmManager;
 use App\Modules\AI\Services\Llm\OpenRouterProvider;
 use App\Modules\Integrations\Models\IntegrationConfig;
+use App\Modules\Integrations\Services\CredentialResolver;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\Http;
 
 /**
  *   php artisan ai:status                  show every configured provider
  *   php artisan ai:status --workspace=1    also run a live 1-token chat test
+ *   php artisan ai:status --gemini-models  list the Gemini models the saved key can actually use
  */
 class AiStatusCommand extends Command
 {
-    protected $signature = 'ai:status {--workspace= : run a live chat test for this workspace id}';
+    protected $signature = 'ai:status {--workspace= : run a live chat test for this workspace id}
+                                       {--gemini-models : list live Gemini models for the configured key}';
 
     protected $description = 'Show AI/LLM provider configuration and optionally test it';
 
     public function handle(): int
     {
+        if ($this->option('gemini-models')) {
+            return $this->listGeminiModels();
+        }
+
         $this->line('=== Workspace AI provider configs (ai_provider_configs) ===');
         $configs = AiProviderConfig::query()->orderBy('workspace_id')->get();
         if ($configs->isEmpty()) {
@@ -76,6 +84,47 @@ class AiStatusCommand extends Command
             } catch (\Throwable $e) {
                 $this->error(get_class($e).': '.$e->getMessage());
             }
+        }
+
+        return self::SUCCESS;
+    }
+
+    private function listGeminiModels(): int
+    {
+        $key = null;
+        $row = IntegrationConfig::forProvider('llm_gemini_default');
+        if ($row && ! empty($row->credentials['api_key'])) {
+            $key = $row->credentials['api_key'];
+        }
+        if (! $key) {
+            $ws = $this->option('workspace');
+            if ($ws) {
+                $wsModel = \App\Models\Workspace::find((int) $ws);
+                $creds = $wsModel ? CredentialResolver::for($wsModel)->llm('gemini') : null;
+                $key = $creds?->apiKey();
+            }
+        }
+        if (! $key) {
+            $this->error('No Gemini API key found (checked system integration + --workspace).');
+
+            return self::FAILURE;
+        }
+
+        $resp = Http::timeout(20)->get('https://generativelanguage.googleapis.com/v1beta/models', ['key' => $key]);
+        if (! $resp->successful()) {
+            $this->error('models list failed: HTTP '.$resp->status().' '.$resp->body());
+
+            return self::FAILURE;
+        }
+
+        $this->line('Models that support generateContent for this key:');
+        foreach ($resp->json('models', []) as $m) {
+            $methods = $m['supportedGenerationMethods'] ?? [];
+            if (! in_array('generateContent', $methods, true)) {
+                continue;
+            }
+            $name = str_replace('models/', '', $m['name'] ?? '?');
+            $this->line(sprintf('  %-40s %s', $name, $m['displayName'] ?? ''));
         }
 
         return self::SUCCESS;
