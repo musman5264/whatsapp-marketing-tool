@@ -38,6 +38,26 @@ const SETUP_GUIDES = {
         link: 'https://aistudio.google.com/app/apikey',
         linkLabelKey: 'ai.guide_gemini_link',
     },
+    cloudflare: {
+        steps: [
+            'ai.guide_cloudflare_step1',
+            'ai.guide_cloudflare_step2',
+            'ai.guide_cloudflare_step3',
+            'ai.guide_cloudflare_step4',
+        ],
+        link: 'https://dash.cloudflare.com/?to=/:account/ai/workers-ai',
+        linkLabelKey: 'ai.guide_cloudflare_link',
+    },
+    openrouter: {
+        steps: [
+            'ai.guide_openrouter_step1',
+            'ai.guide_openrouter_step2',
+            'ai.guide_openrouter_step3',
+            'ai.guide_openrouter_step4',
+        ],
+        link: 'https://openrouter.ai/keys',
+        linkLabelKey: 'ai.guide_openrouter_link',
+    },
 };
 
 function SetupGuide({ providerKey }) {
@@ -100,26 +120,66 @@ const GeminiLogo = () => (
     </svg>
 );
 
+const CloudflareLogo = () => (
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M16.5 16.5c.2-.66.12-1.28-.2-1.73-.3-.42-.8-.66-1.4-.69l-8.4-.11a.22.22 0 0 1-.17-.09.22.22 0 0 1-.03-.2.3.3 0 0 1 .26-.2l8.48-.11c1-.05 2.1-.86 2.48-1.86l.48-1.27a.3.3 0 0 0 .01-.17 5.5 5.5 0 0 0-10.56-.57A2.48 2.48 0 0 0 3.3 12a3.5 3.5 0 0 0-.05.66c0 .1.01.22.02.33a.15.15 0 0 0 .15.13h15.4c.07 0 .14-.05.16-.13l.03-.1c.32-1.13.2-2.17-.35-2.9" fill="currentColor"/>
+    </svg>
+);
+
+const OpenRouterLogo = () => (
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M3 12h4l3-3 4 6 3-3h4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+        <circle cx="19" cy="12" r="2" fill="currentColor"/>
+        <circle cx="5" cy="12" r="2" fill="currentColor"/>
+    </svg>
+);
+
 const PROVIDER_INFO = {
-    openai:    { label: 'OpenAI',    Icon: OpenAILogo,    models: ['gpt-4o', 'gpt-4o-mini', 'gpt-3.5-turbo'] },
-    anthropic: { label: 'Anthropic', Icon: AnthropicLogo, models: ['claude-3-opus-20240229', 'claude-3-sonnet-20240229', 'claude-3-haiku-20240307'] },
-    gemini:    { label: 'Gemini',    Icon: GeminiLogo,    models: ['gemini-1.5-pro', 'gemini-1.5-flash', 'gemini-1.0-pro'] },
+    openai:     { label: 'OpenAI',                Icon: OpenAILogo },
+    anthropic:  { label: 'Anthropic',             Icon: AnthropicLogo },
+    gemini:     { label: 'Gemini',                Icon: GeminiLogo },
+    cloudflare: { label: 'Cloudflare Workers AI', Icon: CloudflareLogo },
+    openrouter: { label: 'OpenRouter',            Icon: OpenRouterLogo },
 };
 
 function ProviderCard({ provider }) {
     const { t } = useTranslation();
     const [showKey, setShowKey] = useState(false);
     const info = PROVIDER_INFO[provider.provider] ?? {};
+    const isCloudflare = provider.provider === 'cloudflare';
+    const isOpenRouter = provider.provider === 'openrouter';
+    const multiKey = provider.multi_key;
+    const [chatModels, setChatModels] = useState(provider.chat_models ?? []);
+    const [refreshing, setRefreshing] = useState(false);
 
-    const { data, setData, put, processing, errors } = useForm({
+    const { data, setData, put, processing } = useForm({
         api_key:             '',
-        default_model_chat:  provider.default_model_chat || info.models?.[1] || '',
+        api_keys:            '',
+        account_id:          provider.account_id ?? '',
+        gateway_slug:        provider.gateway_slug ?? '',
+        default_model_chat:  provider.default_model_chat || (provider.chat_models ?? [])[0] || '',
+        default_model_embed: provider.default_model_embed || '',
         enabled:             provider.enabled,
     });
 
     const handleSubmit = (e) => {
         e.preventDefault();
         put(route('client.ai.providers.update', provider.provider), { preserveScroll: true });
+    };
+
+    const refreshModels = async () => {
+        setRefreshing(true);
+        try {
+            const res = await fetch(route('client.ai.providers.openrouter.models'), {
+                headers: { Accept: 'application/json' },
+            });
+            const json = await res.json();
+            if (Array.isArray(json.models) && json.models.length) setChatModels(json.models);
+        } catch {
+            // keep the current list
+        } finally {
+            setRefreshing(false);
+        }
     };
 
     return (
@@ -133,36 +193,94 @@ function ProviderCard({ provider }) {
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-3">
-                <div>
-                    <label className="text-xs font-medium text-neutral-500 dark:text-neutral-400">{t('ai.api_key')}</label>
-                    <div className="relative mt-1">
+                {isCloudflare && (
+                    <div>
+                        <label className="text-xs font-medium text-neutral-500 dark:text-neutral-400">{t('ai.cf_account_id')}</label>
                         <input
-                            type={showKey ? 'text' : 'password'}
-                            value={data.api_key}
-                            onChange={e => setData('api_key', e.target.value)}
-                            placeholder={provider.configured ? t('ai.api_key_encrypted_placeholder') : 'sk-…'}
-                            className="w-full rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 pr-10 text-sm"
+                            type="text"
+                            value={data.account_id}
+                            onChange={e => setData('account_id', e.target.value)}
+                            placeholder="e.g. 0a1b2c3d4e5f…"
+                            className="mt-1 w-full rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm font-mono"
                         />
-                        <button type="button" onClick={() => setShowKey(v => !v)} className="absolute right-2 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-neutral-600">
-                            {showKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                        </button>
                     </div>
-                </div>
+                )}
+
+                {multiKey ? (
+                    <div>
+                        <label className="text-xs font-medium text-neutral-500 dark:text-neutral-400">
+                            {isCloudflare ? t('ai.cf_api_tokens') : t('ai.or_api_keys')}
+                            {provider.configured && provider.key_count > 0 && (
+                                <span className="ml-1 text-neutral-400">({t('ai.cf_tokens_saved', { count: provider.key_count })})</span>
+                            )}
+                        </label>
+                        <textarea
+                            rows={3}
+                            value={data.api_keys}
+                            onChange={e => setData('api_keys', e.target.value)}
+                            placeholder={provider.configured ? t('ai.api_key_encrypted_placeholder') : (isCloudflare ? 'one token per line' : 'one key per line')}
+                            className="mt-1 w-full rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm font-mono"
+                        />
+                        <p className="mt-1 text-xs text-neutral-400">{isCloudflare ? t('ai.cf_api_tokens_hint') : t('ai.or_api_keys_hint')}</p>
+                    </div>
+                ) : (
+                    <div>
+                        <label className="text-xs font-medium text-neutral-500 dark:text-neutral-400">{t('ai.api_key')}</label>
+                        <div className="relative mt-1">
+                            <input
+                                type={showKey ? 'text' : 'password'}
+                                value={data.api_key}
+                                onChange={e => setData('api_key', e.target.value)}
+                                placeholder={provider.configured ? t('ai.api_key_encrypted_placeholder') : 'sk-…'}
+                                className="w-full rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 pr-10 text-sm"
+                            />
+                            <button type="button" onClick={() => setShowKey(v => !v)} className="absolute right-2 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-neutral-600">
+                                {showKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                            </button>
+                        </div>
+                    </div>
+                )}
+
+                {isCloudflare && (
+                    <div>
+                        <label className="text-xs font-medium text-neutral-500 dark:text-neutral-400">{t('ai.cf_gateway_slug')}</label>
+                        <input
+                            type="text"
+                            value={data.gateway_slug}
+                            onChange={e => setData('gateway_slug', e.target.value)}
+                            placeholder={t('ai.optional')}
+                            className="mt-1 w-full rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm"
+                        />
+                    </div>
+                )}
+
                 <div>
-                    <label className="text-xs font-medium text-neutral-500 dark:text-neutral-400">{t('ai.default_chat_model')}</label>
+                    <div className="flex items-center justify-between">
+                        <label className="text-xs font-medium text-neutral-500 dark:text-neutral-400">
+                            {t('ai.default_chat_model')}
+                            {isOpenRouter && <span className="ml-1 text-neutral-400">· {t('ai.or_free_only', { count: chatModels.length })}</span>}
+                        </label>
+                        {isOpenRouter && (
+                            <button type="button" onClick={refreshModels} disabled={refreshing}
+                                className="text-xs text-brand-600 dark:text-brand-400 hover:underline disabled:opacity-50">
+                                {refreshing ? t('ai.or_refreshing') : t('ai.or_refresh_models')}
+                            </button>
+                        )}
+                    </div>
                     <select value={data.default_model_chat} onChange={e => setData('default_model_chat', e.target.value)} className="mt-1 w-full rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm">
-                        {info.models?.map(m => <option key={m} value={m}>{m}</option>)}
+                        {!chatModels.includes(data.default_model_chat) && data.default_model_chat && (
+                            <option value={data.default_model_chat}>{data.default_model_chat}</option>
+                        )}
+                        {chatModels.map(m => <option key={m} value={m}>{m}</option>)}
                     </select>
                 </div>
                 <label className="flex items-center gap-2 text-sm cursor-pointer">
                     <input type="checkbox" checked={data.enabled} onChange={e => setData('enabled', e.target.checked)} className="rounded" />
                     {t('common.enabled')}
                 </label>
-                {(
-                    <button type="submit" disabled={processing} className="w-full rounded-lg bg-brand-600 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-60 transition">
-                        {processing ? t('ai.saving') : t('common.save')}
-                    </button>
-                )}
+                <button type="submit" disabled={processing} className="w-full rounded-lg bg-brand-600 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-60 transition">
+                    {processing ? t('ai.saving') : t('common.save')}
+                </button>
             </form>
             <div className="pt-2 border-t border-neutral-100 dark:border-neutral-800">
                 <SetupGuide providerKey={provider.provider} />

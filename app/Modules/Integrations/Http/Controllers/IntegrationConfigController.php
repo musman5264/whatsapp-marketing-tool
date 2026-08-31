@@ -82,7 +82,8 @@ class IntegrationConfigController extends Controller
         $fields = IntegrationConfig::FIELDS[$provider] ?? [];
         $rules = ['enabled' => ['required', 'boolean'], 'mode' => ['required', 'in:test,live']];
         foreach ($fields as $f) {
-            $rules['credentials.'.$f['key']] = [$f['required'] ? 'nullable' : 'nullable', 'string', 'max:1024'];
+            $max = ($f['type'] ?? 'text') === 'textarea' ? 8192 : 1024;
+            $rules['credentials.'.$f['key']] = ['nullable', 'string', 'max:'.$max];
         }
 
         $validated = $request->validate($rules);

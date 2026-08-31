@@ -9,11 +9,13 @@ class IntegrationConfigSeeder extends Seeder
 {
     public function run(): void
     {
+        $labels = IntegrationConfig::LABELS;
+
         foreach (IntegrationConfig::PROVIDERS as $provider) {
             IntegrationConfig::firstOrCreate(
                 ['provider' => $provider, 'mode' => 'live'],
                 [
-                    'label' => IntegrationConfig::LABELS[$provider] ?? $provider,
+                    'label' => $labels[$provider] ?? $provider,
                     // Enable local storage by default so the app has a working disk
                     'enabled' => $provider === 'storage_local',
                     'credentials' => [],

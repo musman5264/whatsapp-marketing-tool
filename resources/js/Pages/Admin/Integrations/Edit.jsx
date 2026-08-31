@@ -298,6 +298,31 @@ const SETUP_GUIDES = {
         link: 'https://aistudio.google.com/app/apikey',
         linkLabel: 'Open Google AI Studio',
     },
+    llm_cloudflare_default: {
+        title: 'Cloudflare Workers AI Setup',
+        subtitle: 'Add one or more API tokens — extra tokens are used for automatic failover when one fails or is rate-limited.',
+        steps: [
+            'Log in at dash.cloudflare.com.',
+            'Open Workers & Pages — your Account ID is in the right sidebar. Paste it into the Account ID field.',
+            'Go to My Profile → API Tokens → Create Token → use the "Workers AI" template (or a custom token with the Account · Workers AI · Read+Edit permission).',
+            'Copy the token and paste it on its own line in "API Tokens". Repeat "Create Token" for each extra failover token, one per line.',
+            'Optional: to route through AI Gateway, create a Gateway under AI → AI Gateway and put its slug in the "AI Gateway slug" field.',
+        ],
+        link: 'https://dash.cloudflare.com/?to=/:account/ai/workers-ai',
+        linkLabel: 'Open Cloudflare Dashboard',
+    },
+    llm_openrouter_default: {
+        title: 'OpenRouter Setup',
+        subtitle: 'A gateway to many models incl. a generous free tier. Add several API keys — one per line — for automatic failover across the free-tier rate limit.',
+        steps: [
+            'Sign up at openrouter.ai — no card is required to use the free (":free") models.',
+            'Go to Keys → Create Key and copy it.',
+            'Paste the key on its own line in "API Keys". Create additional keys and add one per line to spread the free-tier limit.',
+            'Workspaces pick a specific model in App → AI → Providers; the free-model list is fetched live from OpenRouter.',
+        ],
+        link: 'https://openrouter.ai/keys',
+        linkLabel: 'Open OpenRouter Keys',
+    },
     sms_twilio_default: {
         title: 'Twilio SMS Setup',
         steps: [
@@ -513,6 +538,8 @@ const BRAND = {
     llm_openai_default:      { bg: 'bg-emerald-100 dark:bg-emerald-900/30', color: '#10a37f', icon: <svg viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5"><path d="M10 2a3.9 3.9 0 00-3.68 2.6A3.9 3.9 0 003.6 8.32a3.9 3.9 0 000 3.36 3.9 3.9 0 002.72 3.72A3.9 3.9 0 0010 18a3.9 3.9 0 003.68-2.6 3.9 3.9 0 002.72-3.72 3.9 3.9 0 000-3.36A3.9 3.9 0 0013.68 4.6 3.9 3.9 0 0010 2zm0 4a2 2 0 110 4 2 2 0 010-4z" /></svg> },
     llm_anthropic_default:   { bg: 'bg-orange-100 dark:bg-orange-900/30', color: '#d4793b', icon: <svg viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5"><path d="M10 2.5L3.5 17h3.2l1.1-2.8h4.4l1.1 2.8h3.2L10 2.5zm0 4.3l1.6 4.2H8.4L10 6.8z" /></svg> },
     llm_gemini_default:      { bg: 'bg-blue-100 dark:bg-blue-900/30', color: '#4285F4', icon: <svg viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5"><path d="M10 2l2 6h6l-5 3.6 1.9 5.9L10 14l-4.9 3.5L7 11.6 2 8h6l2-6z" /></svg> },
+    llm_cloudflare_default:  { bg: 'bg-orange-100 dark:bg-orange-900/30', color: '#F38020', icon: <svg viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5"><path d="M13.8 13.5c.13-.44.08-.85-.13-1.15-.2-.28-.53-.44-.93-.46l-7.6-.1a.15.15 0 01-.12-.06.15.15 0 01-.02-.14.2.2 0 01.18-.13l7.67-.1c.9-.04 1.9-.78 2.24-1.68l.44-1.15a.26.26 0 00.01-.15 5 5 0 00-9.6-.5A2.25 2.25 0 002.3 9.9a3.2 3.2 0 00-.05.6c0 .1.01.2.02.3a.13.13 0 00.13.12h13.9c.07 0 .13-.05.15-.12l.02-.08c.16-.55.13-1.07-.06-1.46l-2.63 4.72z" /></svg> },
+    llm_openrouter_default:  { bg: 'bg-indigo-100 dark:bg-indigo-900/30', color: '#6467f2', icon: <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="h-5 w-5"><path d="M3 10h3l2.5-2.5 3 5 2.5-2.5h3" /><circle cx="15.5" cy="10" r="1.5" fill="currentColor" stroke="none" /><circle cx="4.5" cy="10" r="1.5" fill="currentColor" stroke="none" /></svg> },
     sms_twilio_default:      { bg: 'bg-red-100 dark:bg-red-900/30', color: '#F22F46', icon: <svg viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5"><path d="M10 2a8 8 0 100 16A8 8 0 0010 2zm-2.5 4.5a1.5 1.5 0 110 3 1.5 1.5 0 010-3zm5 0a1.5 1.5 0 110 3 1.5 1.5 0 010-3zm-5 5a1.5 1.5 0 110 3 1.5 1.5 0 010-3zm5 0a1.5 1.5 0 110 3 1.5 1.5 0 010-3z" /></svg> },
     sms_nexmo_default:       { bg: 'bg-purple-100 dark:bg-purple-900/30', color: '#6E3697', icon: <svg viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5"><path d="M3.5 3h3.3L10 9.5 13.2 3h3.3L10 17 3.5 3z" /></svg> },
     sms_messagebird_default: { bg: 'bg-blue-100 dark:bg-blue-900/30', color: '#2481CC', icon: <svg viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5"><path d="M18 9c0-3.31-3.58-6-8-6S2 5.69 2 9c0 2.12 1.32 4 3.38 5.14-.1.48-.46 1.74-.88 2.36 0 0 2.04-.42 3.52-1.56.64.1 1.3.16 1.98.16 4.42 0 8-2.69 8-6zM6 8.5a1 1 0 110 2 1 1 0 010-2zm4 0a1 1 0 110 2 1 1 0 010-2zm4 0a1 1 0 110 2 1 1 0 010-2z" /></svg> },
@@ -564,6 +591,25 @@ function PlainField({ label, fieldKey, value, onChange, required, hint }) {
                 value={value}
                 onChange={e => onChange(fieldKey, e.target.value)}
                 className="w-full rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm text-neutral-900 dark:text-neutral-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
+            />
+            {hint && <p className="mt-1 text-xs text-neutral-400 dark:text-neutral-500">{hint}</p>}
+        </div>
+    );
+}
+
+function TextareaField({ label, fieldKey, value, onChange, required, hint }) {
+    const isMasked = value && /^•+/.test(value);
+    return (
+        <div>
+            <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">
+                {label} {required && <span className="text-red-500">*</span>}
+            </label>
+            <textarea
+                rows={4}
+                value={value}
+                onChange={e => onChange(fieldKey, e.target.value)}
+                placeholder={isMasked ? '•••••••••••• (saved — paste again to replace)' : 'one value per line'}
+                className="w-full rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm font-mono text-neutral-900 dark:text-neutral-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
             />
             {hint && <p className="mt-1 text-xs text-neutral-400 dark:text-neutral-500">{hint}</p>}
         </div>
@@ -716,27 +762,20 @@ export default function IntegrationsEdit({ provider, label, category, fields, co
                                 <p className="text-xs text-neutral-400">
                                     {t('integrations.encrypted_note')}
                                 </p>
-                                {fields.map(f => (
-                                    f.type === 'password'
-                                        ? <SecretField
-                                            key={f.key}
-                                            label={f.label}
-                                            fieldKey={f.key}
-                                            value={data.credentials[f.key] ?? ''}
-                                            onChange={setCredential}
-                                            required={f.required}
-                                            hint={f.hint}
-                                        />
-                                        : <PlainField
-                                            key={f.key}
-                                            label={f.label}
-                                            fieldKey={f.key}
-                                            value={data.credentials[f.key] ?? ''}
-                                            onChange={setCredential}
-                                            required={f.required}
-                                            hint={f.hint}
-                                        />
-                                ))}
+                                {fields.map(f => {
+                                    const common = {
+                                        key: f.key,
+                                        label: f.label,
+                                        fieldKey: f.key,
+                                        value: data.credentials[f.key] ?? '',
+                                        onChange: setCredential,
+                                        required: f.required,
+                                        hint: f.hint,
+                                    };
+                                    if (f.type === 'password') return <SecretField {...common} />;
+                                    if (f.type === 'textarea') return <TextareaField {...common} />;
+                                    return <PlainField {...common} />;
+                                })}
                                 {provider === 'meta_app' &&
                                     data.credentials.config_id_whatsapp &&
                                     data.credentials.config_id_social &&

@@ -71,7 +71,7 @@ class CredentialResolver
         return $this->resolve('oauth_'.$network, OAuthClientCredentials::class);
     }
 
-    /** @param string $provider  openai|anthropic|gemini */
+    /** @param string $provider  openai|anthropic|gemini|cloudflare|openrouter */
     public function llm(string $provider): ?LlmCredentials
     {
         // Check workspace override table first (ai_provider_configs loaded via model)
@@ -164,6 +164,21 @@ class CredentialResolver
             ->first();
 
         $creds = $model?->credentials;
+        if (empty($creds)) {
+            return null;
+        }
+
+        // Cloudflare stores keys in api_keys (multi) rather than a single api_key.
+        if ($provider === 'cloudflare') {
+            $hasKey = ! empty($creds['api_key']) || ! empty($creds['api_keys']);
+
+            return ($hasKey && ! empty($creds['account_id'])) ? $creds : null;
+        }
+
+        // OpenRouter also supports multiple keys via api_keys.
+        if ($provider === 'openrouter') {
+            return (! empty($creds['api_key']) || ! empty($creds['api_keys'])) ? $creds : null;
+        }
 
         return ! empty($creds['api_key']) ? $creds : null;
     }

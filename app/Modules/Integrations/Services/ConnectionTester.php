@@ -68,12 +68,22 @@ class ConnectionTester
     private function testLlm(IntegrationConfig $config): array
     {
         $creds = $config->credentials ?? [];
+        $provider = $config->provider;
+
+        if (str_contains($provider, 'cloudflare')) {
+            return $this->testCloudflare($creds);
+        }
+
+        if (str_contains($provider, 'openrouter')) {
+            return $this->testOpenRouter($creds);
+        }
+
         $apiKey = $creds['api_key'] ?? '';
         if (empty($apiKey)) {
             return ['ok' => false, 'message' => 'API key is required.'];
         }
 
-        if (str_contains($config->provider, 'openai')) {
+        if (str_contains($provider, 'openai')) {
             $resp = HttpFacade::timeout(15)
                 ->withToken($apiKey)
                 ->post('https://api.openai.com/v1/chat/completions', [
@@ -87,7 +97,7 @@ class ConnectionTester
                 : ['ok' => false, 'message' => $resp->json()['error']['message'] ?? 'OpenAI error.'];
         }
 
-        if (str_contains($config->provider, 'anthropic')) {
+        if (str_contains($provider, 'anthropic')) {
             $resp = HttpFacade::timeout(15)
                 ->withHeaders(['x-api-key' => $apiKey, 'anthropic-version' => '2023-06-01', 'content-type' => 'application/json'])
                 ->post('https://api.anthropic.com/v1/messages', [
@@ -101,7 +111,7 @@ class ConnectionTester
                 : ['ok' => false, 'message' => $resp->json()['error']['message'] ?? 'Anthropic error.'];
         }
 
-        if (str_contains($config->provider, 'gemini')) {
+        if (str_contains($provider, 'gemini')) {
             $resp = HttpFacade::timeout(15)
                 ->get("https://generativelanguage.googleapis.com/v1beta/models?key={$apiKey}");
 
@@ -111,6 +121,95 @@ class ConnectionTester
         }
 
         return ['ok' => false, 'message' => 'Unknown LLM provider.'];
+    }
+
+    /**
+     * Tries every configured Cloudflare token against a tiny Workers AI call and
+     * reports how many worked — this mirrors the runtime failover behaviour.
+     *
+     * @param  array<string, mixed>  $creds
+     * @return array{ok: bool, message: string}
+     */
+    private function testCloudflare(array $creds): array
+    {
+        $accountId = trim((string) ($creds['account_id'] ?? ''));
+        if ($accountId === '') {
+            return ['ok' => false, 'message' => 'Account ID is required.'];
+        }
+
+        $keys = \App\Modules\AI\Services\Llm\CloudflareProvider::extractKeys($creds);
+        if (empty($keys)) {
+            return ['ok' => false, 'message' => 'At least one API token is required.'];
+        }
+
+        $model = '@cf/meta/llama-3.1-8b-instruct';
+        $ok = 0;
+        $lastError = null;
+
+        foreach ($keys as $key) {
+            try {
+                $resp = HttpFacade::withToken($key)->timeout(20)->post(
+                    "https://api.cloudflare.com/client/v4/accounts/{$accountId}/ai/run/{$model}",
+                    ['messages' => [['role' => 'user', 'content' => 'ping']], 'max_tokens' => 1],
+                );
+                if ($resp->successful()) {
+                    $ok++;
+                } else {
+                    $lastError = $resp->json('errors.0.message') ?? ('HTTP '.$resp->status());
+                }
+            } catch (\Throwable $e) {
+                $lastError = $e->getMessage();
+            }
+        }
+
+        if ($ok === count($keys)) {
+            return ['ok' => true, 'message' => "Cloudflare Workers AI connected. All {$ok} token(s) working."];
+        }
+        if ($ok > 0) {
+            return ['ok' => true, 'message' => "Cloudflare connected. {$ok}/".count($keys)." token(s) working. Last error: {$lastError}"];
+        }
+
+        return ['ok' => false, 'message' => 'No Cloudflare token worked. Last error: '.($lastError ?? 'unknown')];
+    }
+
+    /**
+     * Checks every configured OpenRouter key against GET /models (a cheap auth
+     * probe) and reports how many are valid.
+     *
+     * @param  array<string, mixed>  $creds
+     * @return array{ok: bool, message: string}
+     */
+    private function testOpenRouter(array $creds): array
+    {
+        $keys = \App\Modules\AI\Services\Llm\OpenRouterProvider::extractKeys($creds);
+        if (empty($keys)) {
+            return ['ok' => false, 'message' => 'At least one API key is required.'];
+        }
+
+        $ok = 0;
+        $lastError = null;
+        foreach ($keys as $key) {
+            try {
+                $resp = HttpFacade::withToken($key)->timeout(15)
+                    ->get('https://openrouter.ai/api/v1/key');
+                if ($resp->successful()) {
+                    $ok++;
+                } else {
+                    $lastError = $resp->json('error.message') ?? ('HTTP '.$resp->status());
+                }
+            } catch (\Throwable $e) {
+                $lastError = $e->getMessage();
+            }
+        }
+
+        if ($ok === count($keys)) {
+            return ['ok' => true, 'message' => "OpenRouter connected. All {$ok} key(s) valid."];
+        }
+        if ($ok > 0) {
+            return ['ok' => true, 'message' => "OpenRouter connected. {$ok}/".count($keys)." key(s) valid. Last error: {$lastError}"];
+        }
+
+        return ['ok' => false, 'message' => 'No OpenRouter key worked. Last error: '.($lastError ?? 'unknown')];
     }
 
     private function testSms(IntegrationConfig $config): array

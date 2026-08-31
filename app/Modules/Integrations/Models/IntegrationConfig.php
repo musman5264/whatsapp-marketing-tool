@@ -18,6 +18,8 @@ class IntegrationConfig extends Model
         'llm_openai_default',
         'llm_anthropic_default',
         'llm_gemini_default',
+        'llm_cloudflare_default',
+        'llm_openrouter_default',
         'google_places',
         'google_workspace',
         'qdrant',
@@ -51,6 +53,8 @@ class IntegrationConfig extends Model
         'llm_openai_default' => 'OpenAI (Default)',
         'llm_anthropic_default' => 'Anthropic Claude (Default)',
         'llm_gemini_default' => 'Google Gemini (Default)',
+        'llm_cloudflare_default' => 'Cloudflare Workers AI (Default)',
+        'llm_openrouter_default' => 'OpenRouter (Default)',
         'google_places' => 'Google Places API',
         'google_workspace' => 'Google Workspace (Sheets / Docs / Calendar / Meet)',
         'qdrant' => 'Qdrant Vector Store',
@@ -73,6 +77,8 @@ class IntegrationConfig extends Model
         'llm_openai_default' => 'AI / LLM',
         'llm_anthropic_default' => 'AI / LLM',
         'llm_gemini_default' => 'AI / LLM',
+        'llm_cloudflare_default' => 'AI / LLM',
+        'llm_openrouter_default' => 'AI / LLM',
         'google_places' => 'Maps',
         'google_workspace' => 'Google Workspace',
         'qdrant' => 'Vector Store',
@@ -126,6 +132,14 @@ class IntegrationConfig extends Model
         ],
         'llm_gemini_default' => [
             ['key' => 'api_key', 'label' => 'API Key', 'type' => 'password', 'required' => true],
+        ],
+        'llm_cloudflare_default' => [
+            ['key' => 'account_id',   'label' => 'Account ID',          'type' => 'text',     'required' => true,  'hint' => 'Cloudflare dashboard → Workers & Pages → right sidebar → Account ID'],
+            ['key' => 'api_keys',     'label' => 'API Tokens',          'type' => 'textarea', 'required' => true,  'hint' => 'One Cloudflare API token per line. Each needs the "Workers AI" permission. Extra tokens are used for automatic failover.'],
+            ['key' => 'gateway_slug', 'label' => 'AI Gateway slug',     'type' => 'text',     'required' => false, 'hint' => 'Optional. If set, requests route through https://gateway.ai.cloudflare.com/…/<slug>/workers-ai'],
+        ],
+        'llm_openrouter_default' => [
+            ['key' => 'api_keys', 'label' => 'API Keys', 'type' => 'textarea', 'required' => true, 'hint' => 'One OpenRouter API key per line (openrouter.ai/keys). Extra keys are used for automatic failover. Free models have low rate limits — multiple keys help.'],
         ],
         'google_places' => [
             ['key' => 'api_key', 'label' => 'API Key', 'type' => 'password', 'required' => true],

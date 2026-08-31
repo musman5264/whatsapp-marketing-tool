@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\Route;
 Route::middleware(['web', 'client-app'])->prefix('app/ai')->name('client.ai.')->group(function () {
     // Provider configs
     Route::get('/providers', [AiProviderController::class, 'index'])->name('providers.index');
+    Route::get('/providers/openrouter/models', [AiProviderController::class, 'openRouterModels'])->name('providers.openrouter.models');
     Route::put('/providers/{provider}', [AiProviderController::class, 'update'])->name('providers.update');
 
     // Knowledge bases
