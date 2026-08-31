@@ -64,7 +64,7 @@ $hits[] = time();
 // ─── Action allowlist ────────────────────────────────────────────────────────
 $action = (string) ($_GET['action'] ?? 'status');
 $ALLOWED = ['probe', 'setup-key', 'clone', 'deploy', 'rollback', 'status', 'git-info',
-    'composer', 'migrate', 'migrate-status', 'fix-env', 'set-env', 'cleanup', 'cmd', 'log', 'selfdelete'];
+    'composer', 'migrate', 'migrate-status', 'fix-env', 'set-env', 'env-dedupe', 'cleanup', 'cmd', 'log', 'selfdelete'];
 if (! in_array($action, $ALLOWED, true)) {
     http_response_code(400);
     die(json_encode(['error' => 'unknown action: ' . $action, 'allowed' => $ALLOWED]));
@@ -577,6 +577,35 @@ if ($action === 'set-env') {
         }
     }
     out(['action' => 'set-env', 'ok' => true, 'changed' => $result]);
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// env-dedupe — remove duplicate KEY= lines in .env, keeping the FIRST of each.
+// The one exception: comment lines (starting with #) are always kept.
+// ═════════════════════════════════════════════════════════════════════════════
+if ($action === 'env-dedupe') {
+    $envF = $SITE_ROOT . '/.env';
+    if (! is_file($envF)) {
+        out(['action' => 'env-dedupe', 'ok' => false, 'error' => '.env not found']);
+    }
+    $lines = explode("\n", str_replace("\r", '', (string) file_get_contents($envF)));
+    $seen = [];
+    $kept = [];
+    $dropped = [];
+    foreach ($lines as $ln) {
+        if (preg_match('/^([A-Z0-9_]+)=/', $ln, $m)) {
+            if (isset($seen[$m[1]])) {
+                $dropped[] = $m[1];
+
+                continue;
+            }
+            $seen[$m[1]] = true;
+        }
+        $kept[] = $ln;
+    }
+    file_put_contents($envF, implode("\n", $kept));
+    run('php artisan config:clear 2>&1', $SITE_ROOT);
+    out(['action' => 'env-dedupe', 'ok' => true, 'dropped_duplicates' => array_values(array_unique($dropped))]);
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
