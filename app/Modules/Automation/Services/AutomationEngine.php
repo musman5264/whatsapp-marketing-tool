@@ -114,8 +114,12 @@ class AutomationEngine
             $currentId = $run->resume_node_id;
             $run->update(['resume_node_id' => null]);
         } else {
-            // Find trigger node and start from the first node after it
-            $triggerNode = $nodes->first(fn ($n) => ($n['type'] ?? '') === 'trigger');
+            // Find trigger node and start from the first node after it. The React
+            // Flow canvas saves the node as type "triggerNode"; older/other flows
+            // use "trigger". Also treat any node carrying data.triggerType as the
+            // trigger so a renamed type never strands a valid flow.
+            $triggerNode = $nodes->first(fn ($n) => in_array($n['type'] ?? '', ['trigger', 'triggerNode'], true)
+                || isset($n['data']['triggerType']));
             if (! $triggerNode) {
                 $run->update(['status' => 'failed', 'error' => 'No trigger node.', 'completed_at' => now()]);
 
