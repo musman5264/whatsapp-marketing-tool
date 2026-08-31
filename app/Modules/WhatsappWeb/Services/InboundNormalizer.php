@@ -3,6 +3,8 @@
 namespace App\Modules\WhatsappWeb\Services;
 
 use App\Modules\WhatsappWeb\Models\WhatsappWebSession;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Log;
 
 /**
  * Converts a WAHA `message` webhook payload into the ($value, $msg) array pair
@@ -11,26 +13,13 @@ use App\Modules\WhatsappWeb\Models\WhatsappWebSession;
  * contact upsert, conversation creation, body extraction, idempotency and the
  * MessageReceived event (auto-replies / AI) — be reused unchanged.
  *
- * WAHA `message` payload (WEBJS/NOWEB engines):
- *   {
- *     "event": "message",
- *     "session": "ws-1",
- *     "payload": {
- *       "id": "false_123@c.us_ABC",
- *       "timestamp": 1699999999,
- *       "from": "123@c.us",
- *       "fromMe": false,
- *       "body": "hello",
- *       "hasMedia": false,
- *       "type": "chat" | "image" | "video" | "ptt" | "document" | "location" | ...,
- *       "media": { "url": "https://waha/api/files/...", "mimetype": "image/jpeg", "filename": null },
- *       "location": { "latitude": .., "longitude": .., "description": ".." },
- *       "_data": { ... }
- *     }
- *   }
+ * Handles both `@c.us` (phone-number) and `@lid` (Linked ID — number hidden)
+ * senders; a LID is resolved to a real number via the engine's contacts API.
  */
 class InboundNormalizer
 {
+    public function __construct(private readonly EngineManager $engines) {}
+
     /**
      * @param  array<string,mixed>  $wahaPayload  the full webhook body
      * @return array{0: array<string,mixed>, 1: array<string,mixed>}|null  [$value, $msg] or null if not an inbound message
@@ -43,20 +32,30 @@ class InboundNormalizer
         }
 
         $fromJid = (string) ($p['from'] ?? '');
-        $fromDigits = preg_replace('/\D+/', '', explode('@', $fromJid)[0]);
-        if ($fromDigits === '' || $fromDigits === null) {
+        if ($fromJid === '') {
             return null;
         }
 
-        // Ignore group / broadcast / status messages — only 1:1 chats (@c.us).
-        if ($fromJid !== '' && ! str_ends_with($fromJid, '@c.us')) {
+        // Only 1:1 chats. Skip groups, broadcasts, newsletters, status.
+        if (str_contains($fromJid, '@g.us')
+            || str_contains($fromJid, '@broadcast')
+            || str_contains($fromJid, '@newsletter')
+            || str_contains($fromJid, 'status@')) {
+            return null;
+        }
+
+        // Resolve the sender to a real phone number.
+        [$phoneDigits, $contactName] = $this->resolveSender($fromJid, $session);
+        if ($phoneDigits === '') {
+            Log::warning('whatsapp_web.inbound.unresolved_sender', ['from' => $fromJid, 'session' => $session->session_name]);
+
             return null;
         }
 
         $type = $this->mapType((string) ($p['type'] ?? 'chat'), $p);
         $msg = [
             'id' => (string) ($p['id'] ?? ('wa-web-'.md5(json_encode($p)))),
-            'from' => $fromDigits,
+            'from' => $phoneDigits,
             'timestamp' => (int) ($p['timestamp'] ?? time()),
             'type' => $type,
         ];
@@ -92,24 +91,73 @@ class InboundNormalizer
                 break;
 
             default:
-                // 'unsupported' — keep the raw payload for diagnostics; body switch
-                // in the driver will fall through to a generic label.
                 $msg['type'] = 'unsupported';
                 if ($body !== '') {
                     $msg['text'] = ['body' => $body];
                 }
         }
 
+        $name = $contactName
+            ?? ($p['notifyName'] ?? null)
+            ?? (is_array($p['_data'] ?? null) ? ($p['_data']['notifyName'] ?? null) : null);
+        // Drop unusable notifyName (WhatsApp sometimes sends garbled single chars).
+        if (is_string($name) && mb_strlen(trim($name)) < 2) {
+            $name = null;
+        }
+
         $value = [
             'metadata' => ['phone_number_id' => $session->session_name],
             'messages' => [$msg],
             'contacts' => [[
-                'wa_id' => $fromDigits,
-                'profile' => ['name' => $p['notifyName'] ?? ($p['_data']['notifyName'] ?? null)],
+                'wa_id' => $phoneDigits,
+                'profile' => ['name' => $name],
             ]],
         ];
 
         return [$value, $msg];
+    }
+
+    /**
+     * @return array{0: string, 1: ?string}  [phone digits without +, display name]
+     */
+    private function resolveSender(string $fromJid, WhatsappWebSession $session): array
+    {
+        $left = explode('@', $fromJid)[0];
+
+        // Plain phone-number JID — use as-is.
+        if (str_ends_with($fromJid, '@c.us') || str_ends_with($fromJid, '@s.whatsapp.net')) {
+            return [preg_replace('/\D+/', '', $left), null];
+        }
+
+        // LID (or anything else) — ask the engine to resolve it. Cache the result
+        // so we don't hit the engine on every message from the same sender.
+        if (str_ends_with($fromJid, '@lid')) {
+            $cacheKey = 'wwlid:'.$session->session_name.':'.$left;
+            $cached = Cache::get($cacheKey);
+            if (is_array($cached)) {
+                return $cached;
+            }
+
+            try {
+                $resolved = $this->engines->adapter()->resolveContact($session->session_name, $fromJid);
+            } catch (\Throwable $e) {
+                Log::warning('whatsapp_web.inbound.resolve_failed', ['from' => $fromJid, 'error' => $e->getMessage()]);
+                $resolved = null;
+            }
+
+            $digits = $resolved && $resolved['phone_e164']
+                ? preg_replace('/\D+/', '', $resolved['phone_e164'])
+                : '';
+            $result = [$digits, $resolved['name'] ?? null];
+
+            if ($digits !== '') {
+                Cache::put($cacheKey, $result, now()->addDay());
+            }
+
+            return $result;
+        }
+
+        return ['', null];
     }
 
     /** @param array<string,mixed> $payload */

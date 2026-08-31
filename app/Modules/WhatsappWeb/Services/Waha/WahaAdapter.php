@@ -133,6 +133,32 @@ class WahaAdapter implements EngineAdapter
         ];
     }
 
+    /**
+     * Resolve a contact id (which may be a LID like `123@lid` that hides the
+     * phone number) to the real phone-number JID and display name.
+     *
+     * @return array{phone_e164: ?string, name: ?string}|null
+     */
+    public function resolveContact(string $session, string $contactId): ?array
+    {
+        $resp = $this->client->get('/api/contacts', [
+            'session' => $session,
+            'contactId' => $contactId,
+        ]);
+        if (! $resp->successful()) {
+            return null;
+        }
+
+        // WAHA returns {id: "923...@c.us", number: "<lid digits>", name: "..."}.
+        $jid = (string) ($resp->json('id') ?? '');
+        $digits = str_ends_with($jid, '@c.us') ? preg_replace('/\D+/', '', explode('@', $jid)[0]) : '';
+
+        return [
+            'phone_e164' => $digits !== '' ? '+'.$digits : null,
+            'name' => $resp->json('name') ?? $resp->json('pushname') ?? $resp->json('shortName') ?? null,
+        ];
+    }
+
     public function logout(string $session): void
     {
         try {

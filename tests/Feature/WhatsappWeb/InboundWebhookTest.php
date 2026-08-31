@@ -121,6 +121,41 @@ class InboundWebhookTest extends TestCase
     }
 
     #[Test]
+    public function lid_sender_is_resolved_to_a_phone_number(): void
+    {
+        // WhatsApp LID contacts hide the number in the payload; the engine's
+        // /api/contacts lookup returns the real phone-number JID.
+        \Illuminate\Support\Facades\Http::fake([
+            'waha.test/api/contacts*' => \Illuminate\Support\Facades\Http::response([
+                'id' => '923345266444@c.us',
+                'number' => '120297755815945',
+                'name' => 'Muhammad Usman',
+            ], 200),
+        ]);
+
+        $payload = [
+            'event' => 'message',
+            'session' => $this->session->session_name,
+            'payload' => [
+                'id' => 'false_120297755815945@lid_ZZZ',
+                'timestamp' => now()->timestamp,
+                'from' => '120297755815945@lid',
+                'fromMe' => false,
+                'body' => 'hi from a lid contact',
+                'type' => 'chat',
+            ],
+        ];
+
+        $this->postJson("/webhooks/whatsapp-web/{$this->token}", $payload)->assertOk();
+
+        $this->assertDatabaseHas('contacts', ['phone_e164' => '+923345266444']);
+        $this->assertDatabaseHas('messages', [
+            'provider_message_id' => 'false_120297755815945@lid_ZZZ',
+            'body' => 'hi from a lid contact',
+        ]);
+    }
+
+    #[Test]
     public function unsigned_request_with_valid_token_is_accepted(): void
     {
         // Not every engine build signs webhooks; the 48-char URL token is the

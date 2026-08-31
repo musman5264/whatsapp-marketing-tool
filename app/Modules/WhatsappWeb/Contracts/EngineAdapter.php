@@ -36,6 +36,14 @@ interface EngineAdapter
      */
     public function getMe(string $session): ?array;
 
+    /**
+     * Resolve a contact id to a real phone number + name. The id may be a LID
+     * (`123@lid`) which hides the number in webhook payloads.
+     *
+     * @return array{phone_e164: ?string, name: ?string}|null
+     */
+    public function resolveContact(string $session, string $contactId): ?array;
+
     /** Unlink the device and delete the engine session. Best-effort. */
     public function logout(string $session): void;
 
