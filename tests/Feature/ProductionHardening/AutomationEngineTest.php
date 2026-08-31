@@ -22,6 +22,14 @@ class AutomationEngineTest extends TestCase
 {
     use RefreshDatabase;
 
+    protected function setUp(): void
+    {
+        parent::setUp();
+        // These tests assert the queued execution path (a deployment with a real
+        // worker). The default is inline execution for shared hosting.
+        config(['automation.execute_inline' => false]);
+    }
+
     private function makeAutomationWithWait(int $workspaceId, int $contactId): Automation
     {
         return Automation::create([
@@ -122,6 +130,35 @@ class AutomationEngineTest extends TestCase
         $this->assertDatabaseHas('automation_runs', [
             'automation_id' => $automation->id,
             'contact_id' => $contact->id,
+        ]);
+    }
+
+    public function test_inline_execution_runs_the_flow_without_a_worker(): void
+    {
+        config(['automation.execute_inline' => true]); // the shared-hosting default
+
+        $data = $this->createWorkspaceContext();
+        $contact = Contact::factory()->create(['workspace_id' => $data['workspace']->id]);
+
+        // A canvas-shaped trigger node ("triggerNode") wired to a tag node.
+        $automation = Automation::create([
+            'workspace_id' => $data['workspace']->id,
+            'name' => 'Inline Test',
+            'status' => 'active',
+            'trigger_type' => 'message.received',
+            'nodes' => [
+                ['id' => 't', 'type' => 'triggerNode', 'data' => ['triggerType' => 'message.received']],
+                ['id' => 'end', 'type' => 'tag', 'data' => ['nodeType' => 'tag', 'tag' => 'greeted']],
+            ],
+            'edges' => [['id' => 'e', 'source' => 't', 'target' => 'end']],
+        ]);
+
+        app(AutomationEngine::class)->triggerForContact($automation, $contact->id);
+
+        // No worker touched it — the run completed inside the call.
+        $this->assertDatabaseHas('automation_runs', [
+            'automation_id' => $automation->id,
+            'status' => 'completed',
         ]);
     }
 }

@@ -70,6 +70,31 @@ class AutomationEngine
             'started_at' => now(),
         ]);
 
+        $this->runNowOrQueue($run);
+    }
+
+    /**
+     * Execute the run immediately if the queue has no worker draining it fast
+     * enough (shared hosting), otherwise queue it. Inline execution is wrapped
+     * so a flow error never breaks the request that triggered it.
+     */
+    private function runNowOrQueue(AutomationRun $run): void
+    {
+        if (config('automation.execute_inline', true)) {
+            try {
+                $this->executeRun($run);
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::error('automation.inline_run_failed', [
+                    'run_id' => $run->id,
+                    'automation_id' => $run->automation_id,
+                    'error' => $e->getMessage(),
+                ]);
+                $run->update(['status' => 'failed', 'error' => mb_substr($e->getMessage(), 0, 500), 'completed_at' => now()]);
+            }
+
+            return;
+        }
+
         dispatch(new ExecuteAutomationRunJob($run->id))->onQueue('automation');
     }
 
@@ -96,7 +121,7 @@ class AutomationEngine
             unset($context['_awaiting_reply'], $context['_reply_var']);
             $run->update(['context' => $context]);
 
-            dispatch(new ExecuteAutomationRunJob($run->id))->onQueue('automation');
+            $this->runNowOrQueue($run);
         }
     }
 
