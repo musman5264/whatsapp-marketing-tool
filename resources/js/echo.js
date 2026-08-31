@@ -31,9 +31,16 @@ function initEcho() {
     const cluster = pusherConfig.cluster || import.meta.env.VITE_PUSHER_APP_CLUSTER || 'mt1';
     const enabled = pusherConfig.enabled !== undefined ? pusherConfig.enabled : !!key;
 
+    // When a self-hosted server (Laravel Reverb / soketi) is used, the backend
+    // sends an explicit ws host/port. Reverb speaks the Pusher protocol, so we
+    // still use the 'pusher' broadcaster — just pointed at our own server.
+    const wsHost   = pusherConfig.wsHost || '';
+    const wsPort   = pusherConfig.wsPort || undefined;
+    const forceTLS = pusherConfig.forceTLS !== undefined ? pusherConfig.forceTLS : true;
+
     if (!key || !enabled) {
         // eslint-disable-next-line no-console
-        console.warn('[echo] Pusher disabled or key missing — real-time disabled.', { enabled, hasKey: !!key });
+        console.warn('[echo] Realtime disabled or key missing — live updates off.', { enabled, hasKey: !!key });
         return;
     }
 
@@ -47,9 +54,15 @@ function initEcho() {
         broadcaster:       'pusher',
         key,
         cluster,
-        forceTLS:          true,
+        forceTLS,
         disableStats:      true,
         enabledTransports: ['ws', 'wss'],
+        // Self-hosted server (Reverb/soketi): pin the ws endpoint.
+        ...(wsHost ? {
+            wsHost,
+            wsPort:  wsPort ?? (forceTLS ? 443 : 80),
+            wssPort: wsPort ?? (forceTLS ? 443 : 80),
+        } : {}),
         // Explicitly use absolute auth endpoint + send CSRF + cookies so the
         // session is always present on POST /broadcasting/auth.
         authEndpoint: '/broadcasting/auth',

@@ -118,6 +118,22 @@ class HandleInertiaRequests extends Middleware
     private function pusherPublicConfig(): array
     {
         try {
+            // Reverb speaks the Pusher protocol. When it's the active broadcaster,
+            // hand the frontend Reverb's key + an explicit ws host/port so
+            // laravel-echo connects to our server instead of pusher.com.
+            if (config('broadcasting.default') === 'reverb') {
+                $key = (string) config('broadcasting.connections.reverb.key');
+
+                return [
+                    'key' => $key,
+                    'cluster' => '',
+                    'enabled' => $key !== '',
+                    'wsHost' => (string) config('broadcasting.connections.reverb.options.host'),
+                    'wsPort' => (int) config('broadcasting.connections.reverb.options.port', 443),
+                    'forceTLS' => config('broadcasting.connections.reverb.options.scheme', 'https') === 'https',
+                ];
+            }
+
             $key = SystemSetting::get('pusher_app_key') ?: env('PUSHER_APP_KEY', '');
             $cluster = SystemSetting::get('pusher_app_cluster') ?: env('PUSHER_APP_CLUSTER', 'mt1');
             $dbFlag = SystemSetting::get('pusher_enabled');
