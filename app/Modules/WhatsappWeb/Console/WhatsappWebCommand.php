@@ -18,9 +18,12 @@ use Illuminate\Support\Facades\Http;
  */
 class WhatsappWebCommand extends Command
 {
-    protected $signature = 'whatsapp-web:status {--reset : delete the local session + ChannelAccount rows} {--engine : also delete the session on the WAHA engine}';
+    protected $signature = 'whatsapp-web:status
+        {--reset : delete the local session + ChannelAccount rows}
+        {--engine : also delete the session on the WAHA engine}
+        {--connect= : run the full connect flow for the given workspace id and report the result}';
 
-    protected $description = 'Diagnose or reset the WhatsApp Web (QR) integration';
+    protected $description = 'Diagnose, connect, or reset the WhatsApp Web (QR) integration';
 
     public function handle(EngineManager $engines): int
     {
@@ -65,6 +68,30 @@ class WhatsappWebCommand extends Command
             } catch (\Throwable $e) {
                 $this->warn('engine unreachable: '.$e->getMessage());
             }
+        }
+
+        if ($ws = $this->option('connect')) {
+            $this->newLine();
+            $this->line('--- connect flow (workspace '.$ws.') ---');
+            try {
+                $prov = app(\App\Modules\WhatsappWeb\Services\SessionProvisioner::class);
+                $row = $prov->ensure((int) $ws, 'waha');
+                $this->info('session row ensured: '.$row->session_name.'  status='.$row->status);
+
+                $webhookUrl = route('webhooks.whatsapp-web.receive', ['token' => $row->webhook_token]);
+                $this->line('webhook url: '.$webhookUrl);
+
+                $engines->adapter()->startSession($row->session_name, $webhookUrl);
+                $this->info('startSession() OK');
+
+                $st = $engines->adapter()->getStatus($row->session_name);
+                $this->info('engine status: '.$st);
+            } catch (\Throwable $e) {
+                $this->error(get_class($e).': '.$e->getMessage());
+                $this->line('  at '.$e->getFile().':'.$e->getLine());
+            }
+
+            return self::SUCCESS;
         }
 
         if ($this->option('reset')) {
