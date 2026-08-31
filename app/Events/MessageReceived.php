@@ -5,11 +5,17 @@ namespace App\Events;
 use App\Modules\Shared\Models\Message;
 use Illuminate\Broadcasting\InteractsWithSockets;
 use Illuminate\Broadcasting\PrivateChannel;
-use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
+use Illuminate\Contracts\Broadcasting\ShouldBroadcastNow;
 use Illuminate\Foundation\Events\Dispatchable;
 use Illuminate\Queue\SerializesModels;
 
-class MessageReceived implements ShouldBroadcast
+/**
+ * Broadcasts synchronously (ShouldBroadcastNow) so the inbox updates the instant
+ * a message lands — shared hosting has no persistent queue worker to drain a
+ * queued broadcast. The extra ~100-300ms HTTP call to the socket server happens
+ * inside the request that created the message.
+ */
+class MessageReceived implements ShouldBroadcastNow
 {
     use Dispatchable, InteractsWithSockets, SerializesModels;
 

@@ -5,7 +5,7 @@ namespace App\Events;
 use App\Modules\Shared\Models\Message;
 use Illuminate\Broadcasting\InteractsWithSockets;
 use Illuminate\Broadcasting\PrivateChannel;
-use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
+use Illuminate\Contracts\Broadcasting\ShouldBroadcastNow;
 use Illuminate\Foundation\Events\Dispatchable;
 use Illuminate\Queue\SerializesModels;
 
@@ -13,7 +13,7 @@ use Illuminate\Queue\SerializesModels;
  * Fired whenever a message's delivery status changes (sent/delivered/read/failed)
  * so the inbox UI can update the ✓ ✓✓ indicators in real time.
  */
-class MessageStatusUpdated implements ShouldBroadcast
+class MessageStatusUpdated implements ShouldBroadcastNow
 {
     use Dispatchable, InteractsWithSockets, SerializesModels;
 
