@@ -2,6 +2,7 @@
 
 namespace App\Modules\AI;
 
+use App\Modules\AI\Console\AiStatusCommand;
 use Illuminate\Support\ServiceProvider;
 
 class AIServiceProvider extends ServiceProvider
@@ -10,5 +11,9 @@ class AIServiceProvider extends ServiceProvider
     {
         $this->loadRoutesFrom(__DIR__.'/routes/web.php');
         $this->loadMigrationsFrom(__DIR__.'/database/migrations');
+
+        if ($this->app->runningInConsole()) {
+            $this->commands([AiStatusCommand::class]);
+        }
     }
 }
