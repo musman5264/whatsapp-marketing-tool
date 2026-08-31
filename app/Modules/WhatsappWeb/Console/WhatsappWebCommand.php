@@ -1,0 +1,92 @@
+<?php
+
+namespace App\Modules\WhatsappWeb\Console;
+
+use App\Modules\Integrations\Services\CredentialResolver;
+use App\Modules\Shared\Models\ChannelAccount;
+use App\Modules\WhatsappWeb\Models\WhatsappWebSession;
+use App\Modules\WhatsappWeb\Services\EngineManager;
+use Illuminate\Console\Command;
+use Illuminate\Support\Facades\Http;
+
+/**
+ * Operator diagnostics + reset for the WhatsApp Web (QR) integration.
+ *
+ *   php artisan whatsapp-web:status            show app + engine state
+ *   php artisan whatsapp-web:status --reset    also wipe the local session + shadow ChannelAccount
+ *   php artisan whatsapp-web:status --reset --engine   also delete the engine-side session
+ */
+class WhatsappWebCommand extends Command
+{
+    protected $signature = 'whatsapp-web:status {--reset : delete the local session + ChannelAccount rows} {--engine : also delete the session on the WAHA engine}';
+
+    protected $description = 'Diagnose or reset the WhatsApp Web (QR) integration';
+
+    public function handle(EngineManager $engines): int
+    {
+        $this->line('APP_URL           : '.config('app.url'));
+
+        $creds = CredentialResolver::system()->whatsappWeb();
+        $this->line('engine configured : '.($engines->enabled() ? 'yes' : 'NO'));
+        if ($creds) {
+            $this->line('engine base_url   : '.$creds->baseUrl());
+            $this->line('engine           : '.$creds->engine());
+            $this->line('webhook secret   : '.($creds->webhookSecret() ? 'set' : 'NOT set'));
+        }
+
+        $session = WhatsappWebSession::first();
+        if ($session) {
+            $this->line('local session    : '.$session->session_name.'  status='.$session->status
+                .'  phone='.($session->phone_e164 ?: '-'));
+            $this->line('webhook url      : '.route('webhooks.whatsapp-web.receive', ['token' => $session->webhook_token]));
+        } else {
+            $this->line('local session    : NONE');
+        }
+
+        $ca = ChannelAccount::where('provider', 'whatsapp_web')->first();
+        $this->line('channel account  : '.($ca ? $ca->phone_number_id.'  status='.$ca->status : 'NONE'));
+
+        // Engine-side view
+        if ($creds && $creds->baseUrl()) {
+            try {
+                $h = $creds->apiKey() ? ['X-Api-Key' => $creds->apiKey()] : [];
+                $resp = Http::withHeaders($h)->timeout(15)->get($creds->baseUrl().'/api/sessions');
+                if ($resp->successful()) {
+                    $this->newLine();
+                    $this->line('--- engine sessions ---');
+                    foreach ($resp->json() ?: [] as $s) {
+                        $this->line('  '.($s['name'] ?? '?').'  status='.($s['status'] ?? '?')
+                            .'  number='.($s['me']['id'] ?? 'none'));
+                        $this->line('    webhook: '.($s['config']['webhooks'][0]['url'] ?? 'none'));
+                    }
+                } else {
+                    $this->warn('engine /api/sessions -> HTTP '.$resp->status());
+                }
+            } catch (\Throwable $e) {
+                $this->warn('engine unreachable: '.$e->getMessage());
+            }
+        }
+
+        if ($this->option('reset')) {
+            $this->newLine();
+
+            if ($this->option('engine') && $session && $creds && $creds->baseUrl()) {
+                try {
+                    $h = $creds->apiKey() ? ['X-Api-Key' => $creds->apiKey()] : [];
+                    $base = $creds->baseUrl();
+                    Http::withHeaders($h)->timeout(30)->post("{$base}/api/sessions/{$session->session_name}/logout");
+                    Http::withHeaders($h)->timeout(30)->delete("{$base}/api/sessions/{$session->session_name}");
+                    $this->info('deleted engine session '.$session->session_name);
+                } catch (\Throwable $e) {
+                    $this->warn('engine delete failed: '.$e->getMessage());
+                }
+            }
+
+            ChannelAccount::where('provider', 'whatsapp_web')->delete();
+            WhatsappWebSession::query()->delete();
+            $this->info('local session + channel account rows deleted. Reconnect from Inbox → Setup → WhatsApp → QR code.');
+        }
+
+        return self::SUCCESS;
+    }
+}

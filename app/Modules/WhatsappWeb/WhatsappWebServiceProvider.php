@@ -2,6 +2,7 @@
 
 namespace App\Modules\WhatsappWeb;
 
+use App\Modules\WhatsappWeb\Console\WhatsappWebCommand;
 use App\Modules\WhatsappWeb\Services\EngineManager;
 use Illuminate\Support\ServiceProvider;
 
@@ -29,5 +30,9 @@ class WhatsappWebServiceProvider extends ServiceProvider
     {
         $this->loadRoutesFrom(__DIR__.'/routes/web.php');
         $this->loadMigrationsFrom(__DIR__.'/database/migrations');
+
+        if ($this->app->runningInConsole()) {
+            $this->commands([WhatsappWebCommand::class]);
+        }
     }
 }
