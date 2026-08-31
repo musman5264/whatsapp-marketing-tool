@@ -114,6 +114,13 @@ class SecureHeaders
         if ($url) {
             $sources[] = parse_url($url, PHP_URL_HOST) ?: $url;
         }
+
+        // Realtime WebSocket host — the browser opens a wss:// connection here for
+        // live inbox updates. Covers self-hosted Reverb and hosted Pusher.
+        foreach ($this->realtimeHosts() as $host) {
+            $sources[] = 'wss://'.$host;
+            $sources[] = 'https://'.$host;
+        }
         if (filled(config('services.onesignal.app_id'))) {
             $sources[] = 'https://onesignal.com';
             $sources[] = 'https://*.onesignal.com';
@@ -144,5 +151,35 @@ class SecureHeaders
         } catch (\Throwable) {
             return false;
         }
+    }
+
+    /**
+     * WebSocket host(s) the frontend connects to for realtime, derived from the
+     * active broadcaster.
+     *
+     * @return list<string>
+     */
+    private function realtimeHosts(): array
+    {
+        $hosts = [];
+        try {
+            $driver = config('broadcasting.default');
+
+            if ($driver === 'reverb') {
+                $h = config('broadcasting.connections.reverb.options.host');
+                if ($h) {
+                    $hosts[] = $h;
+                }
+            } elseif ($driver === 'pusher') {
+                $cluster = config('broadcasting.connections.pusher.options.cluster', 'mt1');
+                $custom = config('broadcasting.connections.pusher.options.host');
+                $hosts[] = $custom ?: "ws-{$cluster}.pusher.com";
+                $hosts[] = "sockjs-{$cluster}.pusher.com";
+            }
+        } catch (\Throwable) {
+            // fall through with an empty list
+        }
+
+        return array_values(array_filter(array_unique($hosts)));
     }
 }
