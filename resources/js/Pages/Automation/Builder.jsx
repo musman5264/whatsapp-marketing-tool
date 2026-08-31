@@ -127,6 +127,54 @@ function useResources() {
     return props.resources ?? {};
 }
 
+/* Flow-scoped context: the list of variables the flow declares/uses, so
+   Condition / Update-contact selects can offer them. */
+const FlowVarsContext = createContext([]);
+const useFlowVars = () => useContext(FlowVarsContext);
+
+/**
+ * Collect the context variables this flow works with:
+ *  - the "save answer to" variable of every Ask Question node
+ *  - any {{context.x}} or bare {{x}} referenced in a node's text fields
+ *  - the target of an Update-contact node that writes context.x
+ * Returns a sorted, de-duplicated list of names (without braces).
+ */
+function collectFlowVariables(nodes) {
+    const vars = new Set();
+    const TEXT_KEYS = ['body', 'question', 'value', 'caption', 'prompt', 'summary', 'description', 'title', 'url', 'payload'];
+
+    for (const n of nodes ?? []) {
+        const d = n.data ?? {};
+        const nt = d.nodeType;
+
+        if (nt === 'ask_question' && d.variable) vars.add(String(d.variable).trim());
+        if (nt === 'update_contact' && typeof d.field === 'string' && d.field.startsWith('context.')) {
+            vars.add(d.field.slice('context.'.length));
+        }
+
+        for (const k of TEXT_KEYS) {
+            const v = d[k];
+            if (typeof v !== 'string') continue;
+            for (const m of v.matchAll(/\{\{\s*(?:context\.)?([a-zA-Z_][\w]*)\s*\}\}/g)) {
+                const name = m[1];
+                // skip the well-known non-variable tokens
+                if (!['contact', 'whatsapp', 'customer', 'message', 'context'].includes(name)) vars.add(name);
+            }
+        }
+        // sequence steps carry their own body/caption
+        for (const s of d.steps ?? []) {
+            for (const k of ['body', 'caption']) {
+                const v = s?.[k];
+                if (typeof v !== 'string') continue;
+                for (const m of v.matchAll(/\{\{\s*(?:context\.)?([a-zA-Z_][\w]*)\s*\}\}/g)) {
+                    if (!['contact', 'whatsapp', 'customer', 'message', 'context'].includes(m[1])) vars.add(m[1]);
+                }
+            }
+        }
+    }
+    return [...vars].filter(Boolean).sort();
+}
+
 /* ─── Node icon helper ───────────────────────────────────────── */
 function NodeIcon({ nodeType, size = 14 }) {
     const def = NODE_DEFS[nodeType];
@@ -453,6 +501,14 @@ const TOKEN_GROUPS = [
 
 function TokenBar() {
     const { t } = useTranslation();
+    const flowVars = useFlowVars();
+
+    const groups = flowVars.length > 0
+        ? [
+            { titleKey: 'automation.flow_variables', tokens: flowVars.map(v => ({ t: `{{${v}}}`, desc: t('automation.tok_flow_var') })) },
+            ...TOKEN_GROUPS,
+        ]
+        : TOKEN_GROUPS;
 
     const insert = (token) => {
         const el = document.activeElement;
@@ -476,7 +532,7 @@ function TokenBar() {
     return (
         <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: '10px', fontSize: 10, color: '#64748b' }}>
             <div style={{ fontWeight: 700, marginBottom: 6, color: '#475569' }}>{t('automation.available_tokens')}</div>
-            {TOKEN_GROUPS.map(g => (
+            {groups.map(g => (
                 <div key={g.titleKey} style={{ marginBottom: 6 }}>
                     <div style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: 0.4, color: '#94a3b8', marginBottom: 3 }}>{t(g.titleKey)}</div>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
@@ -484,7 +540,7 @@ function TokenBar() {
                             <button
                                 key={tok.t}
                                 type="button"
-                                title={t(tok.descKey)}
+                                title={tok.desc ?? (tok.descKey ? t(tok.descKey) : '')}
                                 onMouseDown={e => { e.preventDefault(); insert(tok.t); }}
                                 style={{
                                     background: '#fff', border: '1px solid #cbd5e1', borderRadius: 6,
@@ -744,6 +800,7 @@ function TemplateFields({ d, set }) {
 
     return (
         <>
+            <PersonalNumberNote />
             <Field label={t('automation.field_template_required')}>
                 {templates.length ? (
                     <select className={selectCls} value={tpl ? `${tpl.name}||${tpl.language}` : ''} onChange={e => onPick(e.target.value)}>
@@ -896,6 +953,15 @@ const addBtnStyle = {
     fontWeight: 600, color: '#475569', background: '#f8fafc', cursor: 'pointer',
 };
 
+function PersonalNumberNote() {
+    const { t } = useTranslation();
+    return (
+        <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 8, padding: '8px 10px', fontSize: 10, color: '#1e40af', lineHeight: 1.5 }}>
+            {t('automation.personal_number_degrade_note')}
+        </div>
+    );
+}
+
 function QuickRepliesFields({ d, set }) {
     const { t } = useTranslation();
     const buttons = Array.isArray(d.buttons) ? d.buttons : ['', '', ''];
@@ -906,6 +972,7 @@ function QuickRepliesFields({ d, set }) {
     };
     return (
         <>
+            <PersonalNumberNote />
             <Field label={t('automation.field_message_body_required')}>
                 <textarea className={textareaCls} rows={3} value={d.body ?? ''} onChange={e => set('body', e.target.value)} placeholder={t('automation.placeholder_quick_replies_body')} />
             </Field>
@@ -922,6 +989,7 @@ function ListMessageFields({ d, set }) {
     const { t } = useTranslation();
     return (
         <>
+            <PersonalNumberNote />
             <Field label={t('automation.field_message_body_required')}>
                 <textarea className={textareaCls} rows={3} value={d.body ?? ''} onChange={e => set('body', e.target.value)} placeholder={t('automation.placeholder_list_body')} />
             </Field>
@@ -979,12 +1047,23 @@ function WaitFields({ d, set }) {
 function ConditionFields({ d, set }) {
     const { t } = useTranslation();
     const noValue = d.operator === 'exists' || d.operator === 'not_exists';
+    const flowVars = useFlowVars();
+    // Keep the current value selectable even if it isn't in either list.
+    const known = new Set([...CONDITION_FIELDS.map(f => f.value), ...flowVars.map(v => 'context.' + v)]);
     return (
         <>
             <Field label={t('automation.field_check_field_required')}>
                 <select className={selectCls} value={d.field ?? ''} onChange={e => set('field', e.target.value)}>
                     <option value="">{t('automation.select_field')}</option>
-                    {CONDITION_FIELDS.map(f => <option key={f.value} value={f.value}>{t(f.labelKey)}</option>)}
+                    {flowVars.length > 0 && (
+                        <optgroup label={t('automation.flow_variables')}>
+                            {flowVars.map(v => <option key={v} value={'context.' + v}>{'{{' + v + '}}'}</option>)}
+                        </optgroup>
+                    )}
+                    <optgroup label={t('automation.standard_fields')}>
+                        {CONDITION_FIELDS.map(f => <option key={f.value} value={f.value}>{t(f.labelKey)}</option>)}
+                    </optgroup>
+                    {d.field && !known.has(d.field) && <option value={d.field}>{d.field}</option>}
                 </select>
             </Field>
             <Field label={t('automation.field_operator')}>
@@ -1016,12 +1095,20 @@ function TagFields({ d, set }) {
 
 function UpdateContactFields({ d, set }) {
     const { t } = useTranslation();
+    const flowVars = useFlowVars();
     return (
         <>
             <Field label={t('automation.field_field_to_update_required')}>
                 <select className={selectCls} value={d.field ?? ''} onChange={e => set('field', e.target.value)}>
                     <option value="">{t('automation.select_field')}</option>
-                    {UPDATE_FIELDS.map(f => <option key={f.value} value={f.value}>{t(f.labelKey)}</option>)}
+                    <optgroup label={t('automation.standard_fields')}>
+                        {UPDATE_FIELDS.map(f => <option key={f.value} value={f.value}>{t(f.labelKey)}</option>)}
+                    </optgroup>
+                    {flowVars.length > 0 && (
+                        <optgroup label={t('automation.flow_variables')}>
+                            {flowVars.map(v => <option key={v} value={'context.' + v}>{'{{' + v + '}}'}</option>)}
+                        </optgroup>
+                    )}
                 </select>
             </Field>
             <Field label={t('automation.field_new_value_required')}>
@@ -1951,11 +2038,13 @@ function AutomationBuilderInner({ automation: initial }) {
                     <>
                         <div onClick={() => setSelectedNode(null)} style={{ position: 'absolute', inset: 0, zIndex: 9 }} />
                         <div style={{ position: 'absolute', top: 0, right: 0, bottom: 0, zIndex: 10, pointerEvents: 'all' }}>
-                            <ConfigPanel
-                                node={selectedNode}
-                                onClose={() => setSelectedNode(null)}
-                                onChange={updateNodeData}
-                            />
+                            <FlowVarsContext.Provider value={collectFlowVariables(nodes)}>
+                                <ConfigPanel
+                                    node={selectedNode}
+                                    onClose={() => setSelectedNode(null)}
+                                    onChange={updateNodeData}
+                                />
+                            </FlowVarsContext.Provider>
                             <button
                                 onClick={() => deleteNode(selectedNode.id)}
                                 style={{

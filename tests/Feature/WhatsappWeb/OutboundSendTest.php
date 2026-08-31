@@ -103,13 +103,18 @@ class OutboundSendTest extends TestCase
     }
 
     #[Test]
-    public function template_send_is_rejected(): void
+    public function template_send_degrades_to_plain_text(): void
     {
-        $this->expectException(\RuntimeException::class);
-        $this->expectExceptionMessageMatches('/not supported on a WhatsApp Web/i');
+        // A personal number has no templates — the driver sends the resolved
+        // body as plain text instead of failing the run.
+        Http::fake(['waha.test/api/sendText' => Http::response(['id' => 't_1'], 201)]);
 
-        app(WhatsappDriver::class)->send($this->message('template', [
-            'payload' => ['template' => ['name' => 'greeting', 'language' => 'en']],
+        $id = app(WhatsappDriver::class)->send($this->message('template', [
+            'body' => 'Welcome aboard!',
+            'payload' => ['template' => ['name' => 'greeting', 'language' => 'en', 'components' => []]],
         ]));
+
+        $this->assertSame('t_1', $id);
+        Http::assertSent(fn ($r) => str_ends_with($r->url(), '/api/sendText') && $r['text'] === 'Welcome aboard!');
     }
 }

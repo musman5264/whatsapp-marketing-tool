@@ -3285,6 +3285,11 @@ parameters:
 			path: app/Modules/AI/Console/AiStatusCommand.php
 
 		-
+			message: '#^Access to an undefined property App\\Modules\\Automation\\Models\\Automation(Run|RunLog)\:\:\$\w+\.$#'
+			identifier: property.notFound
+			path: app/Modules/Automation/Console/AutomationRunsCommand.php
+
+		-
 			message: '#^Method App\\Modules\\AI\\Services\\Llm\\LlmProviderInterface\:\:chat\(\) has parameter \$messages with no value type specified in iterable type array\.$#'
 			identifier: missingType.iterableValue
 			count: 1

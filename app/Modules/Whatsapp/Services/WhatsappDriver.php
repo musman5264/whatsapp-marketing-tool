@@ -77,8 +77,11 @@ class WhatsappDriver implements ChannelDriverInterface
     /**
      * Outbound send for the `whatsapp_web` provider (WAHA engine). Media is sent
      * by public URL (payload.link / payload.preview_url) — the inbox/mobile
-     * controllers skip the Meta media upload for this provider. Templates and
-     * interactive messages are not supported on a personal number.
+     * controllers skip the Meta media upload for this provider.
+     *
+     * A personal number has no templates or interactive (button/list) messages,
+     * so those degrade gracefully to a plain-text rendering instead of failing —
+     * the automation still delivers something useful.
      */
     private function sendViaWhatsappWeb(Conversation $conversation, Message $message, string $phone): string
     {
@@ -93,7 +96,23 @@ class WhatsappDriver implements ChannelDriverInterface
         $link = $payload['link'] ?? $payload['preview_url'] ?? null;
 
         return match ($message->type) {
-            'template', 'interactive' => throw new \RuntimeException('Templates and interactive messages are not supported on a WhatsApp Web (personal) number. Send plain text or media instead.'),
+            'template' => $adapter->sendText(
+                $session,
+                $phone,
+                $this->templateAsPlainText(
+                    is_array($payload['template'] ?? null) ? $payload['template'] : [],
+                    (string) ($message->body ?? ''),
+                    (int) $conversation->workspace_id,
+                ),
+            ),
+            'interactive' => $adapter->sendText(
+                $session,
+                $phone,
+                $this->interactiveAsPlainText(
+                    is_array($payload['interactive'] ?? null) ? $payload['interactive'] : [],
+                    (string) ($message->body ?? ''),
+                ),
+            ),
             'image', 'video', 'document', 'audio' => $link
                 ? $adapter->sendMedia($session, $phone, $message->type, (string) $link, $caption, $payload['filename'] ?? null)
                 : throw new \RuntimeException('No downloadable URL for this media message.'),
@@ -107,6 +126,142 @@ class WhatsappDriver implements ChannelDriverInterface
             ),
             default => $adapter->sendText($session, $phone, $message->body ?? ''),
         };
+    }
+
+    /**
+     * Render a Meta template payload as plain text for a personal number: look up
+     * the approved template body, substitute its {{1}}, {{2}} … placeholders with
+     * the supplied body parameters, and append any URL button as a link.
+     *
+     * @param  array<string,mixed>  $template  {name, language, components}
+     */
+    private function templateAsPlainText(array $template, string $fallbackBody, int $workspaceId): string
+    {
+        $name = (string) ($template['name'] ?? '');
+        $components = is_array($template['components'] ?? null) ? $template['components'] : [];
+
+        // Body parameters, in order, from the {type:body, parameters:[{text}]} component.
+        $params = [];
+        $buttonUrl = '';
+        foreach ($components as $c) {
+            $ctype = strtolower((string) ($c['type'] ?? ''));
+            if ($ctype === 'body') {
+                foreach (($c['parameters'] ?? []) as $p) {
+                    $params[] = (string) ($p['text'] ?? ($p['image']['link'] ?? ''));
+                }
+            } elseif ($ctype === 'button') {
+                foreach (($c['parameters'] ?? []) as $p) {
+                    if (! empty($p['text']) && filter_var($p['text'], FILTER_VALIDATE_URL)) {
+                        $buttonUrl = (string) $p['text'];
+                    }
+                }
+            }
+        }
+
+        $bodyText = '';
+        if ($name !== '') {
+            $tpl = WhatsappTemplate::where('name', $name)
+                ->where('workspace_id', $workspaceId)
+                ->first()
+                ?? WhatsappTemplate::where('name', $name)->first();
+            if ($tpl) {
+                $bodyText = $this->extractTemplateBody($tpl);
+            }
+        }
+
+        if ($bodyText === '') {
+            // No stored template — best effort: use the message body, else the
+            // parameters joined so the customer still receives the dynamic bits.
+            $bodyText = $fallbackBody !== '' ? $fallbackBody : implode(' ', array_filter($params));
+        }
+
+        // Substitute {{1}}, {{2}} … positionally.
+        $bodyText = (string) preg_replace_callback('/\{\{\s*(\d+)\s*\}\}/', function ($m) use ($params) {
+            return $params[((int) $m[1]) - 1] ?? '';
+        }, $bodyText);
+
+        $out = trim($bodyText);
+        if ($buttonUrl !== '') {
+            $out = trim($out."\n\n".$buttonUrl);
+        }
+
+        return $out !== '' ? $out : '(message)';
+    }
+
+    /** Pull the BODY text out of a stored template's components array. */
+    private function extractTemplateBody(WhatsappTemplate $tpl): string
+    {
+        $comps = $tpl->components;
+        if (is_string($comps)) {
+            return $comps;
+        }
+        if (is_array($comps)) {
+            foreach ($comps as $c) {
+                if (strtoupper((string) ($c['type'] ?? '')) === 'BODY') {
+                    return (string) ($c['text'] ?? '');
+                }
+            }
+        }
+
+        return '';
+    }
+
+    /**
+     * Render an interactive (button / list) payload as plain text: the body, then
+     * the choices as a numbered list the customer can reply to.
+     *
+     * @param  array<string,mixed>  $interactive
+     */
+    private function interactiveAsPlainText(array $interactive, string $fallbackBody): string
+    {
+        $body = (string) ($interactive['body']['text'] ?? $fallbackBody);
+        $lines = $body !== '' ? [$body, ''] : [];
+
+        $type = (string) ($interactive['type'] ?? '');
+
+        if ($type === 'button') {
+            $n = 1;
+            foreach (($interactive['action']['buttons'] ?? []) as $b) {
+                $title = (string) ($b['reply']['title'] ?? $b['title'] ?? '');
+                if ($title !== '') {
+                    $lines[] = $n.'. '.$title;
+                    $n++;
+                }
+            }
+        } elseif ($type === 'list') {
+            $btn = (string) ($interactive['action']['button'] ?? '');
+            if ($btn !== '') {
+                $lines[] = '('.$btn.')';
+                $lines[] = '';
+            }
+            $n = 1;
+            foreach (($interactive['action']['sections'] ?? []) as $section) {
+                $secTitle = (string) ($section['title'] ?? '');
+                if ($secTitle !== '') {
+                    $lines[] = $secTitle.':';
+                }
+                foreach (($section['rows'] ?? []) as $row) {
+                    $t = (string) ($row['title'] ?? '');
+                    $d = (string) ($row['description'] ?? '');
+                    $lines[] = $n.'. '.$t.($d !== '' ? ' — '.$d : '');
+                    $n++;
+                }
+            }
+            if ($n > 1) {
+                $lines[] = '';
+                $lines[] = 'Reply with a number to choose.';
+            }
+        } elseif ($type === 'cta_url') {
+            $url = (string) ($interactive['action']['parameters']['url'] ?? '');
+            $label = (string) ($interactive['action']['parameters']['display_text'] ?? '');
+            if ($url !== '') {
+                $lines[] = ($label !== '' ? $label.': ' : '').$url;
+            }
+        }
+
+        $out = trim(implode("\n", $lines));
+
+        return $out !== '' ? $out : ($fallbackBody !== '' ? $fallbackBody : '(message)');
     }
 
     /**
