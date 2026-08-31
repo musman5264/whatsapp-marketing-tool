@@ -36,7 +36,7 @@ class WhatsappWebSessionController extends Controller
 
         try {
             $webhookUrl = route('webhooks.whatsapp-web.receive', ['token' => $session->webhook_token]);
-            $this->engines->adapter()->startSession($session->session_name, $webhookUrl);
+            $this->engines->adapter()->startSession($session->session_name, $webhookUrl, $creds?->webhookSecret());
             $status = $this->engines->adapter()->getStatus($session->session_name);
             $session->update(['status' => $this->localStatus($status), 'last_seen_at' => now()]);
         } catch (\Throwable $e) {

@@ -13,8 +13,12 @@ namespace App\Modules\WhatsappWeb\Contracts;
  */
 interface EngineAdapter
 {
-    /** Idempotently create/start the engine session and point its webhook at $webhookUrl. */
-    public function startSession(string $session, string $webhookUrl): void;
+    /**
+     * Idempotently create/start the engine session and point its webhook at
+     * $webhookUrl. When $hmacSecret is given, the engine is told to sign each
+     * webhook (so the app can verify authenticity).
+     */
+    public function startSession(string $session, string $webhookUrl, ?string $hmacSecret = null): void;
 
     /** Current QR as a data URI (image/png;base64). Null once paired or not in scan state. */
     public function getQr(string $session): ?string;

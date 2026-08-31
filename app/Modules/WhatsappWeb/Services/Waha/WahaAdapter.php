@@ -26,14 +26,17 @@ class WahaAdapter implements EngineAdapter
 {
     public function __construct(private readonly WahaClient $client) {}
 
-    public function startSession(string $session, string $webhookUrl): void
+    public function startSession(string $session, string $webhookUrl, ?string $hmacSecret = null): void
     {
-        $config = [
-            'webhooks' => [[
-                'url' => $webhookUrl,
-                'events' => ['message', 'session.status', 'message.ack'],
-            ]],
+        $webhook = [
+            'url' => $webhookUrl,
+            'events' => ['message', 'session.status', 'message.ack'],
         ];
+        if ($hmacSecret !== null && $hmacSecret !== '') {
+            // WAHA signs each webhook body: X-Webhook-Hmac = hmac_sha256(body, key)
+            $webhook['hmac'] = ['key' => $hmacSecret];
+        }
+        $config = ['webhooks' => [$webhook]];
 
         // Does the session already exist? (WAHA Core allows only one, and returns
         // 403/409/422 on a duplicate create — treat any of those as "exists".)

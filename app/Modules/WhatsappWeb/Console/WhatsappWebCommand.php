@@ -120,8 +120,8 @@ class WhatsappWebCommand extends Command
                 $webhookUrl = route('webhooks.whatsapp-web.receive', ['token' => $row->webhook_token]);
                 $this->line('webhook url: '.$webhookUrl);
 
-                $engines->adapter()->startSession($row->session_name, $webhookUrl);
-                $this->info('startSession() OK');
+                $engines->adapter()->startSession($row->session_name, $webhookUrl, $creds?->webhookSecret());
+                $this->info('startSession() OK'.($creds?->webhookSecret() ? ' (with HMAC)' : ' (no HMAC)'));
 
                 // Raw check — what does GET /api/sessions/{name} actually return from here?
                 $creds2 = CredentialResolver::system()->whatsappWeb();
