@@ -63,6 +63,16 @@ Schedule::call(function () {
     app(WebhookIdempotencyService::class)->prune(30);
 })->weekly()->name('prune-inbound-webhook-events');
 
+// Drain the queues every minute. On hosts without a long-running worker
+// (shared / cPanel), this is what actually processes queued jobs — inbound
+// WhatsApp webhooks, campaign sends, auto-replies, etc. `--stop-when-empty`
+// keeps it short-lived so the cron slot is never blocked; `withoutOverlapping`
+// prevents pile-ups if a batch runs long.
+Schedule::command('queue:work --queue=whatsapp,broadcast,social,ai,leads,automation,default --stop-when-empty --max-time=55 --tries=3')
+    ->everyMinute()
+    ->name('drain-queues')
+    ->withoutOverlapping(10);
+
 // Sync subscription statuses with payment gateways (hourly)
 Schedule::command('billing:sync')
     ->hourly()
