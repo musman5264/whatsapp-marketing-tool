@@ -78,7 +78,7 @@ class WhatsappWebCommand extends Command
 
         $session = WhatsappWebSession::first();
         if ($session) {
-            $this->line('local session    : '.$session->session_name.'  status='.$session->status
+            $this->line('local session    : #'.$session->id.'  '.$session->session_name.'  status='.$session->status
                 .'  phone='.($session->phone_e164 ?: '-'));
             $this->line('webhook url      : '.route('webhooks.whatsapp-web.receive', ['token' => $session->webhook_token]));
         } else {
@@ -86,7 +86,13 @@ class WhatsappWebCommand extends Command
         }
 
         $ca = ChannelAccount::where('provider', 'whatsapp_web')->first();
-        $this->line('channel account  : '.($ca ? $ca->phone_number_id.'  status='.$ca->status : 'NONE'));
+        $this->line('channel account  : '.($ca ? '#'.$ca->id.' '.$ca->phone_number_id.'  status='.$ca->status : 'NONE'));
+
+        $this->line('conversations    : '.\App\Modules\Shared\Models\Conversation::count());
+        $this->line('whatsapp messages: '.\App\Modules\Shared\Models\Message::where('channel', 'whatsapp')->count()
+            .' (in='.\App\Modules\Shared\Models\Message::where('channel', 'whatsapp')->where('direction', 'in')->count().')');
+        $this->line('queued jobs      : '.\Illuminate\Support\Facades\DB::table('jobs')->count()
+            .'  failed='.\Illuminate\Support\Facades\DB::table('failed_jobs')->count());
 
         // Engine-side view
         if ($creds && $creds->baseUrl()) {

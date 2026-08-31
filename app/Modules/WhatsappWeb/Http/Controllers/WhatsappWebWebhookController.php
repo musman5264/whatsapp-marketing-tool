@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Modules\Integrations\Services\CredentialResolver;
 use App\Modules\WhatsappWeb\Jobs\ProcessWahaEventJob;
 use App\Modules\WhatsappWeb\Models\WhatsappWebSession;
+use App\Modules\WhatsappWeb\Services\WahaEventProcessor;
 use App\Services\WebhookIdempotencyService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -53,22 +54,21 @@ class WhatsappWebWebhookController extends Controller
             return response()->json(['status' => 'ok']);
         }
 
-        Log::info('whatsapp_web.webhook.received', [
-            'session' => $session->session_name,
-            'event' => $event,
-        ]);
-
-        // Dispatch BEFORE flushing the response. Dispatch to the database queue is
-        // a single fast INSERT; doing it post-flush (after fastcgi_finish_request)
-        // proved unreliable on this host — the job silently never landed.
+        // Process INLINE so the message hits the inbox in ~1s — shared hosting
+        // has no persistent queue worker, and WAHA tolerates a 1-2s response.
+        // If anything throws, queue it for the cron drain to retry.
         try {
-            ProcessWahaEventJob::dispatch($payload, $session->id)->onQueue('whatsapp');
+            app(WahaEventProcessor::class)->process($payload, $session);
         } catch (\Throwable $e) {
-            Log::error('whatsapp_web.webhook.dispatch_failed', [
+            Log::error('whatsapp_web.webhook.inline_failed_queued', [
                 'session' => $session->session_name,
                 'event' => $event,
                 'error' => $e->getMessage(),
             ]);
+            try {
+                ProcessWahaEventJob::dispatch($payload, $session->id, $session->session_name)->onQueue('whatsapp');
+            } catch (\Throwable) {
+            }
         }
 
         return response()->json(['status' => 'ok']);
