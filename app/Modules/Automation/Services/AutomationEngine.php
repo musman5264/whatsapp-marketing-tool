@@ -320,6 +320,7 @@ class AutomationEngine
         $c->last_name = 'Contact';
         $c->email = 'test.contact@example.com';
         $c->phone_e164 = '+15555550123';
+        $c->custom_fields = ['wa_push_name' => 'Test Contact'];
         $c->language = 'en';
         $c->country = 'US';
 
@@ -616,16 +617,58 @@ class AutomationEngine
 
     private function renderTokens(string $template, Contact $contact, array $context): string
     {
-        // Contact tokens: {{contact.first_name}}, {{contact.last_name}}, {{contact.email}}, etc.
-        $template = preg_replace_callback('/\{\{contact\.(\w+)\}\}/', function ($matches) use ($contact) {
+        // The number the customer messages from — always known for WhatsApp/SMS,
+        // even for walk-ins that were never added to Contacts.
+        $number = (string) ($contact->phone_e164 ?? '');
+
+        // The customer's WhatsApp display (push) name, captured at message time.
+        // Falls back: saved push-name → contact full name → first name → number.
+        $waName = (string) (
+            ($contact->custom_fields['wa_push_name'] ?? null)
+            ?: (trim((string) $contact->full_name) ?: null)
+            ?: ($contact->first_name ?? null)
+            ?: $number
+        );
+
+        // A friendly name for greetings: real name if we have one, else "there".
+        $friendly = trim((string) $contact->full_name)
+            ?: (string) ($contact->custom_fields['wa_push_name'] ?? '')
+            ?: ($contact->first_name ?? '')
+            ?: 'there';
+
+        $whatsapp = [
+            'name' => $waName,
+            'number' => $number,
+            'phone' => $number,
+        ];
+
+        // {{whatsapp.name}}, {{whatsapp.number}}, {{whatsapp.phone}}
+        $template = preg_replace_callback('/\{\{\s*whatsapp\.(\w+)\s*\}\}/i', function ($m) use ($whatsapp) {
+            return (string) ($whatsapp[strtolower($m[1])] ?? '');
+        }, $template);
+
+        // {{customer.name}} / {{customer.number}} — aliases of the whatsapp.* set
+        $template = preg_replace_callback('/\{\{\s*customer\.(\w+)\s*\}\}/i', function ($m) use ($whatsapp) {
+            return (string) ($whatsapp[strtolower($m[1])] ?? '');
+        }, $template);
+
+        // Contact name shorthand — falls back to push-name / "there" for walk-ins.
+        $template = str_replace(
+            ['{{contact.name}}', '{{ contact.name }}', '{{contact.first_name_or_friendly}}'],
+            $friendly,
+            $template,
+        );
+
+        // {{contact.number}} — alias for phone_e164 (people expect "number")
+        $template = str_replace(['{{contact.number}}', '{{ contact.number }}'], $number, $template);
+
+        // Contact tokens: {{contact.first_name}}, {{contact.last_name}}, {{contact.email}}, {{contact.phone_e164}}, etc.
+        $template = preg_replace_callback('/\{\{\s*contact\.(\w+)\s*\}\}/', function ($matches) use ($contact) {
             return (string) ($contact->{$matches[1]} ?? '');
         }, $template);
 
-        // Contact name shorthand: {{contact.name}} -> full name
-        $template = str_replace('{{contact.name}}', $contact->full_name, $template);
-
         // Context tokens: {{context.key}}
-        $template = preg_replace_callback('/\{\{context\.(\w+)\}\}/', function ($matches) use ($context) {
+        $template = preg_replace_callback('/\{\{\s*context\.(\w+)\s*\}\}/', function ($matches) use ($context) {
             return (string) ($context[$matches[1]] ?? '');
         }, $template);
 
@@ -837,7 +880,12 @@ class AutomationEngine
 
         // Resolve the actual value from the contact, the inbound message, or the run context.
         $actual = match (true) {
-            $field === 'contact.name' => optional($contact)->full_name,
+            $field === 'contact.name' => optional($contact)->full_name
+                ?: (optional($contact)->custom_fields['wa_push_name'] ?? null),
+            in_array($field, ['contact.phone', 'contact.number'], true) => optional($contact)->phone_e164,
+            $field === 'whatsapp.name' => optional($contact)->custom_fields['wa_push_name']
+                ?? optional($contact)->full_name,
+            $field === 'whatsapp.number' => optional($contact)->phone_e164,
             (bool) $field && str_starts_with((string) $field, 'contact.') => optional($contact)->{str_replace('contact.', '', $field)},
             $field === 'message.body' => $context['message_body'] ?? null,
             (bool) $field && str_starts_with((string) $field, 'context.') => $context[str_replace('context.', '', $field)] ?? null,

@@ -308,11 +308,37 @@ class WhatsappDriver implements ChannelDriverInterface
 
         $workspaceId = (int) $channelAccount->workspace_id;
 
-        $contact = $this->contactService->upsert($workspaceId, [
+        // WhatsApp push-name (their display name) — from the webhook contacts block.
+        // Kept so {{contact.name}} / {{whatsapp.name}} work for walk-in numbers that
+        // were never imported. Only fill it when we don't already have a name.
+        $waName = trim((string) ($value['contacts'][0]['profile']['name'] ?? ''));
+
+        $existing = Contact::where('workspace_id', $workspaceId)
+            ->where('phone_e164', '+'.$fromPhone)
+            ->first();
+
+        $upsertData = [
             'phone_e164' => '+'.$fromPhone,
             'opt_in_whatsapp' => true,
             'source' => 'whatsapp_inbound',
-        ]);
+        ];
+        if ($waName !== '' && (! $existing || trim((string) $existing->full_name) === '')) {
+            $parts = preg_split('/\s+/', $waName, 2);
+            $upsertData['first_name'] = $parts[0] ?? $waName;
+            if (! empty($parts[1])) {
+                $upsertData['last_name'] = $parts[1];
+            }
+        }
+
+        $contact = $this->contactService->upsert($workspaceId, $upsertData);
+
+        // Remember the raw WhatsApp push-name so {{whatsapp.name}} can use it
+        // verbatim even if first/last name get edited later.
+        if ($waName !== '' && ($contact->custom_fields['wa_push_name'] ?? null) !== $waName) {
+            $cf = $contact->custom_fields ?? [];
+            $cf['wa_push_name'] = $waName;
+            $contact->update(['custom_fields' => $cf]);
+        }
 
         $conversation = Conversation::firstOrCreate(
             ['workspace_id' => $workspaceId, 'contact_id' => $contact->id, 'channel_account_id' => $channelAccount?->id],

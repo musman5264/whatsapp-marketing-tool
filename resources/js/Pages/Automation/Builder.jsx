@@ -395,7 +395,16 @@ function ConfigPanel({ node, onClose, onChange }) {
             </div>
 
             {/* Fields */}
-            <div style={{ flex: 1, overflowY: 'auto', padding: 16, paddingBottom: 64 }} className="space-y-4">
+            <div
+                style={{ flex: 1, overflowY: 'auto', padding: 16, paddingBottom: 64 }}
+                className="space-y-4"
+                onFocusCapture={e => {
+                    const el = e.target;
+                    if (el && (el.tagName === 'TEXTAREA' || (el.tagName === 'INPUT' && el.type === 'text'))) {
+                        window.__automationLastField = el;
+                    }
+                }}
+            >
                 {/* Label */}
                 <Field label={t('automation.node_label_optional')}>
                     <input className={inputCls} value={d.label ?? ''} onChange={e => set('label', e.target.value)} placeholder={defLabel} />
@@ -404,11 +413,91 @@ function ConfigPanel({ node, onClose, onChange }) {
                 {/* Per-type fields */}
                 {Fields && <Fields d={d} set={set} />}
 
-                {/* Token hint */}
-                <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: '8px 10px', fontSize: 10, color: '#64748b' }}>
-                    <strong>{t('automation.available_tokens')}</strong> <code>{'{{contact.name}}'}</code>, <code>{'{{contact.email}}'}</code>, <code>{'{{contact.phone}}'}</code>, <code>{'{{message.body}}'}</code>, <code>{'{{context.key}}'}</code>
-                </div>
+                {/* Token inserter */}
+                <TokenBar />
             </div>
+        </div>
+    );
+}
+
+/**
+ * Clickable variable chips. Clicking one inserts the token at the caret of the
+ * text field the user last focused inside this panel (or appends to it).
+ * {{whatsapp.*}} / {{customer.*}} always resolve to the number/name the customer
+ * messaged from — works for walk-ins that were never saved as contacts.
+ */
+const TOKEN_GROUPS = [
+    {
+        titleKey: 'automation.tokens_whatsapp',
+        tokens: [
+            { t: '{{whatsapp.name}}',   descKey: 'automation.tok_wa_name' },
+            { t: '{{whatsapp.number}}', descKey: 'automation.tok_wa_number' },
+        ],
+    },
+    {
+        titleKey: 'automation.tokens_contact',
+        tokens: [
+            { t: '{{contact.name}}',       descKey: 'automation.tok_contact_name' },
+            { t: '{{contact.first_name}}', descKey: 'automation.tok_contact_first' },
+            { t: '{{contact.number}}',     descKey: 'automation.tok_contact_number' },
+            { t: '{{contact.email}}',      descKey: 'automation.tok_contact_email' },
+        ],
+    },
+    {
+        titleKey: 'automation.tokens_other',
+        tokens: [
+            { t: '{{context.key}}', descKey: 'automation.tok_context' },
+        ],
+    },
+];
+
+function TokenBar() {
+    const { t } = useTranslation();
+
+    const insert = (token) => {
+        const el = document.activeElement;
+        const isField = el && (el.tagName === 'TEXTAREA' || (el.tagName === 'INPUT' && el.type === 'text'));
+        // The panel just lost focus to the button; use the remembered field.
+        const target = isField ? el : window.__automationLastField;
+        if (!target) {
+            navigator.clipboard?.writeText(token);
+            return;
+        }
+        const start = target.selectionStart ?? target.value.length;
+        const end = target.selectionEnd ?? target.value.length;
+        target.value = target.value.slice(0, start) + token + target.value.slice(end);
+        // Fire React's onChange
+        target.dispatchEvent(new Event('input', { bubbles: true }));
+        const pos = start + token.length;
+        target.setSelectionRange(pos, pos);
+        target.focus();
+    };
+
+    return (
+        <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: '10px', fontSize: 10, color: '#64748b' }}>
+            <div style={{ fontWeight: 700, marginBottom: 6, color: '#475569' }}>{t('automation.available_tokens')}</div>
+            {TOKEN_GROUPS.map(g => (
+                <div key={g.titleKey} style={{ marginBottom: 6 }}>
+                    <div style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: 0.4, color: '#94a3b8', marginBottom: 3 }}>{t(g.titleKey)}</div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                        {g.tokens.map(tok => (
+                            <button
+                                key={tok.t}
+                                type="button"
+                                title={t(tok.descKey)}
+                                onMouseDown={e => { e.preventDefault(); insert(tok.t); }}
+                                style={{
+                                    background: '#fff', border: '1px solid #cbd5e1', borderRadius: 6,
+                                    padding: '2px 6px', fontSize: 10, fontFamily: 'monospace', color: '#334155',
+                                    cursor: 'pointer',
+                                }}
+                            >
+                                {tok.t}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+            ))}
         </div>
     );
 }

@@ -13,10 +13,36 @@ use App\Modules\Automation\Jobs\ExecuteAutomationRunJob;
 use App\Modules\Automation\Models\Automation;
 use App\Modules\Automation\Models\AutomationRun;
 use App\Modules\Automation\Services\AutomationEngine;
+use App\Services\WebhookIdempotencyService;
 
 class AutomationTriggerListener
 {
-    public function __construct(private readonly AutomationEngine $engine) {}
+    public function __construct(
+        private readonly AutomationEngine $engine,
+        private readonly WebhookIdempotencyService $idempotency,
+    ) {}
+
+    /**
+     * One inbound message can reach this listener more than once — the WhatsApp
+     * Web engine re-sends webhooks, message + message.any arrive for the same id,
+     * and a failed inline run gets re-queued to the cron drain. Guard each
+     * (automation, triggering message) pair with an atomic marker so a given
+     * automation fires at most once per message.
+     *
+     * @param  array<string, mixed>  $context
+     */
+    private function alreadyTriggered(int $automationId, array $context): bool
+    {
+        $messageId = $context['message_id'] ?? null;
+        if (! $messageId) {
+            return false; // non-message triggers have their own semantics
+        }
+
+        return ! $this->idempotency->isNewEvent(
+            'automation_trigger',
+            $automationId.':msg:'.$messageId,
+        );
+    }
 
     public function handleMessageReceived(MessageReceived $event): void
     {
@@ -124,7 +150,12 @@ class AutomationTriggerListener
         Automation::where('workspace_id', $workspaceId)
             ->where('status', 'active')
             ->where('trigger_type', $triggerType)
-            ->each(fn ($automation) => $this->engine->triggerForContact($automation, $contactId, $context));
+            ->each(function ($automation) use ($contactId, $context) {
+                if ($this->alreadyTriggered($automation->id, $context)) {
+                    return;
+                }
+                $this->engine->triggerForContact($automation, $contactId, $context);
+            });
     }
 
     /**
@@ -159,6 +190,10 @@ class AutomationTriggerListener
                 if (! $matches) {
                     continue;
                 }
+            }
+
+            if ($this->alreadyTriggered($automation->id, $context)) {
+                continue;
             }
 
             $this->engine->triggerForContact($automation, $contactId, $context);
