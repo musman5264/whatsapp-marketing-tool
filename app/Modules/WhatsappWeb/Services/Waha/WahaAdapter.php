@@ -35,21 +35,41 @@ class WahaAdapter implements EngineAdapter
             ]],
         ];
 
-        // Create (ignore "already exists"), then start (ignore "already started").
-        $create = $this->client->post('/api/sessions', [
-            'name' => $session,
-            'start' => true,
-            'config' => $config,
-        ]);
+        // Does the session already exist? (WAHA Core allows only one, and returns
+        // 403/409/422 on a duplicate create — treat any of those as "exists".)
+        $existing = $this->client->get("/api/sessions/{$session}");
 
-        if (! $create->successful() && $create->status() !== 422 && $create->status() !== 409) {
-            // 422/409 = already exists; anything else is a real failure.
-            throw new \RuntimeException('WAHA: could not create session ('.$create->status().'): '.$create->body());
+        if (! $existing->successful()) {
+            $create = $this->client->post('/api/sessions', [
+                'name' => $session,
+                'start' => true,
+                'config' => $config,
+            ]);
+
+            if (! $create->successful() && ! in_array($create->status(), [403, 409, 422], true)) {
+                throw new \RuntimeException($this->createError($session, $create->status(), $create->body()));
+            }
         }
 
-        // Ensure it is running and the webhook config is current even if it pre-existed.
+        // Bring the (new or pre-existing) session up to date and running.
         $this->client->post("/api/sessions/{$session}", ['config' => $config]);
         $this->client->post("/api/sessions/{$session}/start");
+    }
+
+    private function createError(string $session, int $status, string $body): string
+    {
+        if ($status === 403) {
+            // On Core this usually means "another session already exists".
+            $sessions = $this->client->get('/api/sessions');
+            $names = collect($sessions->json() ?: [])->pluck('name')->filter()->values();
+            if ($sessions->successful() && $names->isNotEmpty() && ! $names->contains($session)) {
+                return 'This WAHA server already has a linked number ('.$names->implode(', ')
+                    .') and is running the free Core edition, which allows only one. '
+                    .'Disconnect the other number, or run WAHA Plus for multiple numbers.';
+            }
+        }
+
+        return "WAHA: could not create session ({$status}): {$body}";
     }
 
     public function getQr(string $session): ?string

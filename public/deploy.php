@@ -14,7 +14,7 @@
  *   https://your-site/deploy.php?key=DEPLOY_KEY&action=ACTION
  *
  * Actions: probe · setup-key · clone · deploy · rollback · status · git-info
- *          composer · migrate · migrate-status · fix-env · cleanup · cmd · log · selfdelete
+ *          composer · migrate · migrate-status · fix-env · set-env · cleanup · cmd · log · selfdelete
  */
 
 set_time_limit(600);
@@ -64,7 +64,7 @@ $hits[] = time();
 // ─── Action allowlist ────────────────────────────────────────────────────────
 $action = (string) ($_GET['action'] ?? 'status');
 $ALLOWED = ['probe', 'setup-key', 'clone', 'deploy', 'rollback', 'status', 'git-info',
-    'composer', 'migrate', 'migrate-status', 'fix-env', 'cleanup', 'cmd', 'log', 'selfdelete'];
+    'composer', 'migrate', 'migrate-status', 'fix-env', 'set-env', 'cleanup', 'cmd', 'log', 'selfdelete'];
 if (! in_array($action, $ALLOWED, true)) {
     http_response_code(400);
     die(json_encode(['error' => 'unknown action: ' . $action, 'allowed' => $ALLOWED]));
@@ -494,6 +494,55 @@ if ($action === 'fix-env') {
     run('php artisan config:clear 2>&1', $SITE_ROOT);
     run('php artisan cache:clear 2>&1', $SITE_ROOT);
     out(['action' => 'fix-env', 'ok' => true, 'cr_removed' => substr_count($orig, "\r")]);
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// set-env — upsert one or more KEY=VALUE lines in .env (?vars=KEY1=val1,KEY2=val2)
+// ═════════════════════════════════════════════════════════════════════════════
+if ($action === 'set-env') {
+    $envF = $SITE_ROOT . '/.env';
+    if (! is_file($envF)) {
+        out(['action' => 'set-env', 'ok' => false, 'error' => '.env not found']);
+    }
+    $spec = (string) ($_GET['vars'] ?? '');
+    if ($spec === '') {
+        out(['action' => 'set-env', 'ok' => false, 'error' => 'pass ?vars=KEY=VALUE (comma-separate multiple)']);
+    }
+
+    $content = str_replace("\r", '', (string) file_get_contents($envF));
+    $changed = [];
+    foreach (explode(',', $spec) as $pair) {
+        $pair = trim($pair);
+        if (! str_contains($pair, '=')) {
+            continue;
+        }
+        [$k, $v] = explode('=', $pair, 2);
+        $k = trim($k);
+        if (! preg_match('/^[A-Z0-9_]+$/', $k)) {
+            continue;
+        }
+        $line = $k . '=' . $v;
+        if (preg_match('/^' . preg_quote($k, '/') . '=.*$/m', $content)) {
+            $content = preg_replace('/^' . preg_quote($k, '/') . '=.*$/m', $line, $content);
+        } else {
+            $content = rtrim($content, "\n") . "\n" . $line . "\n";
+        }
+        $changed[] = $k;
+    }
+    file_put_contents($envF, $content);
+    run('php artisan config:clear 2>&1', $SITE_ROOT);
+
+    // Echo back the resulting values (secrets get masked).
+    $result = [];
+    foreach ($changed as $k) {
+        if (preg_match('/^' . preg_quote($k, '/') . '=(.*)$/m', $content, $m)) {
+            $val = trim($m[1], '"\' ');
+            $result[$k] = (str_contains($k, 'KEY') || str_contains($k, 'SECRET') || str_contains($k, 'PASSWORD') || str_contains($k, 'TOKEN'))
+                ? (strlen($val) ? '••••••••' : '(empty)')
+                : $val;
+        }
+    }
+    out(['action' => 'set-env', 'ok' => true, 'changed' => $result]);
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
