@@ -428,6 +428,14 @@ function Field({ label, children }) {
 function TriggerConfigPanel({ automation, onTypeChange, onConfigChange, webhookUrl, copied, onCopy, onGenerateToken, generatingToken, onClose }) {
     const { t } = useTranslation();
     const triggerType = automation.trigger_type ?? '';
+
+    // Keep the keyword field as raw text while editing so commas (and trailing
+    // spaces mid-typing) aren't stripped by the array round-trip. Parse to the
+    // array on change but render from local text until the field loses focus.
+    const savedKeywords = (automation.trigger_config?.keywords ?? []).join(', ');
+    const [keywordText, setKeywordText] = useState(savedKeywords);
+    const [keywordFocused, setKeywordFocused] = useState(false);
+    const keywordValue = keywordFocused ? keywordText : savedKeywords;
     const orderTokens = triggerType === 'cart.abandoned'
         ? ['{{context.cart_total}}', '{{context.recovery_url}}', '{{context.order_currency}}']
         : ['{{context.order_number}}', '{{context.order_total}}', '{{context.order_currency}}', '{{context.tracking_url}}', '{{context.store_name}}'];
@@ -467,8 +475,13 @@ function TriggerConfigPanel({ automation, onTypeChange, onConfigChange, webhookU
                         <p style={{ fontSize: 10, color: '#94a3b8', marginBottom: 6 }}>{t('automation.keyword_filter_hint')}</p>
                         <input
                             className={inputCls}
-                            value={(automation.trigger_config?.keywords ?? []).join(', ')}
-                            onChange={e => onConfigChange({ keywords: e.target.value.split(',').map(k => k.trim()).filter(Boolean) })}
+                            value={keywordValue}
+                            onFocus={() => { setKeywordText(savedKeywords); setKeywordFocused(true); }}
+                            onBlur={() => setKeywordFocused(false)}
+                            onChange={e => {
+                                setKeywordText(e.target.value);
+                                onConfigChange({ keywords: e.target.value.split(',').map(k => k.trim()).filter(Boolean) });
+                            }}
                             placeholder={t('automation.placeholder_keywords')}
                         />
                     </Field>
