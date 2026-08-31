@@ -497,31 +497,65 @@ if ($action === 'fix-env') {
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
-// set-env — upsert one or more KEY=VALUE lines in .env (?vars=KEY1=val1,KEY2=val2)
+// set-env — upsert KEY=VALUE lines in .env.
+//   ?vars=KEY1=val1,KEY2=val2            plain (no special chars)
+//   ?b64=BASE64(KEY1=val1\nKEY2=val2)    values may contain / + = etc.
+//   &dedupe=1                            drop duplicate keys (keep FIRST)
 // ═════════════════════════════════════════════════════════════════════════════
 if ($action === 'set-env') {
     $envF = $SITE_ROOT . '/.env';
     if (! is_file($envF)) {
         out(['action' => 'set-env', 'ok' => false, 'error' => '.env not found']);
     }
-    $spec = (string) ($_GET['vars'] ?? '');
-    if ($spec === '') {
-        out(['action' => 'set-env', 'ok' => false, 'error' => 'pass ?vars=KEY=VALUE (comma-separate multiple)']);
+
+    // Collect KEY => VALUE pairs from either ?vars= (comma list) or ?b64= (newline list).
+    $pairs = [];
+    if (($b64 = (string) ($_GET['b64'] ?? '')) !== '') {
+        $decoded = base64_decode(strtr($b64, '-_', '+/'), true);
+        foreach (explode("\n", (string) $decoded) as $ln) {
+            $ln = trim($ln);
+            if (str_contains($ln, '=')) {
+                [$k, $v] = explode('=', $ln, 2);
+                $pairs[trim($k)] = $v;
+            }
+        }
+    } else {
+        foreach (explode(',', (string) ($_GET['vars'] ?? '')) as $p) {
+            $p = trim($p);
+            if (str_contains($p, '=')) {
+                [$k, $v] = explode('=', $p, 2);
+                $pairs[trim($k)] = $v;
+            }
+        }
+    }
+    if ($pairs === [] && ($_GET['dedupe'] ?? '') !== '1') {
+        out(['action' => 'set-env', 'ok' => false, 'error' => 'pass ?vars= or ?b64= (and/or &dedupe=1)']);
     }
 
     $content = str_replace("\r", '', (string) file_get_contents($envF));
-    $changed = [];
-    foreach (explode(',', $spec) as $pair) {
-        $pair = trim($pair);
-        if (! str_contains($pair, '=')) {
-            continue;
+
+    // Optional: dedupe keys, keeping the FIRST occurrence of each.
+    if (($_GET['dedupe'] ?? '') === '1') {
+        $seen = [];
+        $kept = [];
+        foreach (explode("\n", $content) as $ln) {
+            if (preg_match('/^([A-Z0-9_]+)=/', $ln, $m)) {
+                if (isset($seen[$m[1]])) {
+                    continue;
+                }
+                $seen[$m[1]] = true;
+            }
+            $kept[] = $ln;
         }
-        [$k, $v] = explode('=', $pair, 2);
-        $k = trim($k);
+        $content = implode("\n", $kept);
+    }
+
+    $changed = [];
+    foreach ($pairs as $k => $v) {
         if (! preg_match('/^[A-Z0-9_]+$/', $k)) {
             continue;
         }
-        $line = $k . '=' . $v;
+        $line = $k . '="' . trim($v, "\"' ") . '"';
         if (preg_match('/^' . preg_quote($k, '/') . '=.*$/m', $content)) {
             $content = preg_replace('/^' . preg_quote($k, '/') . '=.*$/m', $line, $content);
         } else {
