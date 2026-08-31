@@ -3285,7 +3285,7 @@ parameters:
 			path: app/Modules/AI/Console/AiStatusCommand.php
 
 		-
-			message: '#^Access to an undefined property App\\Modules\\Automation\\Models\\Automation(Run|RunLog)\:\:\$\w+\.$#'
+			message: '#^Access to an undefined property App\\Modules\\Automation\\Models\\Automation(Run|RunLog)?\:\:\$\w+\.$#'
 			identifier: property.notFound
 			path: app/Modules/Automation/Console/AutomationRunsCommand.php
 
