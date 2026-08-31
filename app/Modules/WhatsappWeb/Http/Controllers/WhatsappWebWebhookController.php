@@ -32,14 +32,17 @@ class WhatsappWebWebhookController extends Controller
             abort(403, 'Invalid webhook token');
         }
 
+        // Authenticity is primarily the 48-char random token in the URL path
+        // (unguessable, per-session). If a webhook secret is configured AND the
+        // engine actually sent a signature, verify it; otherwise fall through —
+        // not every engine/build supports webhook HMAC, and rejecting unsigned
+        // requests would silently drop all inbound messages.
         $secret = CredentialResolver::system()->whatsappWeb()?->webhookSecret();
-        if ($secret) {
-            $this->verifyHmac($request, $secret);
-        } elseif (app()->environment('production')) {
-            Log::critical('whatsapp_web.webhook.no_secret', ['session' => $session->session_name]);
-            abort(401, 'Webhook secret not configured');
-        } else {
-            Log::warning('whatsapp_web.webhook.unsigned', ['session' => $session->session_name]);
+        $signature = (string) $request->header('X-Webhook-Hmac', '');
+        if ($secret && $signature !== '') {
+            $this->verifyHmac($request, $secret, $signature);
+        } elseif ($secret) {
+            Log::info('whatsapp_web.webhook.unsigned_but_token_ok', ['session' => $session->session_name]);
         }
 
         $payload = $request->all();
@@ -82,9 +85,8 @@ class WhatsappWebWebhookController extends Controller
         return null; // fail-open: let the job decide
     }
 
-    private function verifyHmac(Request $request, string $secret): void
+    private function verifyHmac(Request $request, string $secret, string $received): void
     {
-        $received = (string) $request->header('X-Webhook-Hmac', '');
         $expected = hash_hmac('sha256', $request->getContent(), $secret);
 
         if (! hash_equals($expected, $received)) {

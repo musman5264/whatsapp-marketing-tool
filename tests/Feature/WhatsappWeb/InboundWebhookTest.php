@@ -121,6 +121,18 @@ class InboundWebhookTest extends TestCase
     }
 
     #[Test]
+    public function unsigned_request_with_valid_token_is_accepted(): void
+    {
+        // Not every engine build signs webhooks; the 48-char URL token is the
+        // primary auth. An unsigned request with a valid token still processes.
+        $payload = $this->messagePayload('unsigned_1@c.us_X', 'no signature here');
+
+        $this->postJson("/webhooks/whatsapp-web/{$this->token}", $payload)->assertOk();
+
+        $this->assertDatabaseHas('messages', ['provider_message_id' => 'unsigned_1@c.us_X']);
+    }
+
+    #[Test]
     public function duplicate_event_is_processed_once(): void
     {
         $payload = $this->messagePayload('dup_1@c.us_X');
