@@ -21,7 +21,8 @@ class WhatsappWebCommand extends Command
     protected $signature = 'whatsapp-web:status
         {--reset : delete the local session + ChannelAccount rows}
         {--engine : also delete the session on the WAHA engine}
-        {--connect= : run the full connect flow for the given workspace id and report the result}';
+        {--connect= : run the full connect flow for the given workspace id and report the result}
+        {--waha-probe : hit each WAHA endpoint directly and show the raw status}';
 
     protected $description = 'Diagnose, connect, or reset the WhatsApp Web (QR) integration';
 
@@ -34,7 +35,22 @@ class WhatsappWebCommand extends Command
         if ($creds) {
             $this->line('engine base_url   : '.$creds->baseUrl());
             $this->line('engine           : '.$creds->engine());
+            $this->line('api_key           : '.($creds->apiKey() ? substr($creds->apiKey(), 0, 3).'…'.substr($creds->apiKey(), -3).' (len '.strlen($creds->apiKey()).')' : 'NOT set'));
             $this->line('webhook secret   : '.($creds->webhookSecret() ? 'set' : 'NOT set'));
+        }
+
+        if ($this->option('waha-probe') && $creds && $creds->baseUrl()) {
+            $this->newLine();
+            $this->line('--- raw WAHA endpoint probe (from this server) ---');
+            $h = $creds->apiKey() ? ['X-Api-Key' => $creds->apiKey()] : [];
+            foreach (['/api/version', '/api/server/status', '/api/sessions', '/api/sessions/ws-1', '/api/sessions/default'] as $p) {
+                try {
+                    $r = Http::withHeaders($h)->timeout(15)->get($creds->baseUrl().$p);
+                    $this->line(str_pad($p, 28).' -> '.$r->status().'  '.mb_substr($r->body(), 0, 90));
+                } catch (\Throwable $e) {
+                    $this->line(str_pad($p, 28).' -> EXC  '.$e->getMessage());
+                }
+            }
         }
 
         $session = WhatsappWebSession::first();
