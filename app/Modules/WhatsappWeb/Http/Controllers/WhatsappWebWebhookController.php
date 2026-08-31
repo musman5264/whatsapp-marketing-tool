@@ -59,6 +59,13 @@ class WhatsappWebWebhookController extends Controller
             'event' => $event,
         ]);
 
+        // TEMP: dump the raw payload of inbound message events so we can see how
+        // WAHA delivers @lid (Linked ID) contacts. Remove once the normalizer
+        // handles them.
+        if (in_array($event, ['message', 'message.any'], true)) {
+            Log::info('whatsapp_web.webhook.raw_message', ['payload' => $payload['payload'] ?? $payload]);
+        }
+
         return $this->flushWebhookOkThen(
             fn () => ProcessWahaEventJob::dispatch($payload, $session->id)->onQueue('whatsapp')
         );
