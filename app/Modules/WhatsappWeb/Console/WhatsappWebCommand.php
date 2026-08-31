@@ -22,12 +22,35 @@ class WhatsappWebCommand extends Command
         {--reset : delete the local session + ChannelAccount rows}
         {--engine : also delete the session on the WAHA engine}
         {--connect= : run the full connect flow for the given workspace id and report the result}
-        {--waha-probe : hit each WAHA endpoint directly and show the raw status}';
+        {--waha-probe : hit each WAHA endpoint directly and show the raw status}
+        {--set-base= : set the WAHA base URL in the whatsapp_web integration}
+        {--set-key= : set the WAHA API key in the whatsapp_web integration}
+        {--set-secret= : set the webhook HMAC secret for the whatsapp_web integration}';
 
     protected $description = 'Diagnose, connect, or reset the WhatsApp Web (QR) integration';
 
     public function handle(EngineManager $engines): int
     {
+        if ($this->option('set-base') !== null || $this->option('set-key') !== null || $this->option('set-secret') !== null) {
+            $cfg = \App\Modules\Integrations\Models\IntegrationConfig::firstOrNew(['provider' => 'whatsapp_web', 'mode' => 'live']);
+            $creds = $cfg->credentials ?? [];
+            $creds['engine'] = $creds['engine'] ?? 'waha';
+            if (($v = $this->option('set-base')) !== null) {
+                $creds['base_url'] = rtrim($v, '/');
+            }
+            if (($v = $this->option('set-key')) !== null) {
+                $creds['api_key'] = $v;
+            }
+            $cfg->credentials = $creds;
+            if (($v = $this->option('set-secret')) !== null) {
+                $cfg->webhook_secret = $v;
+            }
+            $cfg->enabled = true;
+            $cfg->save();
+            $this->info('whatsapp_web integration updated.');
+            $this->call('config:clear');
+        }
+
         $this->line('APP_URL           : '.config('app.url'));
 
         $creds = CredentialResolver::system()->whatsappWeb();
