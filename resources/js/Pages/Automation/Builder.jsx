@@ -484,6 +484,20 @@ function TriggerConfigPanel({ automation, onTypeChange, onConfigChange, webhookU
                             }}
                             placeholder={t('automation.placeholder_keywords')}
                         />
+                        <label style={{ fontSize: 10, color: '#94a3b8', display: 'block', margin: '8px 0 4px' }}>
+                            {t('automation.keyword_match_mode')}
+                        </label>
+                        <select
+                            className={selectCls}
+                            value={automation.trigger_config?.match_mode ?? 'contains'}
+                            onChange={e => onConfigChange({ match_mode: e.target.value })}
+                        >
+                            <option value="contains">{t('automation.match_contains')}</option>
+                            <option value="equals">{t('automation.match_equals')}</option>
+                            <option value="starts_with">{t('automation.match_starts_with')}</option>
+                            <option value="ends_with">{t('automation.match_ends_with')}</option>
+                            <option value="regex">{t('automation.match_regex')}</option>
+                        </select>
                     </Field>
                 )}
 

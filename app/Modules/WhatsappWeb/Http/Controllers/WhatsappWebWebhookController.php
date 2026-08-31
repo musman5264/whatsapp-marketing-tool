@@ -49,27 +49,43 @@ class WhatsappWebWebhookController extends Controller
         $event = (string) ($payload['event'] ?? '');
         $eventId = $this->eventKey($payload);
 
+        // Event-level dedup. WAHA re-sends the same event several times (and the
+        // WEBJS engine emits related events for one message); the atomic
+        // insertOrIgnore means only the first caller proceeds.
         if ($eventId !== null
             && ! app(WebhookIdempotencyService::class)->isNewEvent('whatsapp_web', $eventId)) {
             return response()->json(['status' => 'ok']);
         }
 
-        // Process INLINE so the message hits the inbox in ~1s — shared hosting
-        // has no persistent queue worker, and WAHA tolerates a 1-2s response.
-        // If anything throws, queue it for the cron drain to retry.
-        try {
-            app(WahaEventProcessor::class)->process($payload, $session);
-        } catch (\Throwable $e) {
-            Log::error('whatsapp_web.webhook.inline_failed_queued', [
-                'session' => $session->session_name,
-                'event' => $event,
-                'error' => $e->getMessage(),
-            ]);
-            try {
-                ProcessWahaEventJob::dispatch($payload, $session->id, $session->session_name)->onQueue('whatsapp');
-            } catch (\Throwable) {
+        // Respond to WAHA immediately, THEN process — a slow response makes WAHA
+        // time out and retry the webhook, which was causing duplicate messages
+        // and duplicate automation runs. afterResponse() runs in this same PHP
+        // process once the 200 is flushed, so no queue worker is needed.
+        $sessionId = $session->id;
+        $sessionName = $session->session_name;
+        dispatch(function () use ($payload, $sessionId, $sessionName, $event) {
+            $session = WhatsappWebSession::find($sessionId)
+                ?? WhatsappWebSession::where('session_name', $sessionName)->first();
+            if (! $session) {
+                return;
             }
-        }
+            try {
+                app(WahaEventProcessor::class)->process($payload, $session);
+            } catch (\Throwable $e) {
+                Log::error('whatsapp_web.webhook.process_failed', [
+                    'session' => $sessionName,
+                    'event' => $event,
+                    'error' => $e->getMessage(),
+                ]);
+                // Requeue for the cron drain to retry, but release the dedup key
+                // first so the retry isn't discarded as a duplicate.
+                app(WebhookIdempotencyService::class)->release('whatsapp_web', $this->eventKey($payload) ?? '');
+                try {
+                    ProcessWahaEventJob::dispatch($payload, $sessionId, $sessionName)->onQueue('whatsapp');
+                } catch (\Throwable) {
+                }
+            }
+        })->afterResponse();
 
         return response()->json(['status' => 'ok']);
     }

@@ -128,8 +128,11 @@ class AutomationTriggerListener
     }
 
     /**
-     * Like fire(), but respects trigger_config.keywords for message.received automations.
-     * If keywords are set, the message body must contain at least one keyword (case-insensitive).
+     * Like fire(), but respects trigger_config for message.received automations:
+     *   - keywords     list of terms
+     *   - match_mode   how each term is tested against the body:
+     *                  contains (default) | equals | starts_with | ends_with | regex
+     * Matching is case-insensitive; the automation fires if ANY keyword matches.
      */
     private function fireWithConfig(string $triggerType, int $workspaceId, int $contactId, array $context, string $messageBody = ''): void
     {
@@ -138,15 +141,17 @@ class AutomationTriggerListener
             ->where('trigger_type', $triggerType)
             ->get();
 
-        $bodyLower = mb_strtolower($messageBody);
+        $body = trim($messageBody);
+        $bodyLower = mb_strtolower($body);
 
         foreach ($automations as $automation) {
             $keywords = $automation->trigger_config['keywords'] ?? [];
+            $mode = $automation->trigger_config['match_mode'] ?? 'contains';
 
             if (! empty($keywords)) {
                 $matches = false;
                 foreach ($keywords as $kw) {
-                    if (str_contains($bodyLower, mb_strtolower((string) $kw))) {
+                    if ($this->keywordMatches($bodyLower, $body, (string) $kw, $mode)) {
                         $matches = true;
                         break;
                     }
@@ -158,5 +163,27 @@ class AutomationTriggerListener
 
             $this->engine->triggerForContact($automation, $contactId, $context);
         }
+    }
+
+    private function keywordMatches(string $bodyLower, string $bodyRaw, string $keyword, string $mode): bool
+    {
+        $kw = trim($keyword);
+        if ($kw === '') {
+            return false;
+        }
+        $kwLower = mb_strtolower($kw);
+
+        return match ($mode) {
+            'equals' => $bodyLower === $kwLower,
+            'starts_with' => str_starts_with($bodyLower, $kwLower),
+            'ends_with' => str_ends_with($bodyLower, $kwLower),
+            'regex' => (function () use ($bodyRaw, $kw) {
+                // Anchor-free, case-insensitive. A bad pattern never matches.
+                $pattern = '/'.str_replace('/', '\/', $kw).'/i';
+
+                return @preg_match($pattern, $bodyRaw) === 1;
+            })(),
+            default => str_contains($bodyLower, $kwLower), // 'contains'
+        };
     }
 }
