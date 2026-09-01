@@ -20,6 +20,7 @@ use App\Http\Controllers\Api\V1\SocialPostApiController;
 use App\Http\Controllers\Api\V1\SubscriptionApiController;
 use App\Http\Controllers\Api\V1\TokenController;
 use App\Http\Controllers\Api\V1\WorkspaceApiController;
+use App\Http\Middleware\LogApiRequest;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -46,7 +47,7 @@ Route::prefix('v1/auth')->middleware(['auth:sanctum', 'throttle:api'])->group(fu
 // ─── Mobile Inbox API (agent-facing: full conversation + inbox actions) ───────
 // `demo` blocks writes (POST/PATCH/DELETE) in demo mode while GET reads pass,
 // keeping the mobile app a consistent read-only showcase like the web app.
-Route::prefix('v1/mobile')->middleware(['auth:sanctum', 'throttle:api', 'demo'])->group(function () {
+Route::prefix('v1/mobile')->middleware(['auth:sanctum', 'throttle:api', 'demo', LogApiRequest::class])->group(function () {
     // Conversations
     Route::get('/conversations', [MobileConversationController::class, 'index']);
     Route::get('/conversations/{uuid}', [MobileConversationController::class, 'show']);
@@ -77,7 +78,7 @@ Route::prefix('v1/mobile')->middleware(['auth:sanctum', 'throttle:api', 'demo'])
     Route::get('/contacts/{id}', [MobileInboxController::class, 'contact']);
 });
 
-Route::prefix('v1')->middleware(['auth:sanctum', 'throttle:api', 'demo'])->group(function () {
+Route::prefix('v1')->middleware(['auth:sanctum', 'throttle:api', 'demo', LogApiRequest::class])->group(function () {
 
     // ─── Account ─────────────────────────────────────────────────────────────
     Route::get('/me', [MeController::class, 'show']);
