@@ -4,11 +4,29 @@ namespace Tests\Feature;
 
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Route;
+use Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful;
 use Tests\TestCase;
 
 class ApiTokenTest extends TestCase
 {
     use RefreshDatabase;
+
+    /**
+     * The API Tokens page mints a token by POSTing to /api/v1/tokens with the
+     * browser session cookie (no Bearer token yet — chicken and egg). That only
+     * works if Sanctum's stateful-frontend middleware is on the `api` group,
+     * which Laravel 12 leaves off unless bootstrap/app.php calls statefulApi().
+     * actingAs() hides the gap, so assert the middleware directly.
+     */
+    public function test_api_group_has_sanctum_stateful_middleware(): void
+    {
+        $this->assertContains(
+            EnsureFrontendRequestsAreStateful::class,
+            Route::getMiddlewareGroups()['api'] ?? [],
+            'bootstrap/app.php must call $middleware->statefulApi() so the SPA can cookie-authenticate to /api.'
+        );
+    }
 
     private function clientUser(): User
     {

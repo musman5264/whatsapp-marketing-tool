@@ -117,6 +117,11 @@ return Application::configure(basePath: dirname(__DIR__))
             // Diagnostics for Pusher's auth POST. Read-only; always passes.
             BroadcastingAuthDebug::class,
         ]);
+        // Let first-party browser requests (the SPA on a SANCTUM_STATEFUL_DOMAINS
+        // host) authenticate to /api/* with the session cookie + CSRF token,
+        // not just a Bearer token. Needed so the API Tokens page can mint your
+        // first token. Bearer-token and cross-origin API clients are unaffected.
+        $middleware->statefulApi();
         $middleware->alias([
             'demo' => EnsureNotDemoMode::class,
             'admin' => EnsureAdminRole::class,

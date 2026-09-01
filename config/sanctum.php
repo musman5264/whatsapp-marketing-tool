@@ -15,11 +15,19 @@ return [
     |
     */
 
-    'stateful' => explode(',', env('SANCTUM_STATEFUL_DOMAINS', sprintf(
-        '%s%s',
+    'stateful' => explode(',', (string) env('SANCTUM_STATEFUL_DOMAINS', sprintf(
+        '%s%s%s',
         'localhost,localhost:3000,127.0.0.1,127.0.0.1:8000,::1',
         Sanctum::currentApplicationUrlWithPort(),
-        // Sanctum::currentRequestHost(),
+        // APP_URL is sometimes stored without a scheme on shared hosting, which
+        // makes currentApplicationUrlWithPort() yield no host and drops the real
+        // production domain from this list — so the SPA can't cookie-auth to
+        // /api and the API Tokens page 401s. Re-add the bare host, forcing a
+        // scheme on first so parse_url() can see it.
+        ($sanctumAppHost = parse_url(
+            (string) preg_replace('#^(?!https?://)#i', 'https://', (string) env('APP_URL')),
+            PHP_URL_HOST
+        )) ? ','.$sanctumAppHost : '',
     ))),
 
     /*
