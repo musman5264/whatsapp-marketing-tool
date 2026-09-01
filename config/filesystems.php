@@ -33,6 +33,12 @@ return [
         'local' => [
             'driver' => 'local',
             'root' => storage_path('app/private'),
+            // Keep Laravel's signed file-serving (needed for temporaryUrl(), used
+            // by workspace exports) but pin it to its OWN url prefix. With no
+            // 'url' it defaulted to "/storage/{path}" — a signed-URL-only route —
+            // which shadowed the PUBLIC disk and 404'd every uploaded
+            // image/logo/favicon in production.
+            'url' => rtrim(env('APP_URL'), '/').'/private-files',
             'serve' => true,
             'throw' => false,
             'report' => false,
@@ -46,6 +52,9 @@ return [
             // and 404 every uploaded logo/favicon/media asset.
             'url' => rtrim(env('APP_URL'), '/').'/storage',
             'visibility' => 'public',
+            // No 'serve' here — public files are delivered by the public/storage
+            // symlink when it exists, else by App\Http\Controllers\StorageFileController
+            // (routes/web.php → storage.file), which needs no signed URL.
             'throw' => false,
             'report' => false,
         ],

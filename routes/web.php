@@ -7,6 +7,7 @@ use App\Http\Controllers\I18nController;
 use App\Http\Controllers\IyzicoCheckoutController;
 use App\Http\Controllers\LandingController;
 use App\Http\Controllers\LocaleController;
+use App\Http\Controllers\StorageFileController;
 use App\Http\Controllers\ThemeController;
 use App\Http\Controllers\WebhookController;
 use App\Models\CmsPage;
@@ -157,3 +158,17 @@ Route::middleware('throttle:30,1')->group(function () {
         }
     })->name('healthz.queue');
 });
+
+/*
+ * Fallback serving of local public-disk files (uploads, branding).
+ *
+ * When the public/storage symlink works the web server serves these directly
+ * and this route is never hit. On hosts where the symlink can't be created
+ * (common on cPanel/LiteSpeed) the request falls through to Laravel and this
+ * route delivers the file. Registered last so it never shadows a real route,
+ * and constrained to paths that don't collide with the app (no dots-only, etc).
+ */
+Route::get('/storage/{path}', [StorageFileController::class, 'show'])
+    ->where('path', '.*')
+    ->middleware('throttle:240,1')
+    ->name('storage.file');

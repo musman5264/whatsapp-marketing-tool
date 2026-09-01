@@ -64,7 +64,7 @@ $hits[] = time();
 // ─── Action allowlist ────────────────────────────────────────────────────────
 $action = (string) ($_GET['action'] ?? 'status');
 $ALLOWED = ['probe', 'setup-key', 'clone', 'deploy', 'rollback', 'status', 'git-info',
-    'composer', 'migrate', 'migrate-status', 'fix-env', 'set-env', 'env-dedupe', 'cleanup', 'cmd', 'log', 'selfdelete'];
+    'composer', 'migrate', 'migrate-status', 'fix-env', 'set-env', 'env-dedupe', 'cleanup', 'fix-storage', 'cmd', 'log', 'selfdelete'];
 if (! in_array($action, $ALLOWED, true)) {
     http_response_code(400);
     die(json_encode(['error' => 'unknown action: ' . $action, 'allowed' => $ALLOWED]));
@@ -323,8 +323,24 @@ if ($action === 'deploy') {
             @mkdir($SITE_ROOT . '/' . $d, 0775, true);
         }
     }
-    if (! file_exists($SITE_ROOT . '/public/storage') && is_dir($SITE_ROOT . '/storage/app/public')) {
-        @symlink($SITE_ROOT . '/storage/app/public', $SITE_ROOT . '/public/storage');
+    // public/storage: prefer a real symlink; on hosts that block symlink() a
+    // broken stub file is left behind — remove it so requests fall through to
+    // the app's StorageFileController fallback instead of 404ing.
+    $linkPath = $SITE_ROOT . '/public/storage';
+    $linkTarget = $SITE_ROOT . '/storage/app/public';
+    if (is_link($linkPath)) {
+        // ok — leave it
+    } elseif (is_dir($linkTarget)) {
+        if (file_exists($linkPath) && ! is_dir($linkPath)) {
+            @unlink($linkPath); // broken stub
+        }
+        if (! file_exists($linkPath)) {
+            @symlink($linkTarget, $linkPath);
+        }
+        // If symlink still failed, that's fine — the /storage/{path} route serves it.
+        if (! is_link($linkPath) && file_exists($linkPath) && ! is_dir($linkPath)) {
+            @unlink($linkPath);
+        }
     }
 
     $g = run('git log -1 --format="%h %s"', $SITE_ROOT);
@@ -626,6 +642,50 @@ if ($action === 'cleanup') {
     }
     out(['action' => 'cleanup', 'ok' => true, 'removed' => $removed,
         'message' => $removed ? ('Removed: ' . implode(', ', $removed)) : 'Nothing to remove.']);
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// fix-storage — repair public/storage: real symlink if possible, else remove a
+// broken stub so the app's /storage/{path} fallback route serves the files.
+// ═════════════════════════════════════════════════════════════════════════════
+if ($action === 'fix-storage') {
+    $link = $SITE_ROOT . '/public/storage';
+    $target = $SITE_ROOT . '/storage/app/public';
+    $steps = [];
+
+    if (! is_dir($target)) {
+        @mkdir($target, 0775, true);
+        $steps[] = 'created storage/app/public';
+    }
+
+    if (is_link($link)) {
+        $steps[] = 'symlink already present → ' . (readlink($link) ?: '?');
+    } else {
+        if (file_exists($link) && ! is_dir($link)) {
+            @unlink($link);
+            $steps[] = 'removed broken stub file';
+        }
+        if (! file_exists($link)) {
+            $ok = @symlink($target, $link);
+            $steps[] = $ok ? 'created symlink' : 'symlink() failed — app fallback route will serve files';
+        }
+        // If a non-symlink still sits there, drop it so the rewrite falls to index.php.
+        if (file_exists($link) && ! is_link($link) && ! is_dir($link)) {
+            @unlink($link);
+            $steps[] = 'cleared residual stub';
+        }
+    }
+
+    run('php artisan optimize:clear 2>&1', $SITE_ROOT);
+    run('php artisan config:clear 2>&1', $SITE_ROOT);
+    run('php artisan route:clear 2>&1', $SITE_ROOT);
+
+    out([
+        'action' => 'fix-storage', 'ok' => true, 'steps' => $steps,
+        'is_link' => is_link($link),
+        'stub_present' => (file_exists($link) && ! is_link($link) && ! is_dir($link)),
+        'media_count' => is_dir($target . '/media') ? count(glob($target . '/media/*') ?: []) : 0,
+    ]);
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
