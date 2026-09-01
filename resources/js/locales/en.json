@@ -3366,10 +3366,10 @@
         "saving": "Saving…",
         "canvas_hint": "Drag nodes from the panel · Click a node to configure · Drag to connect handles · Delete key removes selected",
         "delete_node": "Delete Node",
-        "category_${cat}": "Category ${Cat}",
-        "status_${automation": {
-            "status}": "Status}"
-        }
+        "lint_dead_end": "Dead-end branch",
+        "lint_unknown_variable": "Unknown variable",
+        "lint_literal_condition_value": "Literal condition value",
+        "lint_no_trigger_keyword_filter": "No trigger keyword filter"
     },
     "ai": {
         "chatbots_title": "Chatbots",

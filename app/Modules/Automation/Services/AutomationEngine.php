@@ -200,20 +200,55 @@ class AutomationEngine
                 return;
             }
 
-            // Condition branching
-            $nextEdgeLabel = $result['branch'] ?? null;
-
-            // Find next edge
-            $nextEdge = $edges->first(fn ($e) => $e['source'] === $currentId &&
-                (! isset($nextEdgeLabel) || ($e['sourceHandle'] ?? null) === $nextEdgeLabel)
-            );
-
-            $currentId = $nextEdge['target'] ?? null;
-            $nextEdgeLabel = null;
+            // Condition branching. $branch is 'true' | 'false' | null.
+            $currentId = $this->nextNodeId($edges, (string) $currentId, $result['branch'] ?? null);
         }
 
         $run->update(['status' => 'completed', 'completed_at' => now()]);
         $automation->increment('run_count');
+    }
+
+    /**
+     * Pick the next node after $fromId. When the previous node branched
+     * ($branch = 'true'/'false'), prefer the edge whose sourceHandle matches; but
+     * if the canvas only drew ONE plain edge (common with AI-generated / hand-wired
+     * flows) fall through it instead of dead-ending the run silently — that dead
+     * end was the "customer got no reply after the first message" bug.
+     *
+     * @param  \Illuminate\Support\Collection<int, array<string, mixed>>  $edges
+     */
+    private function nextNodeId($edges, string $fromId, ?string $branch): ?string
+    {
+        $out = $edges->filter(fn ($e) => ($e['source'] ?? null) === $fromId)->values();
+        if ($out->isEmpty()) {
+            return null;
+        }
+
+        $isPlain = fn ($e) => in_array($e['sourceHandle'] ?? null, [null, '', 'source', 'a', 'b'], true);
+
+        if ($branch !== null) {
+            $matched = $out->first(fn ($e) => ($e['sourceHandle'] ?? null) === $branch);
+            if ($matched) {
+                return $matched['target'] ?? null;
+            }
+
+            // No handle-specific edge for this branch. One plain edge → take it.
+            $plain = $out->first($isPlain);
+            if ($plain && $out->count() === 1) {
+                return $plain['target'] ?? null;
+            }
+
+            \Illuminate\Support\Facades\Log::warning('automation.branch_dead_end', [
+                'from' => $fromId,
+                'branch' => $branch,
+                'edges' => $out->map(fn ($e) => ($e['sourceHandle'] ?? '-').'→'.($e['target'] ?? '?'))->all(),
+            ]);
+
+            return null;
+        }
+
+        // Not a branching node: take the first plain edge, else the first edge.
+        return ($out->first($isPlain)['target'] ?? null) ?? ($out->first()['target'] ?? null);
     }
 
     /**
@@ -772,8 +807,7 @@ class AutomationEngine
         // Find the next node after this wait node so the wakeup job resumes there
         $automation = $run->automation;
         $edges = collect($automation->edges ?? []);
-        $nextEdge = $edges->first(fn ($e) => $e['source'] === $run->current_node_id);
-        $nextNodeId = $nextEdge['target'] ?? null;
+        $nextNodeId = $this->nextNodeId($edges, (string) $run->current_node_id, null);
 
         // Persist the resume cursor and mark the run as waiting
         $run->update([
@@ -1124,10 +1158,12 @@ class AutomationEngine
         }
 
         // Park the run until the contact's next inbound message (see resumeAwaitingReplies()).
+        // Ask Question is not a branching node — take the plain "continue" edge,
+        // never a stray true/false handle a mis-built canvas left on it.
         $var = ($data['variable'] ?? '') ?: 'answer';
         $edges = collect($run->automation->edges ?? []);
-        $nextEdge = $edges->first(fn ($e) => $e['source'] === $run->current_node_id);
-        $run->update(['status' => 'waiting', 'resume_node_id' => $nextEdge['target'] ?? null]);
+        $resumeNodeId = $this->nextNodeId($edges, (string) $run->current_node_id, null);
+        $run->update(['status' => 'waiting', 'resume_node_id' => $resumeNodeId]);
 
         return [
             'status' => 'waiting',

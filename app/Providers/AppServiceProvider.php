@@ -2,36 +2,6 @@
 
 namespace App\Providers;
 
-use App\Events\AutomationFailed;
-use App\Events\AutomationWebhookReceived;
-use App\Events\CampaignCompleted;
-use App\Events\CommerceEventReceived;
-use App\Events\ContactCreated;
-use App\Events\ConversationAssigned;
-use App\Events\LeadQualified;
-use App\Events\LeadStageChanged;
-use App\Events\MessageReceived;
-use App\Events\PlanChanged;
-use App\Events\SubscriptionCancelled;
-use App\Events\SubscriptionExpired;
-use App\Events\SubscriptionRenewed;
-use App\Events\SubscriptionStarted;
-use App\Events\TrialEnding;
-use App\Listeners\AutomationTriggerListener;
-use App\Listeners\AutoReplyListener;
-use App\Listeners\DispatchOutboundWebhookListener;
-use App\Listeners\LogSuccessfulLogin;
-use App\Listeners\SendAutomationFailedNotification;
-use App\Listeners\SendCampaignCompletedNotification;
-use App\Listeners\SendConversationAssignedNotification;
-use App\Listeners\SendNewMessageNotification;
-use App\Listeners\SendPlanChangedNotification;
-use App\Listeners\SendSubscriptionCancelledNotification;
-use App\Listeners\SendSubscriptionExpiredNotification;
-use App\Listeners\SendSubscriptionRenewedNotification;
-use App\Listeners\SendSubscriptionStartedNotification;
-use App\Listeners\SendTrialEndingNotification;
-use App\Listeners\SendWelcomeNotification;
 use App\Models\Workspace;
 use App\Modules\Shared\Services\ChannelManager;
 use App\Services\Billing\BillingGatewayRegistry;
@@ -39,12 +9,9 @@ use App\Services\StorageManager;
 use Dedoc\Scramble\Scramble;
 use Dedoc\Scramble\Support\Generator\OpenApi;
 use Dedoc\Scramble\Support\Generator\SecurityScheme;
-use Illuminate\Auth\Events\Login;
-use Illuminate\Auth\Events\Registered;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Route;
-use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\RateLimiter;
@@ -81,35 +48,17 @@ class AppServiceProvider extends ServiceProvider
         Gate::define('viewAdmin', fn ($user) => $user?->isAdmin());
         Gate::define('manageAdminSensitive', fn ($user) => $user?->isAdmin());
 
-        Event::listen(Login::class, LogSuccessfulLogin::class);
-        Event::listen(Registered::class, SendWelcomeNotification::class);
-
-        Event::listen(MessageReceived::class, [AutomationTriggerListener::class, 'handleMessageReceived']);
-        Event::listen(MessageReceived::class, [AutoReplyListener::class, 'handle']);
-        Event::listen(ContactCreated::class, [AutomationTriggerListener::class, 'handleContactCreated']);
-        Event::listen(AutomationWebhookReceived::class, [AutomationTriggerListener::class, 'handleAutomationWebhookReceived']);
-        Event::listen(CommerceEventReceived::class, [AutomationTriggerListener::class, 'handleCommerceEvent']);
-        Event::listen(LeadStageChanged::class, [AutomationTriggerListener::class, 'handleLeadStageChanged']);
-        Event::listen(LeadQualified::class, [AutomationTriggerListener::class, 'handleLeadQualified']);
-
-        // ── Outbound webhook event delivery ─────────────────────────────────
-        Event::listen(ContactCreated::class, [DispatchOutboundWebhookListener::class, 'handleContactCreated']);
-        Event::listen(MessageReceived::class, [DispatchOutboundWebhookListener::class, 'handleMessageReceived']);
-        Event::listen(CampaignCompleted::class, [DispatchOutboundWebhookListener::class, 'handleCampaignCompleted']);
-
-        // ── Notification bridging listeners ──────────────────────────────────
-        Event::listen(MessageReceived::class, SendNewMessageNotification::class);
-        Event::listen(CampaignCompleted::class, SendCampaignCompletedNotification::class);
-        Event::listen(AutomationFailed::class, SendAutomationFailedNotification::class);
-        Event::listen(ConversationAssigned::class, SendConversationAssignedNotification::class);
-
-        // ── Subscription & billing notifications ────────────────────────────
-        Event::listen(SubscriptionStarted::class, SendSubscriptionStartedNotification::class);
-        Event::listen(SubscriptionCancelled::class, SendSubscriptionCancelledNotification::class);
-        Event::listen(SubscriptionRenewed::class, SendSubscriptionRenewedNotification::class);
-        Event::listen(SubscriptionExpired::class, SendSubscriptionExpiredNotification::class);
-        Event::listen(PlanChanged::class, SendPlanChangedNotification::class);
-        Event::listen(TrialEnding::class, SendTrialEndingNotification::class);
+        // Event → listener wiring is handled by Laravel's automatic listener
+        // discovery (it scans app/Listeners/ and binds every method whose first
+        // parameter is type-hinted to an event). Do NOT also register those
+        // listeners with Event::listen() here — that made every listener fire
+        // twice (automations ran twice, auto-replies sent twice, and the
+        // "Ask Question" resume ran twice, corrupting parked runs).
+        //
+        // Listeners covered by discovery:
+        //   AutomationTriggerListener, AutoReplyListener,
+        //   DispatchOutboundWebhookListener, LogSuccessfulLogin,
+        //   SendWelcomeNotification, Send*Notification (all of app/Listeners/).
 
         // ── Named rate limiters ─────────────────────────────────────────────
         RateLimiter::for('api', function (Request $request) {

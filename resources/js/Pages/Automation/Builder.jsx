@@ -1,6 +1,6 @@
 import { Head, router, usePage } from '@inertiajs/react';
 import ClientLayout from '@/Layouts/ClientLayout';
-import { useCallback, useContext, useState, createContext } from 'react';
+import { useCallback, useContext, useState, createContext, useMemo } from 'react';
 import {
     ArrowLeft, Save, Play, Pause, Copy, Check, RefreshCw,
     X, Zap, Mail, Phone, Clock, GitBranch,
@@ -10,7 +10,7 @@ import {
     Image, Layers, MousePointerClick, List, HelpCircle, Workflow, Sparkles,
     UserCheck, ExternalLink, MapPin, BarChart3, CalendarClock, Video,
     ClipboardList, ClipboardCheck, Store, Sheet, LayoutTemplate, AlertTriangle, GripVertical,
-    FlaskConical, Loader2, CheckCircle2, MinusCircle, AlertCircle,
+    FlaskConical, Loader2, CheckCircle2, MinusCircle, AlertCircle, ChevronDown,
 } from 'lucide-react';
 import { ChannelBrandIcon } from '@/Components/BrandIcons';
 import MediaUpload from '@/Components/MediaUpload';
@@ -1717,6 +1717,253 @@ function AiGenerateModal({ prompt, setPrompt, loading, error, onClose, onGenerat
     );
 }
 
+/* ─── Flow Lint (Validation/Warning System) ───────────────────────────────── */
+
+/**
+ * Perform flow validation and return an array of warnings.
+ * Each warning has: { id, nodeId, type, message, severity }
+ */
+function runFlowLint(nodes, edges, automation) {
+    const warnings = [];
+    const nodeMap = new Map(nodes.map(n => [n.id, n]));
+
+    // Build adjacency map: which nodes are reachable from each node
+    const outgoing = new Map();
+    for (const node of nodes) {
+        outgoing.set(node.id, []);
+    }
+    for (const edge of edges) {
+        const outs = outgoing.get(edge.source) ?? [];
+        outs.push({ nodeId: edge.target, handle: edge.sourceHandle });
+        outgoing.set(edge.source, outs);
+    }
+
+    // 1. Check for dead-end branches (condition Yes/No with no outgoing edge)
+    //    Also check non-terminal nodes with no outgoing edge
+    const TERMINAL_NODE_TYPES = new Set([
+        'send_whatsapp', 'send_sms', 'send_email', 'send_template', 'send_media',
+        'send_sequence', 'quick_replies', 'list_message'
+    ]);
+
+    for (const node of nodes) {
+        if (node.type === 'triggerNode') continue; // Skip trigger
+        const outs = outgoing.get(node.id) ?? [];
+        const nodeType = node.data?.nodeType;
+
+        if (nodeType === 'condition') {
+            const hasYes = outs.some(o => o.handle === 'true');
+            const hasNo = outs.some(o => o.handle === 'false');
+            if (!hasYes) {
+                warnings.push({
+                    id: `dead-yes-${node.id}`,
+                    nodeId: node.id,
+                    type: 'dead_end',
+                    message: `No "Yes" branch connected. When the condition is true, the flow silently ends.`,
+                });
+            }
+            if (!hasNo) {
+                warnings.push({
+                    id: `dead-no-${node.id}`,
+                    nodeId: node.id,
+                    type: 'dead_end',
+                    message: `No "No" branch connected. When the condition is false, the flow silently ends.`,
+                });
+            }
+        } else if (!TERMINAL_NODE_TYPES.has(nodeType) && nodeType !== 'run_subflow' && nodeType !== 'wait' && nodeType !== 'webhook' && nodeType !== 'run_chatbot') {
+            // Non-terminal, non-logic nodes without outgoing edges
+            if (outs.length === 0 && nodeType !== 'add_tag' && nodeType !== 'remove_tag' && nodeType !== 'add_to_campaign' && nodeType !== 'assign_agent' && nodeType !== 'update_contact') {
+                // Only warn for send/ask/engaging nodes that should lead somewhere
+            }
+        }
+    }
+
+    // 2. Collect all declared/produced variables
+    const producedVars = new Set(['contact', 'whatsapp', 'customer', 'message', 'context']);
+    for (const node of nodes) {
+        const nt = node.data?.nodeType;
+        if (nt === 'ask_question' && node.data?.variable) {
+            producedVars.add(String(node.data.variable).trim());
+        }
+        if (nt === 'ai_reply' && node.data?.variable) {
+            producedVars.add(String(node.data.variable).trim());
+        }
+        // AI reply always produces these
+        if (nt === 'ai_reply') {
+            producedVars.add('response');
+            producedVars.add('ai_reply');
+            producedVars.add('last_ai_reply');
+            producedVars.add('voice_transcript');
+        }
+        if (nt === 'update_contact' && typeof node.data?.field === 'string' && node.data.field.startsWith('context.')) {
+            producedVars.add(node.data.field.slice('context.'.length));
+        }
+    }
+
+    // 3. Check for unknown variables in text fields
+    const TEXT_KEYS = ['body', 'question', 'value', 'caption', 'prompt', 'summary', 'description', 'title', 'url', 'payload'];
+    const BUILTIN_PREFIXES = ['contact', 'whatsapp', 'customer', 'message', 'context'];
+
+    for (const node of nodes) {
+        if (node.type === 'triggerNode') continue;
+        const nt = node.data?.nodeType;
+        const nodeLabel = node.data?.label || NODE_DEFS[nt]?.labelKey || nt;
+
+        for (const key of TEXT_KEYS) {
+            const text = node.data?.[key];
+            if (typeof text !== 'string') continue;
+
+            // Check for bare (non-prefixed) variables
+            for (const match of text.matchAll(/\{\{\s*([a-zA-Z_][\w]*)\s*\}\}/g)) {
+                const varName = match[1];
+                // Skip if it's a known built-in prefix (contact, whatsapp, etc.)
+                if (BUILTIN_PREFIXES.includes(varName)) continue;
+                // Check if this variable is user-defined or produced by a node
+                if (!producedVars.has(varName)) {
+                    warnings.push({
+                        id: `unknown-var-${node.id}-${key}-${varName}`,
+                        nodeId: node.id,
+                        type: 'unknown_variable',
+                        message: `Variable {{${varName}}} is not defined. Make sure it's collected by an earlier "Ask Question" or "AI Reply" node.`,
+                    });
+                }
+            }
+        }
+
+        // Also check sequence steps
+        if (Array.isArray(node.data?.steps)) {
+            for (let i = 0; i < node.data.steps.length; i++) {
+                const step = node.data.steps[i];
+                for (const key of ['body', 'caption']) {
+                    const text = step?.[key];
+                    if (typeof text !== 'string') continue;
+                    for (const match of text.matchAll(/\{\{\s*([a-zA-Z_][\w]*)\s*\}\}/g)) {
+                        const varName = match[1];
+                        if (BUILTIN_PREFIXES.includes(varName)) continue;
+                        if (!producedVars.has(varName)) {
+                            warnings.push({
+                                id: `unknown-var-${node.id}-seq${i}-${key}-${varName}`,
+                                nodeId: node.id,
+                                type: 'unknown_variable',
+                                message: `Variable {{${varName}}} in sequence step ${i + 1} is not defined.`,
+                            });
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // 4. Check for literal condition values (suspicious placeholders)
+    const suspiciousLiterals = new Set(['something', 'nothing', 'value', 'text', 'xyz', 'abc', 'placeholder', 'example', 'test']);
+    for (const node of nodes) {
+        if (node.data?.nodeType === 'condition') {
+            const val = String(node.data?.value ?? '').toLowerCase().trim();
+            if (suspiciousLiterals.has(val)) {
+                warnings.push({
+                    id: `literal-val-${node.id}`,
+                    nodeId: node.id,
+                    type: 'literal_condition_value',
+                    message: `Comparing to literal "${node.data.value}" — did you forget to set the actual comparison value? (e.g. use {{contact.name}} instead)`,
+                });
+            }
+        }
+    }
+
+    // 5. Check for no trigger keyword filter on message.received with send/ask at start
+    if (automation?.trigger_type === 'message.received') {
+        const keywords = automation?.trigger_config?.keywords;
+        const hasKeywords = Array.isArray(keywords) && keywords.length > 0;
+
+        if (!hasKeywords) {
+            // Find the first non-trigger node
+            const firstNode = nodes.find(n => n.type !== 'triggerNode');
+            const firstNodeType = firstNode?.data?.nodeType;
+
+            if (firstNodeType && ['send_whatsapp', 'send_sms', 'send_email', 'ask_question', 'send_template', 'quick_replies', 'list_message'].includes(firstNodeType)) {
+                warnings.push({
+                    id: 'no-keyword-filter',
+                    type: 'no_trigger_keyword_filter',
+                    message: `This automation fires on every inbound message with no keyword filter. Your bot will reply to everything. Add keywords to the trigger to be selective.`,
+                });
+            }
+        }
+    }
+
+    return warnings;
+}
+
+function FlowLint({ nodes, edges, automation }) {
+    const { t } = useTranslation();
+    const [expanded, setExpanded] = useState(false);
+
+    const warnings = useMemo(() => runFlowLint(nodes, edges, automation), [nodes, edges, automation]);
+
+    if (warnings.length === 0) return null;
+
+    return (
+        <Panel position="bottom-left">
+            <div style={{
+                background: '#fff',
+                borderRadius: 12,
+                border: '1px solid #fed7aa',
+                boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
+                overflow: 'hidden',
+            }}>
+                <button
+                    onClick={() => setExpanded(!expanded)}
+                    style={{
+                        display: 'flex', alignItems: 'center', gap: 8, width: '100%',
+                        background: '#fffbeb', padding: '10px 12px', border: 'none',
+                        cursor: 'pointer', textAlign: 'left', fontSize: 12, fontWeight: 600,
+                        color: '#92400e', transition: 'all 0.15s',
+                    }}
+                    onMouseEnter={e => e.currentTarget.style.background = '#fef3c7'}
+                    onMouseLeave={e => e.currentTarget.style.background = '#fffbeb'}
+                >
+                    <AlertTriangle size={14} />
+                    <span>{warnings.length} {warnings.length === 1 ? 'warning' : 'warnings'}</span>
+                    <ChevronDown
+                        size={14}
+                        style={{
+                            marginLeft: 'auto',
+                            transform: expanded ? 'rotate(180deg)' : 'rotate(0)',
+                            transition: 'transform 0.2s',
+                        }}
+                    />
+                </button>
+
+                {expanded && (
+                    <div style={{ maxHeight: 280, overflowY: 'auto', padding: '8px 0', borderTop: '1px solid #fed7aa' }}>
+                        {warnings.map(warn => (
+                            <div
+                                key={warn.id}
+                                style={{
+                                    padding: '8px 12px', borderBottom: '1px solid #fef3c7', fontSize: 11,
+                                    color: '#78350f', lineHeight: 1.4, cursor: 'pointer',
+                                    transition: 'background 0.15s',
+                                }}
+                                onMouseEnter={e => e.currentTarget.style.background = '#fef3c7'}
+                                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                            >
+                                <div style={{ fontWeight: 600, marginBottom: 2 }}>
+                                    {warn.nodeId
+                                        ? (() => {
+                                            const node = nodes.find(n => n.id === warn.nodeId);
+                                            const def = NODE_DEFS[node?.data?.nodeType];
+                                            return node?.data?.label || (def ? t(def.labelKey) : node?.data?.nodeType || 'Node');
+                                        })()
+                                        : 'Trigger'}
+                                </div>
+                                <div>{warn.message}</div>
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </div>
+        </Panel>
+    );
+}
+
 function AutomationBuilderInner({ automation: initial }) {
     const { t } = useTranslation();
     const [automation, setAutomation] = useState(initial);
@@ -2042,6 +2289,9 @@ function AutomationBuilderInner({ automation: initial }) {
                             {t('automation.canvas_hint')}
                         </div>
                     </Panel>
+
+                    {/* Flow Lint */}
+                    <FlowLint nodes={nodes} edges={edges} automation={automation} />
                 </ReactFlow>
 
                 {/* Node config panel */}
