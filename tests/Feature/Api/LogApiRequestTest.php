@@ -2,9 +2,13 @@
 
 namespace Tests\Feature\Api;
 
+use App\Http\Middleware\LogApiRequest;
 use App\Models\ApiRequestLog;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Validation\ValidationException;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 use Tests\TestCase;
 
 class LogApiRequestTest extends TestCase
@@ -90,6 +94,7 @@ class LogApiRequestTest extends TestCase
 
         $row = ApiRequestLog::query()->latest('id')->first();
         $this->assertNull($row->response_body);
+        $this->assertNull($row->request_body); // request body also not captured on sampled-out 2xx
         $this->assertNotNull($row->response_size_bytes); // size always recorded
     }
 
@@ -123,6 +128,7 @@ class LogApiRequestTest extends TestCase
         $this->assertNotNull($row->request_body);
         $this->assertStringContainsString('[redacted]', $row->request_body);
         $this->assertStringNotContainsString('should-not-be-stored', $row->request_body);
+        $this->assertSame(ValidationException::class, $row->error_class);
     }
 
     public function test_login_route_is_not_logged(): void
@@ -131,5 +137,44 @@ class LogApiRequestTest extends TestCase
             ->assertStatus(422); // validation or bad creds — either way
 
         $this->assertDatabaseCount('api_request_logs', 0);
+    }
+
+    /**
+     * No /api/v1 route currently returns a StreamedResponse/BinaryFileResponse
+     * (all API controllers return JSON), so the middleware's streamed-body
+     * branch is unreachable via integration. Exercise it directly: a streamed
+     * response must be logged as the '[streamed response]' placeholder without
+     * the middleware ever calling ->getContent() on the stream.
+     */
+    public function test_streamed_response_is_logged_as_placeholder_without_consuming_stream(): void
+    {
+        config(['api.logging.success_sample_rate' => 1.0]);
+        ['user' => $user] = $this->createWorkspaceContext();
+
+        $request = Request::create('/api/v1/export', 'GET');
+        $request->setUserResolver(fn () => $user);
+        $request->attributes->set('api_log_started_at', hrtime(true));
+
+        $streamRan = false;
+        $response = new StreamedResponse(function () use (&$streamRan) {
+            $streamRan = true;
+            echo 'row1,row2';
+        }, 200, ['Content-Type' => 'text/csv']);
+
+        (new LogApiRequest)->terminate($request, $response);
+
+        $this->assertFalse($streamRan, 'middleware must not consume the stream');
+
+        $row = ApiRequestLog::query()->latest('id')->first();
+        $this->assertNotNull($row);
+        $this->assertSame('[streamed response]', $row->response_body);
+        $this->assertNull($row->response_size_bytes); // not computed for streams (known minor)
+        $this->assertSame(200, $row->status);
+
+        // stream still works for the client afterwards
+        ob_start();
+        $response->sendContent();
+        $this->assertSame('row1,row2', ob_get_clean());
+        $this->assertTrue($streamRan);
     }
 }

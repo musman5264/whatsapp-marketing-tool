@@ -93,10 +93,12 @@ class LogApiRequest
         $query = $query ? ApiLogRedactor::redactArray($query) : null;
 
         // --- Error class, if the framework rendered an exception ---
+        // Laravel attaches the caught exception to the RESPONSE (via
+        // Illuminate\Http\ResponseTrait::withException), not the request. A
+        // plain Symfony Response has no `exception` property, hence the isset().
         $errorClass = null;
-        $exception = $request->attributes->get('exception');
-        if ($exception instanceof \Throwable) {
-            $errorClass = get_class($exception);
+        if (isset($response->exception) && $response->exception instanceof \Throwable) {
+            $errorClass = get_class($response->exception);
         }
 
         DB::table('api_request_logs')->insert([
