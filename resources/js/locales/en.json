@@ -2516,6 +2516,7 @@
         "ep_campaigns_pause": "Pause a sending campaign",
         "ep_campaigns_recipients": "Paginated recipient list with status",
         "ep_messages_send": "Send a single outbound message to a contact (WhatsApp \/ SMS)",
+        "ep_messages_send_note": "WhatsApp sends route through the same channel accounts as the inbox. If channel_account_id is omitted, the account is picked in this order: an existing conversation with the contact, then an active Cloud API number, then an active WhatsApp Web (QR \/ WAHA) session. Cloud API free-form (non-template) messages still require an open 24-hour window — a closed window returns 422 with \"window_closed\": true. WhatsApp Web numbers have no window and no real templates: a template sent through one is delivered as plain text and the response includes \"degraded_to_text\": true.",
         "ep_conversations_list": "List conversations; filter by channel, status, assigned_to",
         "ep_conversations_messages": "Ordered message thread",
         "ep_webhooks_list": "List registered webhook endpoints",

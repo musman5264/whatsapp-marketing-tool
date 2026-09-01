@@ -61,7 +61,7 @@ const ENDPOINTS = [
     {
         groupKey: 'api.group_messages',
         items: [
-            { method: 'POST', path: `${BASE}/messages/send`, descKey: 'api.ep_messages_send', scope: 'messages:write', body: '{ "contact_id": 42, "channel": "whatsapp", "template_name": "order_confirmation", "template_vars": {"1": "ORD-99"} }', response: '{ "provider_message_id": "wamid.xxx", "status": "sent" }' },
+            { method: 'POST', path: `${BASE}/messages/send`, descKey: 'api.ep_messages_send', scope: 'messages:write', body: '{\n  "contact_id": 42,\n  "channel": "whatsapp",\n  "template_name": "order_confirmation",\n  "template_vars": ["ORD-99", "3 May"],\n  "channel_account_id": 7            // optional: force a specific WhatsApp number / WAHA session\n}', response: '{ "provider_message_id": "wamid.xxx", "status": "sent" }\n\n// When a template is sent through a WhatsApp Web (QR / WAHA) number it is\n// delivered as plain text, and the response adds:  "degraded_to_text": true', noteKey: 'api.ep_messages_send_note' },
         ],
     },
     {
@@ -124,7 +124,7 @@ const METHOD_COLORS = {
 function EndpointRow({ ep }) {
     const { t } = useTranslation();
     const [open, setOpen] = useState(false);
-    const hasDetail = ep.body || ep.response || ep.scope;
+    const hasDetail = ep.body || ep.response || ep.scope || ep.noteKey;
 
     return (
         <div className="bg-white dark:bg-neutral-800 rounded-xl border border-neutral-200 dark:border-neutral-700 overflow-hidden">
@@ -150,6 +150,9 @@ function EndpointRow({ ep }) {
             {open && (
                 <div className="border-t border-neutral-100 dark:border-neutral-700 px-4 pb-4 pt-3 space-y-3">
                     <p className="text-sm text-neutral-500 dark:text-neutral-400">{t(ep.descKey)}</p>
+                    {ep.noteKey && (
+                        <p className="text-xs text-neutral-600 dark:text-neutral-300 bg-amber-50 dark:bg-amber-900/20 border border-amber-100 dark:border-amber-800 rounded-soft-lg p-3">{t(ep.noteKey)}</p>
+                    )}
                     {ep.body && (
                         <div>
                             <p className="text-xs font-semibold text-neutral-500 dark:text-neutral-400 mb-1">{t('api.request_body')}</p>
