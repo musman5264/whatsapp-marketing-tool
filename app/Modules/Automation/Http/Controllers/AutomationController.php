@@ -182,7 +182,7 @@ class AutomationController extends Controller
     {
         $wid = $this->workspaceId($request);
         $validated = $request->validate([
-            'prompt' => ['required', 'string', 'max:2000'],
+            'prompt' => ['required', 'string', 'max:8000'],
             'persist' => ['nullable', 'boolean'],
         ]);
 
