@@ -116,6 +116,13 @@ class WhatsappDriver implements ChannelDriverInterface
             'image', 'video', 'document', 'audio' => $link
                 ? $adapter->sendMedia($session, $phone, $message->type, (string) $link, $caption, $payload['filename'] ?? null)
                 : throw new \RuntimeException('No downloadable URL for this media message.'),
+            'poll' => $adapter->sendPoll(
+                $session,
+                $phone,
+                (string) ($payload['poll']['question'] ?? $message->body ?? ''),
+                array_values((array) ($payload['poll']['options'] ?? [])),
+                (bool) ($payload['poll']['multiple'] ?? false),
+            ),
             'location' => $adapter->sendLocation(
                 $session,
                 $phone,
