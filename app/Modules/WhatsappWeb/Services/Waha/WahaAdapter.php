@@ -30,7 +30,11 @@ class WahaAdapter implements EngineAdapter
     {
         $webhook = [
             'url' => $webhookUrl,
-            'events' => ['message', 'session.status', 'message.ack'],
+            'events' => [
+                'message', 'session.status', 'message.ack',
+                'message.reaction', 'poll.vote',
+                'call.received', 'call.accepted', 'call.rejected',
+            ],
         ];
         if ($hmacSecret !== null && $hmacSecret !== '') {
             // WAHA signs each webhook body: X-Webhook-Hmac = hmac_sha256(body, key)
