@@ -3113,6 +3113,8 @@
         "run_status_running": "Running",
         "run_status_pending": "Pending",
         "run_status_cancelled": "Cancelled",
+        "qr_badge_hint": "Works as-is on a personal number linked by QR code (WhatsApp Web). Nodes without this badge need the WhatsApp Cloud API for their full form and send as plain text on a personal number.",
+        "qr_legend": "sends as-is on a QR-linked personal number",
         "builder": "Automation Builder",
         "trigger": "Trigger",
         "select_trigger": "Select a trigger…",

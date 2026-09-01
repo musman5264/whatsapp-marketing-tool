@@ -53,48 +53,68 @@ const TRIGGER_TYPES = [
 // Categories rendered (in order) in the node palette — mirrors the product node list.
 const CATEGORY_ORDER = ['send', 'listen', 'logic', 'ai', 'contact', 'engage', 'commerce', 'integrations'];
 
+// `qr: true` — this node sends exactly as designed on a personal (QR-linked /
+// WhatsApp Web) number. Nodes without it rely on the Cloud API for their rich
+// form (tappable buttons, lists, templates, flows) and silently degrade to a
+// plain-text send on a personal number, so they get no (QR) badge in the palette.
 const NODE_DEFS = {
     // ── SEND ──────────────────────────────────────────────────────────────
-    send_whatsapp:       { labelKey: 'automation.node_send_whatsapp',       color: '#25D366', bg: '#f0fdf4', icon: 'whatsapp',        category: 'send' },
+    send_whatsapp:       { labelKey: 'automation.node_send_whatsapp',       color: '#25D366', bg: '#f0fdf4', icon: 'whatsapp',        category: 'send',         qr: true },
     send_template:       { labelKey: 'automation.node_send_template',       color: '#16a34a', bg: '#f0fdf4', icon: LayoutTemplate,    category: 'send' },
-    send_media:          { labelKey: 'automation.node_send_media',          color: '#0d9488', bg: '#f0fdfa', icon: Image,             category: 'send' },
-    send_sequence:       { labelKey: 'automation.node_send_sequence',       color: '#0891b2', bg: '#ecfeff', icon: Layers,            category: 'send' },
+    send_media:          { labelKey: 'automation.node_send_media',          color: '#0d9488', bg: '#f0fdfa', icon: Image,             category: 'send',         qr: true },
+    send_sequence:       { labelKey: 'automation.node_send_sequence',       color: '#0891b2', bg: '#ecfeff', icon: Layers,            category: 'send',         qr: true },
     quick_replies:       { labelKey: 'automation.node_quick_replies',       color: '#7c3aed', bg: '#faf5ff', icon: MousePointerClick, category: 'send' },
     list_message:        { labelKey: 'automation.node_list_message',        color: '#6d28d9', bg: '#f5f3ff', icon: List,              category: 'send' },
-    send_sms:            { labelKey: 'automation.node_send_sms',            color: '#6366f1', bg: '#eef2ff', icon: Phone,             category: 'send' },
-    send_email:          { labelKey: 'automation.node_send_email',          color: '#0ea5e9', bg: '#f0f9ff', icon: Mail,              category: 'send' },
+    send_sms:            { labelKey: 'automation.node_send_sms',            color: '#6366f1', bg: '#eef2ff', icon: Phone,             category: 'send',         qr: true },
+    send_email:          { labelKey: 'automation.node_send_email',          color: '#0ea5e9', bg: '#f0f9ff', icon: Mail,              category: 'send',         qr: true },
     // ── LISTEN ────────────────────────────────────────────────────────────
-    ask_question:        { labelKey: 'automation.node_ask_question',        color: '#ea580c', bg: '#fff7ed', icon: HelpCircle,        category: 'listen' },
+    ask_question:        { labelKey: 'automation.node_ask_question',        color: '#ea580c', bg: '#fff7ed', icon: HelpCircle,        category: 'listen',       qr: true },
     // ── LOGIC ─────────────────────────────────────────────────────────────
-    condition:           { labelKey: 'automation.node_condition',           color: '#8b5cf6', bg: '#f5f3ff', icon: GitBranch,         category: 'logic' },
-    wait:                { labelKey: 'automation.node_wait',                color: '#f59e0b', bg: '#fffbeb', icon: Clock,             category: 'logic' },
-    webhook:             { labelKey: 'automation.node_webhook',             color: '#64748b', bg: '#f8fafc', icon: Webhook,           category: 'logic' },
-    run_subflow:         { labelKey: 'automation.node_run_subflow',         color: '#475569', bg: '#f8fafc', icon: Workflow,          category: 'logic' },
+    condition:           { labelKey: 'automation.node_condition',           color: '#8b5cf6', bg: '#f5f3ff', icon: GitBranch,         category: 'logic',        qr: true },
+    wait:                { labelKey: 'automation.node_wait',                color: '#f59e0b', bg: '#fffbeb', icon: Clock,             category: 'logic',        qr: true },
+    webhook:             { labelKey: 'automation.node_webhook',             color: '#64748b', bg: '#f8fafc', icon: Webhook,           category: 'logic',        qr: true },
+    run_subflow:         { labelKey: 'automation.node_run_subflow',         color: '#475569', bg: '#f8fafc', icon: Workflow,          category: 'logic',        qr: true },
     // ── AI ────────────────────────────────────────────────────────────────
-    ai_reply:            { labelKey: 'automation.node_ai_reply',            color: '#7c3aed', bg: '#faf5ff', icon: Sparkles,          category: 'ai' },
+    ai_reply:            { labelKey: 'automation.node_ai_reply',            color: '#7c3aed', bg: '#faf5ff', icon: Sparkles,          category: 'ai',           qr: true },
     // ── CONTACT ───────────────────────────────────────────────────────────
-    add_tag:             { labelKey: 'automation.node_add_tag',             color: '#10b981', bg: '#ecfdf5', icon: Tag,               category: 'contact' },
-    remove_tag:          { labelKey: 'automation.node_remove_tag',          color: '#f43f5e', bg: '#fff1f2', icon: Scissors,          category: 'contact' },
-    update_contact:      { labelKey: 'automation.node_update_contact',      color: '#0ea5e9', bg: '#f0f9ff', icon: UserCog,           category: 'contact' },
-    assign_agent:        { labelKey: 'automation.node_assign_agent',        color: '#0284c7', bg: '#f0f9ff', icon: UserCheck,         category: 'contact' },
-    add_to_campaign:     { labelKey: 'automation.node_add_to_campaign',     color: '#f97316', bg: '#fff7ed', icon: Megaphone,         category: 'contact' },
+    add_tag:             { labelKey: 'automation.node_add_tag',             color: '#10b981', bg: '#ecfdf5', icon: Tag,               category: 'contact',      qr: true },
+    remove_tag:          { labelKey: 'automation.node_remove_tag',          color: '#f43f5e', bg: '#fff1f2', icon: Scissors,          category: 'contact',      qr: true },
+    update_contact:      { labelKey: 'automation.node_update_contact',      color: '#0ea5e9', bg: '#f0f9ff', icon: UserCog,           category: 'contact',      qr: true },
+    assign_agent:        { labelKey: 'automation.node_assign_agent',        color: '#0284c7', bg: '#f0f9ff', icon: UserCheck,         category: 'contact',      qr: true },
+    add_to_campaign:     { labelKey: 'automation.node_add_to_campaign',     color: '#f97316', bg: '#fff7ed', icon: Megaphone,         category: 'contact',      qr: true },
     // ── ENGAGE ────────────────────────────────────────────────────────────
     cta_button:          { labelKey: 'automation.node_cta_button',          color: '#e11d48', bg: '#fff1f2', icon: ExternalLink,      category: 'engage' },
-    send_location:       { labelKey: 'automation.node_send_location',       color: '#dc2626', bg: '#fef2f2', icon: MapPin,            category: 'engage' },
+    send_location:       { labelKey: 'automation.node_send_location',       color: '#dc2626', bg: '#fef2f2', icon: MapPin,            category: 'engage',       qr: true },
     send_poll:           { labelKey: 'automation.node_send_poll',           color: '#9333ea', bg: '#faf5ff', icon: BarChart3,         category: 'engage' },
-    run_chatbot:         { labelKey: 'automation.node_run_chatbot',         color: '#7c3aed', bg: '#faf5ff', icon: Bot,               category: 'engage' },
-    book_appointment:    { labelKey: 'automation.node_book_appointment',    color: '#2563eb', bg: '#eff6ff', icon: CalendarClock,     category: 'engage' },
-    google_meet:         { labelKey: 'automation.node_google_meet',         color: '#16a34a', bg: '#f0fdf4', icon: Video,             category: 'engage' },
+    run_chatbot:         { labelKey: 'automation.node_run_chatbot',         color: '#7c3aed', bg: '#faf5ff', icon: Bot,               category: 'engage',       qr: true },
+    book_appointment:    { labelKey: 'automation.node_book_appointment',    color: '#2563eb', bg: '#eff6ff', icon: CalendarClock,     category: 'engage',       qr: true },
+    google_meet:         { labelKey: 'automation.node_google_meet',         color: '#16a34a', bg: '#f0fdf4', icon: Video,             category: 'engage',       qr: true },
     whatsapp_form:       { labelKey: 'automation.node_whatsapp_form',       color: '#0891b2', bg: '#ecfeff', icon: ClipboardList,     category: 'engage' },
     // ── COMMERCE ──────────────────────────────────────────────────────────
     whatsapp_catalog:    { labelKey: 'automation.node_whatsapp_catalog',    color: '#16a34a', bg: '#f0fdf4', icon: ShoppingBag,       category: 'commerce' },
     woocommerce_product: { labelKey: 'automation.node_woocommerce_product', color: '#7f54b3', bg: '#f5f3ff', icon: ShoppingCart,      category: 'commerce' },
     shopify_product:     { labelKey: 'automation.node_shopify_product',     color: '#5a8a35', bg: '#f7fee7', icon: Store,             category: 'commerce' },
     // ── INTEGRATIONS ──────────────────────────────────────────────────────
-    google_sheets:       { labelKey: 'automation.node_google_sheets',       color: '#0f9d58', bg: '#f0fdf4', icon: Sheet,             category: 'integrations' },
-    google_docs:         { labelKey: 'automation.node_google_docs',         color: '#4285f4', bg: '#eff6ff', icon: FileText,          category: 'integrations' },
-    google_forms:        { labelKey: 'automation.node_google_forms',        color: '#7248b9', bg: '#f5f3ff', icon: ClipboardCheck,    category: 'integrations' },
+    google_sheets:       { labelKey: 'automation.node_google_sheets',       color: '#0f9d58', bg: '#f0fdf4', icon: Sheet,             category: 'integrations', qr: true },
+    google_docs:         { labelKey: 'automation.node_google_docs',         color: '#4285f4', bg: '#eff6ff', icon: FileText,          category: 'integrations', qr: true },
+    google_forms:        { labelKey: 'automation.node_google_forms',        color: '#7248b9', bg: '#f5f3ff', icon: ClipboardCheck,    category: 'integrations', qr: true },
 };
+
+/* Small green "(QR)" tag: this node sends as-is on a personal / QR-linked number. */
+function QrTag({ style }) {
+    const { t } = useTranslation();
+    return (
+        <span
+            title={t('automation.qr_badge_hint')}
+            style={{
+                color: '#15803d', fontWeight: 700, fontSize: '0.72em',
+                letterSpacing: '0.04em', flexShrink: 0, ...style,
+            }}
+        >
+            (QR)
+        </span>
+    );
+}
 
 const CONDITION_FIELDS = [
     { value: 'contact.name',      labelKey: 'automation.cond_field_contact_name' },
@@ -238,6 +258,7 @@ function BaseNode({ id, data, selected }) {
                 <div style={{ minWidth: 0, flex: 1 }}>
                     <div style={{ fontSize: 12, fontWeight: 600, color: '#111827', lineHeight: 1.3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {defLabel}
+                        {def?.qr && <QrTag style={{ marginLeft: 4 }} />}
                     </div>
                     <div style={{
                         fontSize: 10.5, lineHeight: 1.3, marginTop: 1,
@@ -2170,8 +2191,11 @@ function AutomationBuilderInner({ automation: initial }) {
                 {/* Node palette */}
                 <div style={{ padding: 12, flex: 1 }}>
                     <div style={{ fontSize: 10, fontWeight: 700, color: '#9ca3af', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 4 }}>{t('automation.add_node')}</div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 9, color: '#94a3b8', marginBottom: 8 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 9, color: '#94a3b8', marginBottom: 4 }}>
                         <GripVertical size={10} /> {t('automation.drag_node_hint')}
+                    </div>
+                    <div style={{ fontSize: 9, color: '#94a3b8', marginBottom: 8, lineHeight: 1.4 }}>
+                        <span style={{ color: '#15803d', fontWeight: 700 }}>(QR)</span> {t('automation.qr_legend')}
                     </div>
 
                     <input
@@ -2206,7 +2230,8 @@ function AutomationBuilderInner({ automation: initial }) {
                                         <span style={{ color: def.color, display: 'flex', flexShrink: 0 }}>
                                             <NodeIcon nodeType={type} size={13} />
                                         </span>
-                                        <span style={{ fontWeight: 500 }}>{t(def.labelKey)}</span>
+                                        <span style={{ fontWeight: 500, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t(def.labelKey)}</span>
+                                        {def.qr && <QrTag style={{ marginLeft: 4 }} />}
                                         <GripVertical size={11} style={{ marginLeft: 'auto', color: '#d1d5db', flexShrink: 0 }} />
                                     </button>
                                 ))}
