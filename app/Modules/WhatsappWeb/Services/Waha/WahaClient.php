@@ -53,6 +53,12 @@ class WahaClient
         return $this->http()->delete($this->url($path), $body);
     }
 
+    /** @param array<string,mixed> $body */
+    public function put(string $path, array $body = []): Response
+    {
+        return $this->http()->put($this->url($path), $body);
+    }
+
     /** WAHA health/status probe — used by the admin "Test connection" button. */
     public function ping(): Response
     {
