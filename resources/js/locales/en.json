@@ -3197,6 +3197,7 @@
         "field_operator": "Operator",
         "field_value_required": "Value *",
         "placeholder_compare_value": "Compare value",
+        "condition_contains_hint": "Separate multiple keywords with commas — matches if any one is found. Not case-sensitive.",
         "condition_yes_hint": "condition is true → connects from left handle",
         "condition_no_hint": "condition is false → connects from right handle",
         "field_tag_name_required": "Tag Name *",

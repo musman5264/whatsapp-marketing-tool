@@ -991,16 +991,42 @@ class AutomationEngine
         };
 
         return match ($operator) {
-            'equals' => (string) $actual === (string) $value,
-            'not_equals' => (string) $actual !== (string) $value,
-            'contains' => $value !== null && str_contains((string) $actual, (string) $value),
-            'not_contains' => $value === null || ! str_contains((string) $actual, (string) $value),
+            // String comparisons are case-insensitive so "Yes" matches "yes".
+            'equals' => mb_strtolower((string) $actual) === mb_strtolower((string) $value),
+            'not_equals' => mb_strtolower((string) $actual) !== mb_strtolower((string) $value),
+            // A comma-separated Value ("job,internship") is an OR-list: contains =
+            // ANY keyword is present; not_contains = NONE are (also true when empty).
+            'contains' => $this->conditionContainsAny((string) $actual, $value),
+            'not_contains' => ! $this->conditionContainsAny((string) $actual, $value),
             'exists' => $actual !== null && $actual !== '' && $actual !== false,
             'not_exists' => $actual === null || $actual === '' || $actual === false,
             'gt' => (float) $actual > (float) $value,
             'lt' => (float) $actual < (float) $value,
             default => false,
         };
+    }
+
+    /**
+     * True when $haystack contains any one of the comma-separated keywords in
+     * $value. Each keyword is trimmed, blanks are ignored, and matching is
+     * case-insensitive. An empty or blank $value never matches.
+     */
+    private function conditionContainsAny(string $haystack, mixed $value): bool
+    {
+        $haystack = mb_strtolower($haystack);
+
+        $keywords = array_filter(
+            array_map(fn ($k) => mb_strtolower(trim($k)), explode(',', (string) ($value ?? ''))),
+            fn ($k) => $k !== '',
+        );
+
+        foreach ($keywords as $keyword) {
+            if (str_contains($haystack, $keyword)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private function conditionResult(bool $passed, ?string $field, string $operator, mixed $value): array

@@ -1095,6 +1095,9 @@ function ConditionFields({ d, set }) {
             {!noValue && (
                 <Field label={t('automation.field_value_required')}>
                     <input className={inputCls} value={d.value ?? ''} onChange={e => set('value', e.target.value)} placeholder={t('automation.placeholder_compare_value')} />
+                    {(d.operator === 'contains' || d.operator === 'not_contains') && (
+                        <p style={{ fontSize: 10, color: '#94a3b8', marginTop: 3 }}>{t('automation.condition_contains_hint')}</p>
+                    )}
                 </Field>
             )}
             <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, padding: '8px 10px', fontSize: 10, color: '#166534' }}>
