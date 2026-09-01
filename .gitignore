@@ -33,6 +33,7 @@ database/.DS_Store
 /docs
 /landing
 /.superpowers
+/.claude/worktrees
 
 /WhatsMe
 /release
