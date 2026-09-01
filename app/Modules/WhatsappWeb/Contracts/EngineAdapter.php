@@ -73,4 +73,19 @@ interface EngineAdapter
         ?string $name,
         ?string $address,
     ): string;
+
+    /** Send a native poll. Returns the engine message id. */
+    public function sendPoll(string $session, string $toE164, string $question, array $options, bool $multipleAnswers): string;
+
+    /** React to a message with an emoji. Pass an empty string to remove the reaction. */
+    public function sendReaction(string $session, string $messageId, string $emoji): void;
+
+    /** Mark a chat's messages read (blue ticks), optionally up to one message id. */
+    public function sendSeen(string $session, string $chatId, ?string $messageId = null): void;
+
+    /** Toggle the typing indicator for a chat. */
+    public function sendTyping(string $session, string $toE164, bool $on): void;
+
+    /** Reject an incoming call by its engine call id. */
+    public function rejectCall(string $session, string $callId): void;
 }
