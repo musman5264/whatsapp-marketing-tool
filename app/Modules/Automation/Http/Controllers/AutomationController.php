@@ -129,8 +129,11 @@ class AutomationController extends Controller
     {
         $this->authorise($request, $automation);
         $runs = AutomationRun::where('automation_id', $automation->id)
-            ->with('logs')
-            ->latest()->paginate(50);
+            ->with(['logs', 'contact:id,phone_e164,first_name,last_name,avatar'])
+            ->withCount('logs')
+            ->latest()
+            ->paginate(20)
+            ->withQueryString();
 
         return Inertia::render('Automation/Runs', ['automation' => $automation, 'runs' => $runs]);
     }

@@ -2,6 +2,7 @@
 
 namespace App\Modules\Automation\Models;
 
+use App\Modules\Shared\Models\Contact;
 use Illuminate\Database\Eloquent\Model;
 
 class AutomationRun extends Model
@@ -22,6 +23,11 @@ class AutomationRun extends Model
     public function automation()
     {
         return $this->belongsTo(Automation::class);
+    }
+
+    public function contact()
+    {
+        return $this->belongsTo(Contact::class);
     }
 
     public function logs()
