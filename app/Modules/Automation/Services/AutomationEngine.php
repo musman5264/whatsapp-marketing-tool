@@ -1327,12 +1327,48 @@ class AutomationEngine
             return ['status' => 'error', 'message' => 'Question and options are required.'];
         }
 
-        // The Cloud API has no native poll — emulate with reply buttons (≤3) or an interactive list.
-        $interactive = count($options) <= 3
-            ? $this->buttonInteractive($question, $options)
-            : $this->listInteractive($question, (string) ($data['button_label'] ?? 'Vote'), 'Options', array_map(fn ($o) => ['title' => $o, 'description' => ''], $options));
+        $multiple = (bool) ($data['multiple'] ?? false);
+        $resultVar = ($data['result_var'] ?? '') ?: 'poll_answer';
 
-        return $this->sendWhatsappPayload($run, 'interactive', $question, ['interactive' => $interactive]);
+        // Remember which variable the vote lands in, and that this run may get a
+        // poll.vote later (see WahaEventProcessor / the poll.vote inbound handler).
+        $ctxUpdate = ['_poll_result_var' => $resultVar];
+
+        $target = $this->resolveChannelTarget($run->automation->workspace_id, $contact, 'whatsapp');
+        $isPersonal = $target['account']?->provider === 'whatsapp_web';
+
+        if ($isPersonal) {
+            // WhatsApp Web (WAHA) has a real poll — send it natively.
+            $res = $this->sendWhatsappPayload($run, 'poll', $question, [
+                'poll' => ['question' => $question, 'options' => $options, 'multiple' => $multiple],
+            ]);
+        } else {
+            // The Cloud API has no native poll — emulate with reply buttons (≤3) or an interactive list.
+            $interactive = count($options) <= 3
+                ? $this->buttonInteractive($question, $options)
+                : $this->listInteractive($question, (string) ($data['button_label'] ?? 'Vote'), 'Options', array_map(fn ($o) => ['title' => $o, 'description' => ''], $options));
+            $res = $this->sendWhatsappPayload($run, 'interactive', $question, ['interactive' => $interactive]);
+        }
+
+        if (($res['status'] ?? '') === 'ok') {
+            $res['context_update'] = array_merge($res['context_update'] ?? [], $ctxUpdate);
+        }
+
+        // Optionally park the run until the poll gets a vote (native polls only —
+        // the emulated interactive is handled by the button/list-reply resume path).
+        if ($isPersonal && ($data['wait_for_vote'] ?? false) && ($res['status'] ?? '') === 'ok') {
+            $edges = collect($run->automation->edges ?? []);
+            $resumeNodeId = $this->nextNodeId($edges, (string) $run->current_node_id, null);
+            $run->update(['status' => 'waiting', 'resume_node_id' => $resumeNodeId]);
+
+            return [
+                'status' => 'waiting',
+                'message' => 'Poll sent — waiting for a vote.',
+                'context_update' => array_merge($ctxUpdate, ['_awaiting_poll' => true]),
+            ];
+        }
+
+        return $res;
     }
 
     private function executeRunChatbot(array $data, AutomationRun $run, array $context): array
