@@ -418,6 +418,9 @@ class AutomationEngine
             'assign_agent' => $ok(! empty($data['agent_name']) ? 'Would assign to '.$data['agent_name'].'.' : 'Would hand off to a human agent.'),
             'add_to_campaign' => ($data['campaign_id'] ?? '') === '' ? $skip('No campaign selected.') : $ok('Would add contact to campaign #'.$data['campaign_id'].'.'),
             'cta_button' => $ok('Would send CTA "'.($data['display_text'] ?? 'Open').'" → '.$this->snippet($render($data['url'] ?? ''), 40)),
+            'react_message' => ($data['emoji'] ?? '') === ''
+                ? $err('Pick an emoji to react with.')
+                : $ok('Would react '.$data['emoji'].' to the trigger message.'),
             'send_location' => $ok('Would send location '.($data['latitude'] ?? '?').', '.($data['longitude'] ?? '?').'.'),
             'send_poll' => $ok('Would send a poll: "'.$this->snippet($render($data['question'] ?? '')).'"'),
             'run_chatbot' => empty($data['chatbot_id']) ? $err('No chatbot selected.') : $ok('Would run chatbot #'.$data['chatbot_id'].' and send the reply.', ['context_update' => ['last_ai_reply' => '[chatbot reply]']]),
@@ -476,6 +479,7 @@ class AutomationEngine
                 'assign_agent' => $this->executeAssignAgent($data, $run),
                 // ── ENGAGE ────────────────────────────────────────────────────
                 'cta_button' => $this->executeCtaButton($data, $run, $context),
+                'react_message' => $this->executeReactMessage($data, $run, $context),
                 'send_location' => $this->executeSendLocation($data, $run, $context),
                 'send_poll' => $this->executeSendPoll($data, $run, $context),
                 'run_chatbot' => $this->executeRunChatbot($data, $run, $context),
@@ -1369,6 +1373,29 @@ class AutomationEngine
         }
 
         return $res;
+    }
+
+    /**
+     * React to the message that triggered this automation (message.received runs).
+     * Emits a `reaction` Message targeting the local trigger-message PK; the
+     * WhatsappDriver resolves it to a provider id and reacts on Cloud or WAHA.
+     */
+    private function executeReactMessage(array $data, AutomationRun $run, array $context): array
+    {
+        $emoji = (string) ($data['emoji'] ?? '');
+        if ($emoji === '') {
+            return ['status' => 'error', 'message' => 'No emoji configured.'];
+        }
+
+        $targetId = $context['message_id'] ?? null;
+        if (! $targetId) {
+            return ['status' => 'skipped', 'message' => 'No trigger message to react to (this automation was not started by an inbound message).'];
+        }
+
+        return $this->sendWhatsappPayload($run, 'reaction', null, [
+            'target_message_id' => (int) $targetId,
+            'emoji' => $emoji,
+        ]);
     }
 
     /**
