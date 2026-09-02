@@ -72,6 +72,7 @@
         "billing": "Billing",
         "plans": "Plans",
         "api_tokens": "API Tokens",
+        "api_usage": "API Usage",
         "webhooks": "Webhooks",
         "api_docs": "API Docs",
         "media_library": "Media Library",

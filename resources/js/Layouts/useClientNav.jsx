@@ -5,7 +5,7 @@ import {
     LayoutDashboard, CreditCard, Package, FileText, Users, Settings,
     Layers, Webhook, Key, BookOpen, Image, Radio, Inbox, Bot, Database,
     Zap, Share2, MapPin, Tag, LifeBuoy, ExternalLink, Mail, MessageSquare,
-    ShoppingBag, KanbanSquare,
+    ShoppingBag, KanbanSquare, Activity,
 } from 'lucide-react';
 
 const iconClass = 'h-4 w-4';
@@ -53,7 +53,8 @@ export default function useClientNav() {
     ];
 
     const developerItems = [
-        { label: t('nav.api_tokens'),    href: safeRoute('client.api-tokens.index'), icon: <Key className={iconClass} />,     activePattern: 'client.api-tokens.*' },
+        { label: t('nav.api_tokens'),    href: safeRoute('client.api-tokens.index'), icon: <Key className={iconClass} />,      activePattern: 'client.api-tokens.*' },
+        { label: t('nav.api_usage'),     href: safeRoute('client.api-usage.index'),   icon: <Activity className={iconClass} />, activePattern: 'client.api-usage.*' },
         { label: t('nav.webhooks'),      href: safeRoute('client.webhooks.index'),    icon: <Webhook className={iconClass} />,  activePattern: 'client.webhooks.*' },
         { label: t('nav.api_docs'),      href: safeRoute('client.api-docs'),          icon: <BookOpen className={iconClass} />, activePattern: 'client.api-docs' },
         { label: t('nav.media_library'), href: safeRoute('client.media.index'),       icon: <Image className={iconClass} />,   activePattern: 'client.media.*' },
