@@ -64,6 +64,20 @@ class AutomationTriggerListener
         ], $messageBody);
     }
 
+    public function handleReactionReceived(\App\Events\ReactionReceived $event): void
+    {
+        $contactId = $event->message->conversation?->contact_id;
+        $workspaceId = $event->message->conversation?->workspace_id;
+        if (! $contactId || ! $workspaceId) {
+            return;
+        }
+
+        $this->fireWithConfig('reaction.received', $workspaceId, $contactId, [
+            'message_id' => $event->message->id,
+            'reaction_emoji' => $event->emoji,
+        ], $event->emoji);
+    }
+
     public function handleContactCreated(ContactCreated $event): void
     {
         $this->fire('contact.created', $event->contact->workspace_id, $event->contact->id);

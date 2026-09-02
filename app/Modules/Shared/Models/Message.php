@@ -12,7 +12,7 @@ class Message extends Model
 
     protected $fillable = [
         'conversation_id', 'direction', 'channel', 'type', 'payload', 'body',
-        'media_id', 'status', 'provider_message_id', 'error_json',
+        'reaction_emoji', 'media_id', 'status', 'provider_message_id', 'error_json',
         'sent_by', 'user_id', 'sent_at',
     ];
 

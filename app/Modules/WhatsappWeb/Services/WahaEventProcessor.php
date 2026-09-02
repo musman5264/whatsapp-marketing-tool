@@ -38,6 +38,7 @@ class WahaEventProcessor
             $event === 'session.status' => $this->handleSessionStatus($payload, $session),
             $event === 'message.ack' => $this->handleAck($payload),
             $event === 'poll.vote' => $this->handlePollVote($payload),
+            $event === 'message.reaction' => $this->handleReaction($payload),
             default => Log::info('whatsapp_web.event.ignored', ['event' => $event]),
         };
     }
@@ -141,5 +142,36 @@ class WahaEventProcessor
         }
 
         $this->engine->applyPollVote($pollMessageId, $selected);
+    }
+
+    /**
+     * A contact reacted to a message we sent. WAHA delivers the reaction as a
+     * `message.reaction` event; store the emoji on our copy of the reacted
+     * message and fire the `reaction.received` automation trigger.
+     *
+     * @param  array<string,mixed>  $payload
+     */
+    private function handleReaction(array $payload): void
+    {
+        $p = $payload['payload'] ?? [];
+        $emoji = (string) ($p['reaction']['text'] ?? $p['reaction']['emoji'] ?? ($p['text'] ?? ''));
+        $targetProviderId = (string) ($p['reaction']['messageId'] ?? $p['reaction']['id'] ?? ($p['messageId'] ?? ''));
+        $rxId = (string) ($p['id'] ?? ($targetProviderId.':'.$emoji));
+
+        if ($targetProviderId === '') {
+            return;
+        }
+
+        if (! app(WebhookIdempotencyService::class)->isNewEvent('whatsapp_web', 'reaction:'.$rxId)) {
+            return;
+        }
+
+        $message = Message::where('provider_message_id', $targetProviderId)->first();
+        if (! $message) {
+            return;
+        }
+
+        $message->update(['reaction_emoji' => $emoji !== '' ? $emoji : null]);
+        \App\Events\ReactionReceived::dispatch($message, $emoji);
     }
 }
