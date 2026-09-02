@@ -44,6 +44,9 @@ class PruneApiRequestLogsTest extends TestCase
 
         $this->assertDatabaseMissing('api_request_logs', ['id' => $ancient->id]);
         $this->assertDatabaseHas('api_request_logs', ['id' => $fresh->id]);
+
+        // A row younger than payload_retention_days keeps its payload untouched.
+        $this->assertSame('{"a":1}', $fresh->fresh()->request_body);
     }
 
     public function test_enforces_global_row_cap_deleting_oldest(): void

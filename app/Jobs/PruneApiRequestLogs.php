@@ -11,10 +11,10 @@ use Illuminate\Queue\SerializesModels;
 
 /**
  * Keeps api_request_logs bounded. Runs daily:
- *   1. Null payload columns on rows older than payload_retention_days.
- *   2. Delete rows older than retention_days.
+ *   1. Delete rows older than retention_days.
+ *   2. Null payload columns on rows older than payload_retention_days.
  *   3. Delete oldest rows beyond the max_rows global cap.
- * All deletes are chunked to avoid long locks on MySQL.
+ * All deletes and updates are chunked to avoid long locks on MySQL.
  */
 class PruneApiRequestLogs implements ShouldQueue
 {
@@ -26,27 +26,34 @@ class PruneApiRequestLogs implements ShouldQueue
         $rowCutoff = now()->subDays((int) config('api.logging.retention_days', 90));
         $maxRows = (int) config('api.logging.max_rows', 5_000_000);
 
-        // 1. Strip payloads from old rows (kept as metadata).
-        ApiRequestLog::where('created_at', '<', $payloadCutoff)
-            ->where(function ($q) {
-                $q->whereNotNull('request_body')
-                  ->orWhereNotNull('response_body')
-                  ->orWhereNotNull('request_headers')
-                  ->orWhereNotNull('query');
-            })
-            ->toBase()
-            ->update([
-                'request_body' => null,
-                'response_body' => null,
-                'request_headers' => null,
-                'query' => null,
-            ]);
-
-        // 2. Delete rows past retention, chunked.
+        // 1. Delete rows past retention, chunked. Done first so the payload-null
+        //    pass below has strictly fewer rows to touch (a >retention_days row
+        //    also matches the <payload_retention_days predicate).
         do {
             $deleted = ApiRequestLog::where('created_at', '<', $rowCutoff)
                 ->limit(10_000)->delete();
         } while ($deleted > 0);
+
+        // 2. Strip payloads from old rows (kept as metadata), chunked. Each
+        //    iteration nulls up to 10k still-matching rows; a nulled row no
+        //    longer matches the whereNotNull group, so the loop drains.
+        do {
+            $updated = ApiRequestLog::where('created_at', '<', $payloadCutoff)
+                ->where(function ($q) {
+                    $q->whereNotNull('request_body')
+                        ->orWhereNotNull('response_body')
+                        ->orWhereNotNull('request_headers')
+                        ->orWhereNotNull('query');
+                })
+                ->toBase()
+                ->limit(10_000)
+                ->update([
+                    'request_body' => null,
+                    'response_body' => null,
+                    'request_headers' => null,
+                    'query' => null,
+                ]);
+        } while ($updated > 0);
 
         // 3. Global row cap — delete oldest beyond the cap, chunked.
         $total = ApiRequestLog::count();
