@@ -200,6 +200,15 @@ export default function ApiDocs() {
                     </Link>
                 </div>
 
+                {/* API request logs callout */}
+                <div className="rounded-soft border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800/50 p-4">
+                    <h3 className="text-sm font-semibold text-neutral-800 dark:text-neutral-200">{t('api.docs_logs_heading')}</h3>
+                    <p className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">{t('api.usage_retention_note')}</p>
+                    <a href={route('client.api-usage.index')} className="mt-2 inline-block text-xs text-brand-600 hover:underline">
+                        {t('api.usage_title')} →
+                    </a>
+                </div>
+
                 {/* Tabs */}
                 <div className="border-b border-neutral-200 dark:border-neutral-700">
                     <nav className="-mb-px flex gap-4">
