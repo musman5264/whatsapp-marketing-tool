@@ -7,6 +7,13 @@ use App\Modules\Shared\Models\Message;
 
 class ChatbotRunner
 {
+    /**
+     * Upper bound on a single AI reply. Providers otherwise fall back to their
+     * own low default (~1024) and long FAQ-style answers get clipped
+     * mid-sentence — 4096 leaves room for a full answer without runaway cost.
+     */
+    private const REPLY_MAX_TOKENS = 4096;
+
     public function __construct(
         private LlmGateway $llmGateway,
         private EmbeddingStore $embedStore,
@@ -85,7 +92,7 @@ class ChatbotRunner
             $response = $this->llmGateway->chat(
                 $workspaceId,
                 $messages,
-                ['max_tokens' => 512],
+                ['max_tokens' => self::REPLY_MAX_TOKENS],
                 $bot->id,
                 $conversation->id,
             );
@@ -188,7 +195,7 @@ class ChatbotRunner
             $response = $this->llmGateway->chat(
                 $workspaceId,
                 $messages,
-                ['max_tokens' => 512],
+                ['max_tokens' => self::REPLY_MAX_TOKENS],
                 $bot->id,
             );
 

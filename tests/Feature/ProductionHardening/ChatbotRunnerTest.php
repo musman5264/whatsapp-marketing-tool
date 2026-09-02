@@ -117,4 +117,56 @@ class ChatbotRunnerTest extends TestCase
         $this->assertNotNull($capturedSystemPrompt, 'System prompt should have been captured');
         $this->assertStringContainsString('refund policy is 30 days', $capturedSystemPrompt);
     }
+
+    public function test_chatbot_reply_is_not_truncated_to_a_short_token_limit(): void
+    {
+        $data = $this->createWorkspaceContext();
+        $workspace = $data['workspace'];
+
+        $chatbot = AiChatbot::create([
+            'workspace_id' => $workspace->id,
+            'name' => 'Support Bot',
+            'system_prompt' => 'You are a helpful assistant.',
+            'enabled' => true,
+            'channels' => ['whatsapp'],
+        ]);
+
+        $contact = Contact::factory()->create(['workspace_id' => $workspace->id]);
+        $conv = Conversation::create([
+            'workspace_id' => $workspace->id,
+            'contact_id' => $contact->id,
+            'status' => 'open',
+        ]);
+        $message = new Message;
+        $message->body = 'Write me a long essay about IT development.';
+        $message->direction = 'in';
+        $message->channel = 'playground';
+        $message->setRelation('conversation', $conv);
+
+        $capturedMaxTokens = null;
+        Http::fake([
+            'api.openai.com/v1/chat/completions' => function ($request) use (&$capturedMaxTokens) {
+                $capturedMaxTokens = json_decode($request->body(), true)['max_tokens'] ?? null;
+
+                return Http::response([
+                    'choices' => [['message' => ['content' => 'A long essay...']]],
+                    'usage' => ['prompt_tokens' => 50, 'completion_tokens' => 20],
+                    'model' => 'gpt-4o-mini',
+                ], 200);
+            },
+        ]);
+
+        AiProviderConfig::create([
+            'workspace_id' => $workspace->id,
+            'provider' => 'openai',
+            'credentials' => ['api_key' => 'sk-test'],
+            'default_model_chat' => 'gpt-4o-mini',
+            'default_model_embed' => 'text-embedding-3-small',
+            'enabled' => true,
+        ]);
+
+        app(ChatbotRunner::class)->run($chatbot, $message);
+
+        $this->assertSame(4096, $capturedMaxTokens, 'Chatbot replies must allow room for long answers, not clip at 512 tokens.');
+    }
 }
