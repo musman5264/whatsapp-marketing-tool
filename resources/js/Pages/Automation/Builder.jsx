@@ -85,7 +85,7 @@ const NODE_DEFS = {
     // ── ENGAGE ────────────────────────────────────────────────────────────
     cta_button:          { labelKey: 'automation.node_cta_button',          color: '#e11d48', bg: '#fff1f2', icon: ExternalLink,      category: 'engage' },
     send_location:       { labelKey: 'automation.node_send_location',       color: '#dc2626', bg: '#fef2f2', icon: MapPin,            category: 'engage',       qr: true },
-    send_poll:           { labelKey: 'automation.node_send_poll',           color: '#9333ea', bg: '#faf5ff', icon: BarChart3,         category: 'engage' },
+    send_poll:           { labelKey: 'automation.node_send_poll',           color: '#9333ea', bg: '#faf5ff', icon: BarChart3,         category: 'engage', qr: true },
     run_chatbot:         { labelKey: 'automation.node_run_chatbot',         color: '#7c3aed', bg: '#faf5ff', icon: Bot,               category: 'engage',       qr: true },
     book_appointment:    { labelKey: 'automation.node_book_appointment',    color: '#2563eb', bg: '#eff6ff', icon: CalendarClock,     category: 'engage',       qr: true },
     google_meet:         { labelKey: 'automation.node_google_meet',         color: '#16a34a', bg: '#f0fdf4', icon: Video,             category: 'engage',       qr: true },
@@ -1301,6 +1301,17 @@ function PollFields({ d, set }) {
             <Field label={t('automation.field_poll_options_required')}>
                 <textarea className={textareaCls} rows={4} value={d.options ?? ''} onChange={e => set('options', e.target.value)} placeholder={t('automation.placeholder_poll_options')} />
             </Field>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#374151' }}>
+                <input type="checkbox" checked={!!d.multiple} onChange={e => set('multiple', e.target.checked)} />
+                {t('automation.poll_multiple')}
+            </label>
+            <Field label={t('automation.field_poll_result_var')}>
+                <input className={inputCls} value={d.result_var ?? ''} onChange={e => set('result_var', e.target.value)} placeholder="poll_answer" />
+            </Field>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#374151' }}>
+                <input type="checkbox" checked={!!d.wait_for_vote} onChange={e => set('wait_for_vote', e.target.checked)} />
+                {t('automation.poll_wait_for_vote')}
+            </label>
             <p style={{ fontSize: 10, color: '#64748b' }}>{t('automation.poll_hint')}</p>
         </>
     );
