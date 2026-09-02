@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\ApiRequestLog;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Route;
@@ -86,5 +87,39 @@ class ApiTokenTest extends TestCase
              ->getJson('/api/v1/me')
              ->assertOk()
              ->assertJsonPath('email', $user->email);
+    }
+
+    public function test_revoking_a_token_nulls_log_token_id_but_keeps_rows(): void
+    {
+        // The DELETE /api/v1/tokens/{id} request is itself logged by the
+        // LogApiRequest middleware. Turn logging off here so the row count
+        // reflects only our seeded row — the point of this test is that the
+        // history row survives revocation, not that a new one is written.
+        config(['api.logging.enabled' => false]);
+
+        $user = $this->clientUser();
+        $token = $user->createToken('Loggable');
+        $tokenId = $token->accessToken->id;
+
+        ApiRequestLog::create([
+            'client_id' => $user->client_id,
+            'user_id' => $user->id,
+            'token_id' => $tokenId,
+            'token_name' => 'Loggable',
+            'method' => 'GET',
+            'path' => 'api/v1/me',
+            'status' => 200,
+            'duration_ms' => 5,
+            'created_at' => now(),
+        ]);
+
+        $this->actingAs($user)->deleteJson('/api/v1/tokens/'.$tokenId)->assertOk();
+
+        $this->assertDatabaseMissing('personal_access_tokens', ['id' => $tokenId]);
+        $this->assertDatabaseHas('api_request_logs', [
+            'token_id' => null,
+            'token_name' => 'Loggable',
+        ]);
+        $this->assertSame(1, ApiRequestLog::count());
     }
 }

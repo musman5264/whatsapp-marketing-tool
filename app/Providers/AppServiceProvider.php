@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Models\ApiRequestLog;
 use App\Models\Workspace;
 use App\Modules\Shared\Services\ChannelManager;
 use App\Services\Billing\BillingGatewayRegistry;
@@ -18,6 +19,7 @@ use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Support\Facades\Vite;
 use Illuminate\Support\ServiceProvider;
+use Laravel\Sanctum\PersonalAccessToken;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -79,6 +81,19 @@ class AppServiceProvider extends ServiceProvider
             $perMinute = $workspace?->client?->activePlan?->limits['ai_runs_per_minute'] ?? 10;
 
             return Limit::perMinute((int) $perMinute)->by((string) $workspaceId);
+        });
+
+        // When a personal access token is revoked, keep its request-log history
+        // but detach the (now dangling) token_id. token_name was snapshotted at
+        // write time so the rows stay readable.
+        //
+        // NOTE: model events fire only for INSTANCE deletes ($token->delete()),
+        // not for query-builder bulk DELETEs (e.g. $user->tokens()->delete() on
+        // logout). TokenController::destroy also nulls token_id explicitly so
+        // the API revoke path is covered regardless.
+        PersonalAccessToken::deleting(function (PersonalAccessToken $token): void {
+            ApiRequestLog::where('token_id', $token->getKey())
+                ->update(['token_id' => null]);
         });
 
         // ── Scramble / OpenAPI ──────────────────────────────────────────────

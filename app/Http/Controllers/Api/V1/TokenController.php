@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Models\ApiRequestLog;
 use App\Support\ApiAbilities;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
@@ -62,11 +63,23 @@ class TokenController extends Controller
      */
     public function destroy(Request $request, int $tokenId): JsonResponse
     {
-        $deleted = $request->user()->tokens()->where('id', $tokenId)->delete();
+        $user = $request->user();
 
-        if (! $deleted) {
+        $token = $user->tokens()->where('id', $tokenId)->first();
+
+        if (! $token) {
             return response()->json(['error' => 'Token not found.'], 404);
         }
+
+        // Detach the token_id from its request-log history, then delete the
+        // token. token_name stays on the log rows as a readable snapshot; the
+        // rows themselves are never removed. This explicit update is the
+        // reliable path — it does not depend on the PersonalAccessToken
+        // "deleting" model event firing.
+        ApiRequestLog::where('token_id', $token->getKey())
+            ->update(['token_id' => null]);
+
+        $token->delete();
 
         return response()->json(['ok' => true]);
     }
