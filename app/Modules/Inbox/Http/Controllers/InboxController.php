@@ -697,6 +697,38 @@ class InboxController extends Controller
         return redirect()->route('client.inbox.show', $conversation);
     }
 
+    public function react(Request $request, Conversation $conversation, Message $message): JsonResponse
+    {
+        $this->authorise($request, $conversation);
+        abort_unless((int) $message->conversation_id === (int) $conversation->id, 404);
+
+        $validated = $request->validate(['emoji' => ['required', 'string', 'max:16']]);
+
+        $out = Message::create([
+            'conversation_id' => $conversation->id,
+            'direction' => 'out',
+            'channel' => $conversation->channelAccount?->channel ?? 'whatsapp',
+            'type' => 'reaction',
+            'body' => $validated['emoji'],
+            'payload' => ['target_message_id' => $message->id, 'emoji' => $validated['emoji']],
+            'status' => 'queued',
+            'sent_by' => 'human',
+            'user_id' => $request->user()->id,
+            'sent_at' => now(),
+        ]);
+
+        try {
+            $id = $this->channelManager->driver($out->channel)->send($out);
+            $out->update(['status' => 'sent', 'provider_message_id' => $id ?: null]);
+        } catch (\Throwable $e) {
+            $out->update(['status' => 'failed', 'error_json' => ['message' => $e->getMessage()]]);
+
+            return response()->json(['ok' => false, 'error' => $e->getMessage()], 422);
+        }
+
+        return response()->json(['ok' => true]);
+    }
+
     private function authorise(Request $request, Conversation $conversation): void
     {
         $workspaceId = $request->user()->current_workspace_id ?? $request->user()->workspace_id;
