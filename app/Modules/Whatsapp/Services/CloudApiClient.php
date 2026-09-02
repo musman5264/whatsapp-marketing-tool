@@ -376,6 +376,17 @@ class CloudApiClient
         ]);
     }
 
+    /** React to a message with an emoji (empty string removes the reaction). */
+    public function sendReaction(string $to, string $messageId, string $emoji): Response
+    {
+        return $this->post("/{$this->phoneNumberId}/messages", [
+            'messaging_product' => 'whatsapp',
+            'to' => $to,
+            'type' => 'reaction',
+            'reaction' => ['message_id' => $messageId, 'emoji' => $emoji],
+        ]);
+    }
+
     /** Verify that the access token and WABA are valid. */
     public function verifyCreds(string $wabaId): bool
     {

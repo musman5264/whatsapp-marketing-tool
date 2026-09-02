@@ -64,6 +64,14 @@ class WhatsappDriver implements ChannelDriverInterface
                 $payload['location']['name'] ?? null,
                 $payload['location']['address'] ?? null,
             ),
+            'reaction' => (function () use ($client, $phone, $payload) {
+                $target = $this->targetProviderId($payload['target_message_id'] ?? null);
+                if ($target === '') {
+                    throw new \RuntimeException('Cannot react — the target message has no provider id yet.');
+                }
+
+                return $client->sendReaction($phone, $target, (string) ($payload['emoji'] ?? ''));
+            })(),
             default => $client->sendText($phone, $message->body ?? ''),
         };
 
@@ -131,8 +139,27 @@ class WhatsappDriver implements ChannelDriverInterface
                 $payload['location']['name'] ?? null,
                 $payload['location']['address'] ?? null,
             ),
+            'reaction' => (function () use ($adapter, $session, $payload) {
+                $target = $this->targetProviderId($payload['target_message_id'] ?? null);
+                if ($target === '') {
+                    throw new \RuntimeException('Cannot react — the target message has no provider id yet.');
+                }
+                $adapter->sendReaction($session, $target, (string) ($payload['emoji'] ?? ''));
+
+                return '';
+            })(),
             default => $adapter->sendText($session, $phone, $message->body ?? ''),
         };
+    }
+
+    /** Resolve a local target-message id (from a reaction payload) to its provider id. */
+    private function targetProviderId(?int $localId): string
+    {
+        if (! $localId) {
+            return '';
+        }
+
+        return (string) (Message::whereKey($localId)->value('provider_message_id') ?? '');
     }
 
     /**
