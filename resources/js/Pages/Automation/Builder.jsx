@@ -10,7 +10,7 @@ import {
     Image, Layers, MousePointerClick, List, HelpCircle, Workflow, Sparkles,
     UserCheck, ExternalLink, MapPin, BarChart3, CalendarClock, Video,
     ClipboardList, ClipboardCheck, Store, Sheet, LayoutTemplate, AlertTriangle, GripVertical,
-    FlaskConical, Loader2, CheckCircle2, MinusCircle, AlertCircle, ChevronDown,
+    FlaskConical, Loader2, CheckCircle2, MinusCircle, AlertCircle, ChevronDown, SmilePlus,
 } from 'lucide-react';
 import { ChannelBrandIcon } from '@/Components/BrandIcons';
 import MediaUpload from '@/Components/MediaUpload';
@@ -84,6 +84,7 @@ const NODE_DEFS = {
     add_to_campaign:     { labelKey: 'automation.node_add_to_campaign',     color: '#f97316', bg: '#fff7ed', icon: Megaphone,         category: 'contact',      qr: true },
     // ── ENGAGE ────────────────────────────────────────────────────────────
     cta_button:          { labelKey: 'automation.node_cta_button',          color: '#e11d48', bg: '#fff1f2', icon: ExternalLink,      category: 'engage' },
+    react_message:       { labelKey: 'automation.node_react_message',       color: '#f59e0b', bg: '#fffbeb', icon: SmilePlus,         category: 'engage',       qr: true },
     send_location:       { labelKey: 'automation.node_send_location',       color: '#dc2626', bg: '#fef2f2', icon: MapPin,            category: 'engage',       qr: true },
     send_poll:           { labelKey: 'automation.node_send_poll',           color: '#9333ea', bg: '#faf5ff', icon: BarChart3,         category: 'engage', qr: true },
     run_chatbot:         { labelKey: 'automation.node_run_chatbot',         color: '#7c3aed', bg: '#faf5ff', icon: Bot,               category: 'engage',       qr: true },
@@ -417,6 +418,7 @@ const FIELD_COMPONENTS = {
     assign_agent: AssignAgentFields,
     add_to_campaign: CampaignFields,
     cta_button: CtaButtonFields,
+    react_message: ReactMessageFields,
     send_location: LocationFields,
     send_poll: PollFields,
     run_chatbot: RunChatbotFields,
@@ -1313,6 +1315,38 @@ function PollFields({ d, set }) {
                 {t('automation.poll_wait_for_vote')}
             </label>
             <p style={{ fontSize: 10, color: '#64748b' }}>{t('automation.poll_hint')}</p>
+        </>
+    );
+}
+
+const REACTION_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🙏', '🔥', '🎉', '✅'];
+
+function ReactMessageFields({ d, set }) {
+    const { t } = useTranslation();
+    return (
+        <>
+            <Field label={t('automation.field_reaction_emoji')}>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                    {REACTION_EMOJIS.map(e => (
+                        <button
+                            key={e}
+                            type="button"
+                            onClick={() => set('emoji', e)}
+                            style={{
+                                fontSize: 18, lineHeight: 1, padding: '6px 8px', borderRadius: 8,
+                                border: d.emoji === e ? '2px solid #f59e0b' : '1px solid #e5e7eb',
+                                background: d.emoji === e ? '#fffbeb' : '#fff', cursor: 'pointer',
+                            }}
+                        >
+                            {e}
+                        </button>
+                    ))}
+                </div>
+            </Field>
+            <Field label={t('automation.field_reaction_custom')}>
+                <input className={inputCls} maxLength={8} value={d.emoji ?? ''} onChange={e => set('emoji', e.target.value)} placeholder="👍" />
+            </Field>
+            <p style={{ fontSize: 10, color: '#64748b' }}>{t('automation.react_message_hint')}</p>
         </>
     );
 }
