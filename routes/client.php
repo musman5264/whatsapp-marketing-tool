@@ -4,6 +4,7 @@ use App\Http\Controllers\Auth\SessionController;
 use App\Http\Controllers\Auth\TwoFactorController;
 use App\Http\Controllers\CheckoutController;
 use App\Http\Controllers\Client\ApiTokenController;
+use App\Http\Controllers\Client\ApiUsageController;
 use App\Http\Controllers\Client\AuditLogController as ClientAuditLogController;
 use App\Http\Controllers\Client\BillingController;
 use App\Http\Controllers\Client\DashboardController as ClientDashboardController;
@@ -86,6 +87,11 @@ Route::middleware(['verified'])->group(function () {
     // API Tokens & Docs
     Route::get('/api-tokens', [ApiTokenController::class, 'index'])->name('api-tokens.index');
     Route::get('/api-docs', fn () => Inertia::render('client/Api/Docs'))->name('api-docs');
+
+    // API Usage (activity + analytics for API tokens)
+    Route::get('/api-usage', [ApiUsageController::class, 'index'])->name('api-usage.index');
+    Route::get('/api-usage/stats', [ApiUsageController::class, 'stats'])->name('api-usage.stats');
+    Route::get('/api-usage/{id}', [ApiUsageController::class, 'show'])->whereNumber('id')->name('api-usage.show');
 
     // Media Library
     Route::get('/media', [MediaController::class, 'index'])->name('media.index');

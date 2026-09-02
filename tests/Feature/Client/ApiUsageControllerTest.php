@@ -11,6 +11,17 @@ class ApiUsageControllerTest extends TestCase
 {
     use RefreshDatabase;
 
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        // The client/Api/Usage.jsx page is delivered by a later task; skip the
+        // Vite manifest lookup and the Inertia page-file existence check so the
+        // controller's Inertia response can still be asserted here.
+        $this->withoutVite();
+        config()->set('inertia.testing.ensure_pages_exist', false);
+    }
+
     private function seedLog(array $attrs = []): ApiRequestLog
     {
         return ApiRequestLog::create(array_merge([
@@ -49,5 +60,64 @@ class ApiUsageControllerTest extends TestCase
         $this->seedLog(['client_id' => $client->id, 'user_id' => $staff->id]);
 
         $this->assertSame(1, ApiRequestLog::forUser($staff->fresh())->count());
+    }
+
+    public function test_index_renders_for_client_admin_and_scopes_rows(): void
+    {
+        ['user' => $admin, 'client' => $client] = $this->createWorkspaceContext();
+        $this->seedLog(['client_id' => $client->id, 'user_id' => $admin->id, 'path' => 'api/v1/contacts']);
+        $this->seedLog(['client_id' => $client->id + 999, 'user_id' => 0, 'path' => 'api/v1/other']);
+
+        $this->actingAs($admin)
+            ->get(route('client.api-usage.index'))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->component('client/Api/Usage')
+                ->has('logs.data', 1)
+                ->where('logs.data.0.path', 'api/v1/contacts')
+            );
+    }
+
+    public function test_index_filters_by_status_bucket_and_method(): void
+    {
+        ['user' => $admin, 'client' => $client] = $this->createWorkspaceContext();
+        $this->seedLog(['client_id' => $client->id, 'user_id' => $admin->id, 'status' => 200, 'method' => 'GET']);
+        $this->seedLog(['client_id' => $client->id, 'user_id' => $admin->id, 'status' => 422, 'method' => 'POST']);
+        $this->seedLog(['client_id' => $client->id, 'user_id' => $admin->id, 'status' => 500, 'method' => 'POST']);
+
+        $this->actingAs($admin)
+            ->get(route('client.api-usage.index', ['status' => '4xx']))
+            ->assertInertia(fn ($p) => $p->has('logs.data', 1)->where('logs.data.0.status', 422));
+
+        $this->actingAs($admin)
+            ->get(route('client.api-usage.index', ['method' => 'POST']))
+            ->assertInertia(fn ($p) => $p->has('logs.data', 2));
+    }
+
+    public function test_show_404s_for_row_outside_scope(): void
+    {
+        ['user' => $admin, 'client' => $client] = $this->createWorkspaceContext();
+        $foreign = $this->seedLog(['client_id' => $client->id + 999, 'user_id' => 0]);
+
+        $this->actingAs($admin)
+            ->get(route('client.api-usage.show', $foreign->id))
+            ->assertNotFound();
+    }
+
+    public function test_stats_endpoint_returns_shape(): void
+    {
+        ['user' => $admin, 'client' => $client] = $this->createWorkspaceContext();
+        $this->seedLog(['client_id' => $client->id, 'user_id' => $admin->id, 'status' => 200, 'created_at' => now()->subHour()]);
+        $this->seedLog(['client_id' => $client->id, 'user_id' => $admin->id, 'status' => 500, 'created_at' => now()->subHour()]);
+
+        $this->actingAs($admin)
+            ->getJson(route('client.api-usage.stats'))
+            ->assertOk()
+            ->assertJsonStructure(['calls_24h', 'error_rate', 'p95_ms', 'top_paths']);
+    }
+
+    public function test_index_requires_auth(): void
+    {
+        $this->get(route('client.api-usage.index'))->assertRedirect();
     }
 }
