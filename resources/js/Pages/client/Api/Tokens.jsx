@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import ClientLayout from '@/Layouts/ClientLayout';
+import ApiTokensTabs from '@/Components/client/ApiTokensTabs';
 import { Head, usePage } from '@inertiajs/react';
 import { Key, Plus, Trash2, Copy, Check } from 'lucide-react';
 import { DatePicker } from '@/Components/ui';
@@ -203,6 +204,7 @@ export default function ApiTokens({ tokens: initialTokens }) {
         <ClientLayout title={t('api.tokens_title')}>
             <Head title={t('api.tokens_title')} />
             <div className="space-y-6 max-w-4xl">
+                <ApiTokensTabs active="tokens" />
                 <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
                         <Key className="h-6 w-6 text-brand-500" />
@@ -259,6 +261,12 @@ export default function ApiTokens({ tokens: initialTokens }) {
                                     </td>
                                     <td className="px-4 py-3 text-neutral-500 dark:text-neutral-400 text-xs">{formatDate(token.created_at)}</td>
                                     <td className="px-4 py-3 text-right">
+                                        <a
+                                            href={route('client.api-usage.index', { token_id: token.id })}
+                                            className="mr-2 inline-flex items-center gap-1 text-xs text-brand-600 hover:underline"
+                                        >
+                                            {t('api.usage_activity')} →
+                                        </a>
                                         <button onClick={() => handleRevoke(token.id)} className="p-1 text-neutral-400 hover:text-coral-600" title={t('api.revoke')}>
                                             <Trash2 className="h-4 w-4" />
                                         </button>
