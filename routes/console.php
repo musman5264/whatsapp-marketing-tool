@@ -7,6 +7,7 @@ use App\Modules\Social\Jobs\RefreshSocialTokensJob;
 use App\Modules\Whatsapp\Jobs\TemplateSyncJob;
 use App\Modules\Whatsapp\Models\WhatsappBusinessAccount;
 use App\Http\Controllers\Admin\CronSetupController;
+use App\Jobs\PruneApiRequestLogs;
 use App\Services\WebhookIdempotencyService;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
@@ -62,6 +63,13 @@ Schedule::call(function () {
 Schedule::call(function () {
     app(WebhookIdempotencyService::class)->prune(30);
 })->weekly()->name('prune-inbound-webhook-events');
+
+// Keep the API request log bounded (payloads nulled at 14d, rows at 90d, 5M cap)
+Schedule::job(new PruneApiRequestLogs)
+    ->dailyAt('03:15')
+    ->name('prune-api-request-logs')
+    ->withoutOverlapping()
+    ->onOneServer();
 
 // Drain the queues every minute. On hosts without a long-running worker
 // (shared / cPanel), this is what actually processes queued jobs — inbound
