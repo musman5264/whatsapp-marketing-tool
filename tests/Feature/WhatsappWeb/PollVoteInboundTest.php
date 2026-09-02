@@ -4,6 +4,7 @@ namespace Tests\Feature\WhatsappWeb;
 
 use App\Modules\Automation\Models\Automation;
 use App\Modules\Automation\Models\AutomationRun;
+use App\Modules\Automation\Services\AutomationEngine;
 use App\Modules\Integrations\Models\IntegrationConfig;
 use App\Modules\Shared\Models\ChannelAccount;
 use App\Modules\Shared\Models\Contact;
@@ -153,19 +154,25 @@ class PollVoteInboundTest extends TestCase
     }
 
     #[Test]
-    public function the_same_vote_delivered_twice_is_processed_once(): void
+    public function the_same_vote_delivered_twice_hits_the_engine_only_once(): void
     {
         Http::fake(['*' => Http::response([], 200)]);
         $run = $this->makeParkedRun();
 
-        app(WahaEventProcessor::class)->process($this->votePayload(), $this->session);
-        $statusAfterFirst = $run->fresh()->status;
+        // Spy the engine so we can prove the SECOND webhook is short-circuited by
+        // the idempotency guard BEFORE it reaches applyPollVote — the real method
+        // is naturally idempotent for identical input, so only the guard makes
+        // "processed once" observable. partialMock keeps the real applyPollVote
+        // running (so the run still resumes) while recording the calls.
+        $spy = $this->partialMock(AutomationEngine::class);
 
-        // Second delivery of the identical webhook — idempotency must drop it.
         app(WahaEventProcessor::class)->process($this->votePayload(), $this->session);
+        app(WahaEventProcessor::class)->process($this->votePayload(), $this->session);
+
+        $spy->shouldHaveReceived('applyPollVote')->once();
 
         $this->assertSame('Coffee', $run->fresh()->context['drink']);
-        $this->assertSame($statusAfterFirst, $run->fresh()->status);
+        $this->assertNotSame('waiting', $run->fresh()->status);
         $this->assertSame(1, AutomationRun::where('automation_id', $run->automation_id)->count());
     }
 
