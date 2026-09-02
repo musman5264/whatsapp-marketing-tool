@@ -1371,6 +1371,41 @@ class AutomationEngine
         return $res;
     }
 
+    /**
+     * A contact voted on a poll an automation sent. Write their choice into the
+     * run context and resume the run if it is parked after the poll node.
+     *
+     * @param  array<int,string>  $selectedOptions
+     */
+    public function applyPollVote(string $pollProviderMessageId, array $selectedOptions): void
+    {
+        $message = Message::where('provider_message_id', $pollProviderMessageId)
+            ->where('type', 'poll')
+            ->latest('id')
+            ->first();
+        if (! $message) {
+            return;
+        }
+
+        $run = AutomationRun::where('contact_id', $message->conversation->contact_id)
+            ->whereIn('status', ['waiting', 'running', 'completed'])
+            ->latest('id')
+            ->first();
+        if (! $run) {
+            return;
+        }
+
+        $context = $run->context ?? [];
+        $var = $context['_poll_result_var'] ?? 'poll_answer';
+        $context[$var] = implode(', ', $selectedOptions);
+        unset($context['_awaiting_poll']);
+        $run->update(['context' => $context]);
+
+        if ($run->status === 'waiting') {
+            $this->runNowOrQueue($run);
+        }
+    }
+
     private function executeRunChatbot(array $data, AutomationRun $run, array $context): array
     {
         $contact = Contact::find($run->contact_id);

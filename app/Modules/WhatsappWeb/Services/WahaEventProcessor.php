@@ -2,9 +2,11 @@
 
 namespace App\Modules\WhatsappWeb\Services;
 
+use App\Modules\Automation\Services\AutomationEngine;
 use App\Modules\Shared\Models\Message;
 use App\Modules\Whatsapp\Services\WhatsappDriver;
 use App\Modules\WhatsappWeb\Models\WhatsappWebSession;
+use App\Services\WebhookIdempotencyService;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -21,6 +23,7 @@ class WahaEventProcessor
         private readonly InboundNormalizer $normalizer,
         private readonly WhatsappDriver $driver,
         private readonly SessionProvisioner $provisioner,
+        private readonly AutomationEngine $engine,
     ) {}
 
     /**
@@ -34,6 +37,7 @@ class WahaEventProcessor
             $event === 'message' || $event === 'message.any' => $this->handleInbound($payload, $session),
             $event === 'session.status' => $this->handleSessionStatus($payload, $session),
             $event === 'message.ack' => $this->handleAck($payload),
+            $event === 'poll.vote' => $this->handlePollVote($payload),
             default => Log::info('whatsapp_web.event.ignored', ['event' => $event]),
         };
     }
@@ -111,5 +115,31 @@ class WahaEventProcessor
         }
 
         $this->driver->applyStatusUpdate(['id' => $id, 'status' => $status]);
+    }
+
+    /**
+     * A contact voted on a poll an automation sent. WAHA delivers the vote as a
+     * `poll.vote` event; write the choice into the run context and resume the
+     * run if it was parked after the poll node.
+     *
+     * @param  array<string,mixed>  $payload
+     */
+    private function handlePollVote(array $payload): void
+    {
+        $p = $payload['payload'] ?? [];
+        $pollMessageId = (string) ($p['pollMessageId'] ?? ($p['poll']['id'] ?? ''));
+        $voter = (string) ($p['from'] ?? ($p['voter'] ?? ''));
+        $selected = array_values((array) ($p['vote']['selectedOptions'] ?? ($p['selectedOptions'] ?? [])));
+
+        if ($pollMessageId === '') {
+            return;
+        }
+
+        $key = 'pollvote:'.$pollMessageId.':'.$voter.':'.implode(',', $selected);
+        if (! app(WebhookIdempotencyService::class)->isNewEvent('whatsapp_web', $key)) {
+            return;
+        }
+
+        $this->engine->applyPollVote($pollMessageId, $selected);
     }
 }
