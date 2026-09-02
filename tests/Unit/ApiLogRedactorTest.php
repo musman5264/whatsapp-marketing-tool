@@ -7,21 +7,8 @@ use Tests\TestCase;
 
 class ApiLogRedactorTest extends TestCase
 {
-    protected function setUp(): void
-    {
-        parent::setUp();
-
-        // config/api.php is owned by a parallel task and may not exist yet.
-        // Set sensible defaults so these unit tests are self-contained.
-        config([
-            'api.logging.redact_keys' => [
-                'password', 'password_confirmation', 'api_key', 'apikey',
-                'token', 'access_token', 'refresh_token', 'secret',
-                'client_secret', 'authorization', 'cookie',
-            ],
-            'api.logging.max_body_bytes' => 16384,
-        ]);
-    }
+    // Redaction keys and max_body_bytes come from config/api.php; the one test
+    // that needs a small truncation limit overrides it locally.
 
     public function test_redacts_sensitive_keys_case_insensitively_and_nested(): void
     {

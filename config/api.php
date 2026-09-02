@@ -5,7 +5,7 @@ return [
     'logging' => [
         // Master switch. Set API_LOGGING_ENABLED=false to disable all API
         // request logging without a deploy.
-        'enabled' => env('API_LOGGING_ENABLED', true),
+        'enabled' => (bool) env('API_LOGGING_ENABLED', true),
 
         // Fraction of successful (2xx/3xx) responses whose request+response
         // bodies are stored. Errors (>=400) are always stored at 100%.

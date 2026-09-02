@@ -7,6 +7,7 @@ use App\Models\ApiRequestLog;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -88,12 +89,23 @@ class ApiUsageController extends Controller
             };
         }
 
-        if ($request->filled('from')) {
-            $query->where('created_at', '>=', $request->date('from')->startOfDay());
+        // Ignore unparseable date params rather than 500 — Request::date() throws
+        // on garbage input and filled() only checks for non-empty.
+        if ($request->filled('from') && ($from = $this->parseDate($request->input('from')))) {
+            $query->where('created_at', '>=', $from->startOfDay());
         }
 
-        if ($request->filled('to')) {
-            $query->where('created_at', '<=', $request->date('to')->endOfDay());
+        if ($request->filled('to') && ($to = $this->parseDate($request->input('to')))) {
+            $query->where('created_at', '<=', $to->endOfDay());
+        }
+    }
+
+    private function parseDate(mixed $value): ?Carbon
+    {
+        try {
+            return Carbon::parse((string) $value);
+        } catch (\Throwable) {
+            return null;
         }
     }
 

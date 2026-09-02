@@ -104,6 +104,29 @@ class ApiUsageControllerTest extends TestCase
             ->assertNotFound();
     }
 
+    public function test_index_ignores_unparseable_date_filter_instead_of_500(): void
+    {
+        ['user' => $admin, 'client' => $client] = $this->createWorkspaceContext();
+        $this->seedLog(['client_id' => $client->id, 'user_id' => $admin->id]);
+
+        $this->actingAs($admin)
+            ->get(route('client.api-usage.index', ['from' => 'not-a-date', 'to' => '???']))
+            ->assertOk()
+            ->assertInertia(fn ($p) => $p->has('logs.data', 1));
+    }
+
+    public function test_index_applies_valid_date_range_filter(): void
+    {
+        ['user' => $admin, 'client' => $client] = $this->createWorkspaceContext();
+        $this->seedLog(['client_id' => $client->id, 'user_id' => $admin->id, 'created_at' => now()->subDays(10)]);
+        $this->seedLog(['client_id' => $client->id, 'user_id' => $admin->id, 'created_at' => now()->subDays(1)]);
+
+        $this->actingAs($admin)
+            ->get(route('client.api-usage.index', ['from' => now()->subDays(3)->toDateString()]))
+            ->assertOk()
+            ->assertInertia(fn ($p) => $p->has('logs.data', 1));
+    }
+
     public function test_stats_endpoint_returns_shape(): void
     {
         ['user' => $admin, 'client' => $client] = $this->createWorkspaceContext();
