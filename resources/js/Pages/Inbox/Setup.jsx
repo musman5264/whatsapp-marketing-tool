@@ -621,16 +621,19 @@ function WhatsAppSection({ wabas, webhookGlobalUrl, webhookBaseUrl, webhookToken
             )}
 
             {webConnected && (
-                <div className={`${wabas.length > 0 ? 'mt-3' : ''} rounded-xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-900/20 p-3`}>
-                    <div className="flex items-center gap-2 text-xs font-semibold text-emerald-800 dark:text-emerald-200">
-                        <Smartphone className="h-3.5 w-3.5" /> {t('inbox.whatsapp_web_connected')}
+                <>
+                    <div className={`${wabas.length > 0 ? 'mt-3' : ''} rounded-xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-900/20 p-3`}>
+                        <div className="flex items-center gap-2 text-xs font-semibold text-emerald-800 dark:text-emerald-200">
+                            <Smartphone className="h-3.5 w-3.5" /> {t('inbox.whatsapp_web_connected')}
+                        </div>
+                        <div className="mt-1 flex items-center gap-2 text-[11px] text-emerald-700 dark:text-emerald-300">
+                            <span>{whatsappWebSession.push_name || t('inbox.whatsapp_web_your_number')}</span>
+                            {whatsappWebSession.phone_e164 && <span className="font-mono opacity-80">{whatsappWebSession.phone_e164}</span>}
+                            <span className="rounded bg-emerald-100 dark:bg-emerald-800/50 px-1.5 py-0.5 text-[10px] uppercase tracking-wide">QR</span>
+                        </div>
                     </div>
-                    <div className="mt-1 flex items-center gap-2 text-[11px] text-emerald-700 dark:text-emerald-300">
-                        <span>{whatsappWebSession.push_name || t('inbox.whatsapp_web_your_number')}</span>
-                        {whatsappWebSession.phone_e164 && <span className="font-mono opacity-80">{whatsappWebSession.phone_e164}</span>}
-                        <span className="rounded bg-emerald-100 dark:bg-emerald-800/50 px-1.5 py-0.5 text-[10px] uppercase tracking-wide">QR</span>
-                    </div>
-                </div>
+                    <CallReceiptSettings initial={whatsappWebSession.settings ?? {}} />
+                </>
             )}
 
             {!showForm && wabas.length === 0 && !webConnected && (
@@ -1053,6 +1056,96 @@ function EmbeddedSignupButton({ configId, appId, channel, label, color, onCode, 
 }
 
 /* ─────────────────── WhatsApp Web (QR / personal number, unofficial engine) ─────────────────── */
+
+function SettingSwitch({ checked, onChange, disabled }) {
+    return (
+        <button type="button" role="switch" aria-checked={checked} onClick={onChange} disabled={disabled}
+            className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition disabled:opacity-50 ${checked ? 'bg-emerald-500' : 'bg-neutral-300 dark:bg-neutral-600'}`}>
+            <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition ${checked ? 'translate-x-4' : 'translate-x-0.5'}`} />
+        </button>
+    );
+}
+
+function CallReceiptSettings({ initial = {} }) {
+    const { t } = useTranslation();
+    const [autoReject, setAutoReject] = useState(initial.auto_reject_calls ?? false);
+    const [rejectMsg, setRejectMsg] = useState(initial.call_reject_message ?? '');
+    const [sendReceipts, setSendReceipts] = useState(initial.send_receipts ?? true);
+    const [saving, setSaving] = useState(false);
+    const [saved, setSaved] = useState(false);
+
+    const save = useCallback(async (patch) => {
+        setSaving(true);
+        setSaved(false);
+        try {
+            const res = await fetch(route('client.whatsapp-web.settings'), {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+                    'Accept': 'application/json',
+                },
+                body: JSON.stringify(patch),
+            });
+            if (res.ok) {
+                setSaved(true);
+                setTimeout(() => setSaved(false), 2000);
+            }
+        } catch { /* leave UI as-is; user can retry */ } finally {
+            setSaving(false);
+        }
+    }, []);
+
+    const toggleAutoReject = () => {
+        const next = !autoReject;
+        setAutoReject(next);
+        save({ auto_reject_calls: next });
+    };
+
+    const toggleSendReceipts = () => {
+        const next = !sendReceipts;
+        setSendReceipts(next);
+        save({ send_receipts: next });
+    };
+
+    return (
+        <div className="mt-3 rounded-xl border border-neutral-200 dark:border-neutral-700 p-3 space-y-3">
+            <div className="flex items-center gap-2 text-xs font-semibold text-neutral-700 dark:text-neutral-200">
+                <Phone className="h-3.5 w-3.5" /> {t('inbox.calls_card_title')}
+                {saving && <span className="ml-auto text-[10px] font-normal text-neutral-400">{t('inbox.saving')}</span>}
+                {saved && !saving && <span className="ml-auto text-[10px] font-normal text-emerald-500">{t('inbox.settings_saved')}</span>}
+            </div>
+
+            <div className="flex items-start justify-between gap-3">
+                <span className="text-xs text-neutral-600 dark:text-neutral-300">{t('inbox.auto_reject_calls_label')}</span>
+                <SettingSwitch checked={autoReject} onChange={toggleAutoReject} disabled={saving} />
+            </div>
+
+            {autoReject && (
+                <div>
+                    <label className="block text-xs font-medium text-neutral-700 dark:text-neutral-300 mb-1">{t('inbox.call_reject_message_label')}</label>
+                    <textarea
+                        value={rejectMsg}
+                        onChange={(e) => setRejectMsg(e.target.value)}
+                        onBlur={() => save({ call_reject_message: rejectMsg })}
+                        rows={2}
+                        maxLength={1000}
+                        placeholder={t('inbox.call_reject_message_placeholder')}
+                        className="w-full rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-2.5 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-brand-500/30 focus:border-brand-400"
+                    />
+                </div>
+            )}
+
+            <div className="flex items-start justify-between gap-3 border-t border-neutral-100 dark:border-neutral-800 pt-3">
+                <div>
+                    <span className="text-xs text-neutral-600 dark:text-neutral-300">{t('inbox.send_receipts_label')}</span>
+                    <p className="mt-0.5 text-[10px] text-neutral-400 leading-relaxed">{t('inbox.send_receipts_help')}</p>
+                </div>
+                <SettingSwitch checked={sendReceipts} onChange={toggleSendReceipts} disabled={saving} />
+            </div>
+        </div>
+    );
+}
 
 function QrConnectPanel({ enabled, initialSession }) {
     const { t } = useTranslation();

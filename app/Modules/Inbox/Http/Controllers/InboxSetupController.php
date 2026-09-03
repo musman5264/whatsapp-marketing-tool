@@ -83,6 +83,7 @@ class InboxSetupController extends Controller
                 'status' => $webSession->status,
                 'phone_e164' => $webSession->phone_e164,
                 'push_name' => $webSession->push_name,
+                'settings' => $webSession->only(['auto_reject_calls', 'call_reject_message', 'send_receipts']),
             ] : null,
             'whatsappWebhookUrl' => url('/webhooks/whatsapp'),
             'whatsappWebhookGlobalUrl' => route('webhooks.whatsapp.global.receive'),
