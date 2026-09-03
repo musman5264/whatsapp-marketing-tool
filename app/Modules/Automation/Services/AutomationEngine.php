@@ -615,6 +615,7 @@ class AutomationEngine
             $tokens = $result['tokens_used'] ?? 0;
         } else {
             $system = $this->renderTokens($data['prompt'] ?? 'You are a helpful assistant.', $contact, $context);
+            $system .= "\n\nIf a short emoji reaction is a better response than words (e.g. the customer just said thanks), reply with exactly {\"action\":\"react\",\"emoji\":\"👍\"} and nothing else.";
             $messages = [['role' => 'system', 'content' => $system]];
             $messages[] = [
                 'role' => 'user',
@@ -653,6 +654,23 @@ class AutomationEngine
             return [
                 'status' => 'ok',
                 'message' => 'AI reply generated → {{response}}'.($var ? " / {{{$var}}}" : ''),
+                'output' => ['reply' => $reply, 'tokens_used' => $tokens],
+                'context_update' => $ctxUpdate,
+            ];
+        }
+
+        // A {"action":"react","emoji":"X"} reply reacts to the trigger message
+        // instead of sending text (only when there is a message to react to).
+        $reactEmoji = $this->parseAiReaction((string) $reply);
+        if ($reactEmoji !== null && ! empty($context['message_id'])) {
+            $res = $this->sendWhatsappPayload($run, 'reaction', null, [
+                'target_message_id' => (int) $context['message_id'],
+                'emoji' => $reactEmoji,
+            ]);
+
+            return [
+                'status' => $res['status'] ?? 'ok',
+                'message' => ($res['status'] ?? 'ok') === 'ok' ? "AI reacted {$reactEmoji}." : ($res['message'] ?? 'Reaction failed.'),
                 'output' => ['reply' => $reply, 'tokens_used' => $tokens],
                 'context_update' => $ctxUpdate,
             ];
@@ -1375,6 +1393,22 @@ class AutomationEngine
         return $res;
     }
 
+    /** If the AI reply is a {"action":"react","emoji":"X"} object, return the emoji. */
+    private function parseAiReaction(string $reply): ?string
+    {
+        if (! str_contains($reply, '"react"')) {
+            return null;
+        }
+        if (preg_match('/\{[^{}]*"action"\s*:\s*"react"[^{}]*\}/', $reply, $m)) {
+            $obj = json_decode($m[0], true);
+            $emoji = is_array($obj) ? trim((string) ($obj['emoji'] ?? '')) : '';
+
+            return $emoji !== '' ? $emoji : null;
+        }
+
+        return null;
+    }
+
     /**
      * React to the message that triggered this automation (message.received runs).
      * Emits a `reaction` Message targeting the local trigger-message PK; the
@@ -1460,6 +1494,23 @@ class AutomationEngine
         $reply = $result['reply'] ?? null;
         if (! $reply) {
             return ['status' => 'skipped', 'message' => 'Chatbot returned no reply.'];
+        }
+
+        // A {"action":"react","emoji":"X"} reply reacts to the trigger message
+        // instead of sending text (only when there is a message to react to).
+        $reactEmoji = $this->parseAiReaction((string) $reply);
+        if ($reactEmoji !== null && ! empty($context['message_id'])) {
+            $res = $this->sendWhatsappPayload($run, 'reaction', null, [
+                'target_message_id' => (int) $context['message_id'],
+                'emoji' => $reactEmoji,
+            ]);
+
+            return [
+                'status' => $res['status'] ?? 'ok',
+                'message' => ($res['status'] ?? 'ok') === 'ok' ? "Chatbot reacted {$reactEmoji}." : ($res['message'] ?? 'Reaction failed.'),
+                'output' => ['reply' => $reply, 'tokens_used' => $result['tokens_used'] ?? 0],
+                'context_update' => ['last_ai_reply' => $reply],
+            ];
         }
 
         $send = $this->sendTextViaChannel($run, $data['channel'] ?? 'whatsapp', $reply, 'bot');
