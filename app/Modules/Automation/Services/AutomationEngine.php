@@ -597,6 +597,8 @@ class AutomationEngine
             }
         }
 
+        $this->markInboundSeenIfPersonal($run, $context);
+
         if (! empty($data['chatbot_id'])) {
             $bot = AiChatbot::where('id', $data['chatbot_id'])
                 ->where('workspace_id', $workspaceId)
@@ -1410,6 +1412,45 @@ class AutomationEngine
     }
 
     /**
+     * When an AI Reply / Chatbot node is about to answer an inbound message on a
+     * personal (WhatsApp Web) number whose send_receipts toggle is on, mark that
+     * message read first — so the customer sees the bot "read" their message
+     * before it replies. Best-effort; a failure never affects the reply.
+     */
+    private function markInboundSeenIfPersonal(AutomationRun $run, array $context): void
+    {
+        $contact = Contact::find($run->contact_id);
+        if (! $contact || ! $contact->phone_e164) {
+            return;
+        }
+
+        $target = $this->resolveChannelTarget($run->automation->workspace_id, $contact, 'whatsapp');
+        $account = $target['account'] ?? null;
+        if ($account?->provider !== 'whatsapp_web') {
+            return;
+        }
+
+        $ws = \App\Modules\WhatsappWeb\Models\WhatsappWebSession::where('session_name', $account->phone_number_id)->first();
+        if (! $ws?->send_receipts) {
+            return;
+        }
+
+        $providerId = ! empty($context['message_id'])
+            ? (string) (Message::whereKey($context['message_id'])->value('provider_message_id') ?? '')
+            : '';
+
+        try {
+            app(\App\Modules\WhatsappWeb\Services\EngineManager::class)->adapter()->sendSeen(
+                $ws->session_name,
+                preg_replace('/\D+/', '', (string) $contact->phone_e164).'@c.us',
+                $providerId ?: null,
+            );
+        } catch (\Throwable $e) {
+            Log::warning('automation.send_seen_failed', ['run' => $run->id, 'error' => $e->getMessage()]);
+        }
+    }
+
+    /**
      * React to the message that triggered this automation (message.received runs).
      * Emits a `reaction` Message targeting the local trigger-message PK; the
      * WhatsappDriver resolves it to a provider id and reacts on Cloud or WAHA.
@@ -1489,6 +1530,8 @@ class AutomationEngine
         if ($message === '') {
             $message = 'Hello';
         }
+
+        $this->markInboundSeenIfPersonal($run, $context);
 
         $result = $this->chatbotRunner->runForApi($bot, $message, $workspaceId, $context['history'] ?? []);
         $reply = $result['reply'] ?? null;

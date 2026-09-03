@@ -77,7 +77,15 @@ class InboxController extends Controller
         $messages = $conversation->messages()->with('conversation')->orderBy('sent_at')->get();
 
         // Mark as read
+        $hadUnread = $conversation->unread_count > 0;
         $conversation->update(['unread_count' => 0]);
+
+        // On a personal (WhatsApp Web) number whose send_receipts toggle is on,
+        // also send the customer a read receipt for their unread messages when an
+        // agent opens the thread. Best-effort — never blocks the page.
+        if ($hadUnread && $conversation->channelAccount?->provider === 'whatsapp_web') {
+            $this->markWhatsappWebSeen($conversation);
+        }
 
         // Align UI with WhatsApp session rules (inbound-only window; see Conversation::isWhatsappWindowOpen).
         // isWhatsappWindowOpen() already returns true for non-Cloud-API conversations
@@ -733,5 +741,29 @@ class InboxController extends Controller
     {
         $workspaceId = $request->user()->current_workspace_id ?? $request->user()->workspace_id;
         abort_unless((int) $conversation->workspace_id === (int) $workspaceId, 403);
+    }
+
+    /** Send a WAHA read receipt for the contact's latest inbound message. Best-effort. */
+    private function markWhatsappWebSeen(Conversation $conversation): void
+    {
+        $ws = \App\Modules\WhatsappWeb\Models\WhatsappWebSession::where('session_name', $conversation->channelAccount?->phone_number_id)->first();
+        if (! $ws?->send_receipts || ! $conversation->contact?->phone_e164) {
+            return;
+        }
+
+        $lastInbound = $conversation->messages()
+            ->where('direction', 'in')
+            ->latest('id')
+            ->value('provider_message_id');
+
+        try {
+            app(\App\Modules\WhatsappWeb\Services\EngineManager::class)->adapter()->sendSeen(
+                $ws->session_name,
+                preg_replace('/\D+/', '', (string) $conversation->contact->phone_e164).'@c.us',
+                $lastInbound,
+            );
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('inbox.send_seen_failed', ['conversation' => $conversation->id, 'error' => $e->getMessage()]);
+        }
     }
 }
