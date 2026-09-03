@@ -3132,6 +3132,8 @@
         "trigger_order_cancelled": "Order Cancelled",
         "trigger_cart_abandoned": "Cart Abandoned",
         "trigger_customer_created": "New Store Customer",
+        "trigger_reaction_received": "Reaction Received",
+        "trigger_call_received": "Call Received",
         "node_send_whatsapp": "Send WhatsApp",
         "node_send_sms": "Send SMS",
         "node_send_email": "Send Email",

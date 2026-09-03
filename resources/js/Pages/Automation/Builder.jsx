@@ -48,6 +48,8 @@ const TRIGGER_TYPES = [
     { value: 'order.cancelled',   labelKey: 'automation.trigger_order_cancelled',   Icon: XCircle        },
     { value: 'cart.abandoned',    labelKey: 'automation.trigger_cart_abandoned',    Icon: ShoppingCart   },
     { value: 'customer.created',  labelKey: 'automation.trigger_customer_created',  Icon: UserPlus       },
+    { value: 'reaction.received', labelKey: 'automation.trigger_reaction_received', Icon: SmilePlus      },
+    { value: 'call.received',     labelKey: 'automation.trigger_call_received',     Icon: Phone          },
 ];
 
 // Categories rendered (in order) in the node palette — mirrors the product node list.
