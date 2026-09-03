@@ -103,53 +103,82 @@ class WhatsappDriver implements ChannelDriverInterface
         $caption = $payload['caption'] ?? $message->body;
         $link = $payload['link'] ?? $payload['preview_url'] ?? null;
 
-        return match ($message->type) {
-            'template' => $adapter->sendText(
-                $session,
-                $phone,
-                $this->templateAsPlainText(
-                    is_array($payload['template'] ?? null) ? $payload['template'] : [],
-                    (string) ($message->body ?? ''),
-                    (int) $conversation->workspace_id,
-                ),
-            ),
-            'interactive' => $adapter->sendText(
-                $session,
-                $phone,
-                $this->interactiveAsPlainText(
-                    is_array($payload['interactive'] ?? null) ? $payload['interactive'] : [],
-                    (string) ($message->body ?? ''),
-                ),
-            ),
-            'image', 'video', 'document', 'audio' => $link
-                ? $adapter->sendMedia($session, $phone, $message->type, (string) $link, $caption, $payload['filename'] ?? null)
-                : throw new \RuntimeException('No downloadable URL for this media message.'),
-            'poll' => $adapter->sendPoll(
-                $session,
-                $phone,
-                (string) ($payload['poll']['question'] ?? $message->body ?? ''),
-                array_values((array) ($payload['poll']['options'] ?? [])),
-                (bool) ($payload['poll']['multiple'] ?? false),
-            ),
-            'location' => $adapter->sendLocation(
-                $session,
-                $phone,
-                (float) ($payload['location']['latitude'] ?? 0),
-                (float) ($payload['location']['longitude'] ?? 0),
-                $payload['location']['name'] ?? null,
-                $payload['location']['address'] ?? null,
-            ),
-            'reaction' => (function () use ($adapter, $session, $payload) {
-                $target = $this->targetProviderId($payload['target_message_id'] ?? null);
-                if ($target === '') {
-                    throw new \RuntimeException('Cannot react — the target message has no provider id yet.');
-                }
-                $adapter->sendReaction($session, $target, (string) ($payload['emoji'] ?? ''));
+        // When the number opts in to read receipts we also show a brief "typing…"
+        // indicator around the send so an automated reply feels typed, not
+        // instant. Best-effort — a failed typing call never blocks the message.
+        $webSession = \App\Modules\WhatsappWeb\Models\WhatsappWebSession::where('session_name', $session)->first();
+        $receipts = (bool) ($webSession?->send_receipts ?? false);
 
-                return '';
-            })(),
-            default => $adapter->sendText($session, $phone, $message->body ?? ''),
-        };
+        if ($receipts && $message->type !== 'reaction') {
+            try {
+                $adapter->sendTyping($session, $phone, true);
+            } catch (\Throwable $e) {
+                Log::debug('whatsapp_web.typing_failed', ['session' => $session, 'error' => $e->getMessage()]);
+            }
+            if (! app()->runningUnitTests()) {
+                usleep(900_000); // ~0.9s so the indicator is visible
+            }
+        }
+
+        try {
+            $result = match ($message->type) {
+                'template' => $adapter->sendText(
+                    $session,
+                    $phone,
+                    $this->templateAsPlainText(
+                        is_array($payload['template'] ?? null) ? $payload['template'] : [],
+                        (string) ($message->body ?? ''),
+                        (int) $conversation->workspace_id,
+                    ),
+                ),
+                'interactive' => $adapter->sendText(
+                    $session,
+                    $phone,
+                    $this->interactiveAsPlainText(
+                        is_array($payload['interactive'] ?? null) ? $payload['interactive'] : [],
+                        (string) ($message->body ?? ''),
+                    ),
+                ),
+                'image', 'video', 'document', 'audio' => $link
+                    ? $adapter->sendMedia($session, $phone, $message->type, (string) $link, $caption, $payload['filename'] ?? null)
+                    : throw new \RuntimeException('No downloadable URL for this media message.'),
+                'poll' => $adapter->sendPoll(
+                    $session,
+                    $phone,
+                    (string) ($payload['poll']['question'] ?? $message->body ?? ''),
+                    array_values((array) ($payload['poll']['options'] ?? [])),
+                    (bool) ($payload['poll']['multiple'] ?? false),
+                ),
+                'location' => $adapter->sendLocation(
+                    $session,
+                    $phone,
+                    (float) ($payload['location']['latitude'] ?? 0),
+                    (float) ($payload['location']['longitude'] ?? 0),
+                    $payload['location']['name'] ?? null,
+                    $payload['location']['address'] ?? null,
+                ),
+                'reaction' => (function () use ($adapter, $session, $payload) {
+                    $target = $this->targetProviderId($payload['target_message_id'] ?? null);
+                    if ($target === '') {
+                        throw new \RuntimeException('Cannot react — the target message has no provider id yet.');
+                    }
+                    $adapter->sendReaction($session, $target, (string) ($payload['emoji'] ?? ''));
+
+                    return '';
+                })(),
+                default => $adapter->sendText($session, $phone, $message->body ?? ''),
+            };
+        } finally {
+            if ($receipts && $message->type !== 'reaction') {
+                try {
+                    $adapter->sendTyping($session, $phone, false);
+                } catch (\Throwable $e) {
+                    Log::debug('whatsapp_web.typing_stop_failed', ['session' => $session, 'error' => $e->getMessage()]);
+                }
+            }
+        }
+
+        return $result;
     }
 
     /** Resolve a local target-message id (from a reaction payload) to its provider id. */
