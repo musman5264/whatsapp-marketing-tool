@@ -2,7 +2,11 @@
 
 namespace App\Modules\WhatsappWeb\Services;
 
+use App\Events\CallReceived;
 use App\Modules\Automation\Services\AutomationEngine;
+use App\Modules\Shared\Models\ChannelAccount;
+use App\Modules\Shared\Models\Contact;
+use App\Modules\Shared\Models\Conversation;
 use App\Modules\Shared\Models\Message;
 use App\Modules\Whatsapp\Services\WhatsappDriver;
 use App\Modules\WhatsappWeb\Models\WhatsappWebSession;
@@ -24,6 +28,7 @@ class WahaEventProcessor
         private readonly WhatsappDriver $driver,
         private readonly SessionProvisioner $provisioner,
         private readonly AutomationEngine $engine,
+        private readonly EngineManager $engines,
     ) {}
 
     /**
@@ -39,6 +44,8 @@ class WahaEventProcessor
             $event === 'message.ack' => $this->handleAck($payload),
             $event === 'poll.vote' => $this->handlePollVote($payload),
             $event === 'message.reaction' => $this->handleReaction($payload),
+            $event === 'call.received' || $event === 'call.accepted' || $event === 'call.rejected'
+                => $this->handleCall($payload, $session, $event),
             default => Log::info('whatsapp_web.event.ignored', ['event' => $event]),
         };
     }
@@ -173,5 +180,94 @@ class WahaEventProcessor
 
         $message->update(['reaction_emoji' => $emoji !== '' ? $emoji : null]);
         \App\Events\ReactionReceived::dispatch($message, $emoji);
+    }
+
+    /**
+     * An incoming voice/video call on the personal number. Every call event is
+     * logged into the caller's conversation as a "📞 …" line so agents see call
+     * history inline. On `call.received`, when the number's `auto_reject_calls`
+     * toggle is on we reject it (and optionally send a canned reply), and either
+     * way we fire the `call.received` automation trigger.
+     *
+     * @param  array<string,mixed>  $payload
+     */
+    private function handleCall(array $payload, WhatsappWebSession $session, string $event): void
+    {
+        $p = $payload['payload'] ?? [];
+        $callId = (string) ($p['id'] ?? '');
+        $fromJid = (string) ($p['from'] ?? ($p['peerJid'] ?? ''));
+        $phone = preg_replace('/\D+/', '', explode('@', $fromJid)[0] ?? '');
+        if ($callId === '' || $phone === '') {
+            return;
+        }
+
+        if (! app(WebhookIdempotencyService::class)->isNewEvent('whatsapp_web', 'call:'.$callId.':'.$event)) {
+            return;
+        }
+
+        $callType = ($p['isVideo'] ?? false) ? 'video' : 'audio';
+
+        $contact = Contact::firstOrCreate(
+            ['workspace_id' => $session->workspace_id, 'phone_e164' => '+'.$phone],
+        );
+        $account = ChannelAccount::where('workspace_id', $session->workspace_id)
+            ->where('channel', 'whatsapp')
+            ->where('phone_number_id', $session->session_name)
+            ->first();
+        $conversation = Conversation::firstOrCreate(
+            ['workspace_id' => $session->workspace_id, 'contact_id' => $contact->id, 'channel_account_id' => $account?->id],
+            ['status' => 'open'],
+        );
+
+        $label = match ($event) {
+            'call.received' => '📞 Missed call',
+            'call.rejected' => '📞 Call rejected',
+            'call.accepted' => '📞 Call answered',
+            default => '📞 Call',
+        };
+        Message::create([
+            'conversation_id' => $conversation->id,
+            'direction' => 'in',
+            'channel' => 'whatsapp',
+            'type' => 'text',
+            'body' => $label.' ('.$callType.')',
+            'status' => 'delivered',
+            'sent_by' => 'bot',
+            'sent_at' => now(),
+        ]);
+        $conversation->update(['last_message_at' => now()]);
+
+        if ($event !== 'call.received') {
+            return;
+        }
+
+        if ($session->auto_reject_calls) {
+            try {
+                $this->engines->adapter()->rejectCall($session->session_name, $callId);
+            } catch (\Throwable $e) {
+                Log::warning('whatsapp_web.call.reject_failed', ['call' => $callId, 'error' => $e->getMessage()]);
+            }
+
+            if (trim((string) $session->call_reject_message) !== '') {
+                $out = Message::create([
+                    'conversation_id' => $conversation->id,
+                    'direction' => 'out',
+                    'channel' => 'whatsapp',
+                    'type' => 'text',
+                    'body' => $session->call_reject_message,
+                    'status' => 'queued',
+                    'sent_by' => 'bot',
+                    'sent_at' => now(),
+                ]);
+                try {
+                    $this->driver->send($out);
+                    $out->update(['status' => 'sent']);
+                } catch (\Throwable $e) {
+                    $out->update(['status' => 'failed', 'error_json' => ['message' => $e->getMessage()]]);
+                }
+            }
+        }
+
+        CallReceived::dispatch($session->workspace_id, $contact->id, $callId, $callType, '+'.$phone);
     }
 }

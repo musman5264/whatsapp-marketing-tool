@@ -78,6 +78,15 @@ class AutomationTriggerListener
         ], $event->emoji);
     }
 
+    public function handleCallReceived(\App\Events\CallReceived $event): void
+    {
+        $this->fireWithConfig('call.received', $event->workspaceId, $event->contactId, [
+            'call_id' => $event->callId,
+            'call_type' => $event->callType,
+            'caller_phone' => $event->callerPhone,
+        ], '');
+    }
+
     public function handleContactCreated(ContactCreated $event): void
     {
         $this->fire('contact.created', $event->contact->workspace_id, $event->contact->id);
