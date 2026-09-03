@@ -11,5 +11,6 @@ Route::middleware(['web', 'client-app'])
         Route::post('/connect', [WhatsappWebSessionController::class, 'connect'])->name('connect');
         Route::get('/qr', [WhatsappWebSessionController::class, 'qr'])->name('qr');
         Route::get('/status', [WhatsappWebSessionController::class, 'status'])->name('status');
+        Route::post('/settings', [WhatsappWebSessionController::class, 'updateSettings'])->name('settings');
         Route::delete('/disconnect', [WhatsappWebSessionController::class, 'disconnect'])->name('disconnect');
     });
