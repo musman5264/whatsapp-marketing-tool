@@ -1,5 +1,0 @@
-<<<<<<<< HEAD:public/build/assets/useLocale-4ygw4yZc.js
-import{u,k as p,b as i}from"./app-BAYR4U91.js";function m(){var s,t,a;const e=u().props,o=((s=e.i18n)==null?void 0:s.locale)??e.locale??"en",c=((t=e.i18n)==null?void 0:t.isRtl)??!1,r=((a=e.i18n)==null?void 0:a.locales)??[],n=e.rtlLocales??["ar"];return{locale:o,isRtl:c,locales:r,setLocale:l=>{l!==o&&(p(l,n),i.put(route("locale.update"),{locale:l},{preserveScroll:!0}))}}}export{m as u};
-========
-import{u,k as p,b as i}from"./app-BZ05UTTW.js";function m(){var s,t,a;const e=u().props,o=((s=e.i18n)==null?void 0:s.locale)??e.locale??"en",c=((t=e.i18n)==null?void 0:t.isRtl)??!1,r=((a=e.i18n)==null?void 0:a.locales)??[],n=e.rtlLocales??["ar"];return{locale:o,isRtl:c,locales:r,setLocale:l=>{l!==o&&(p(l,n),i.put(route("locale.update"),{locale:l},{preserveScroll:!0}))}}}export{m as u};
->>>>>>>> worktree-waha-expansion:public/build/assets/useLocale-D9941c-f.js
