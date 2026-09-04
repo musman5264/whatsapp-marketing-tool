@@ -83,4 +83,33 @@ class SessionConnectTest extends TestCase
             ->postJson(route('client.whatsapp-web.connect'))
             ->assertStatus(422);
     }
+
+    #[Test]
+    public function start_session_subscribes_to_the_new_event_types(): void
+    {
+        Http::fake([
+            'waha.test/api/sessions' => Http::response(['name' => 'ws-1', 'status' => 'STARTING'], 201),
+            'waha.test/api/sessions/*/start' => Http::response([], 200),
+            'waha.test/api/sessions/ws-*' => Http::response(['status' => 'SCAN_QR_CODE'], 200),
+        ]);
+
+        $this->actingAs($this->ctx['user'])->postJson(route('client.whatsapp-web.connect'))->assertOk();
+
+        Http::assertSent(function ($r) {
+            if (! str_contains($r->url(), '/api/sessions') || $r->method() !== 'POST') {
+                return false;
+            }
+            $events = data_get($r->data(), 'config.webhooks.0.events', []);
+            if ($events === []) {
+                return false;
+            }
+            foreach (['message', 'session.status', 'message.ack', 'message.reaction', 'poll.vote', 'call.received', 'call.accepted', 'call.rejected'] as $want) {
+                if (! in_array($want, $events, true)) {
+                    return false;
+                }
+            }
+
+            return true;
+        });
+    }
 }

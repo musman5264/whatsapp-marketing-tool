@@ -418,6 +418,9 @@ class AutomationEngine
             'assign_agent' => $ok(! empty($data['agent_name']) ? 'Would assign to '.$data['agent_name'].'.' : 'Would hand off to a human agent.'),
             'add_to_campaign' => ($data['campaign_id'] ?? '') === '' ? $skip('No campaign selected.') : $ok('Would add contact to campaign #'.$data['campaign_id'].'.'),
             'cta_button' => $ok('Would send CTA "'.($data['display_text'] ?? 'Open').'" → '.$this->snippet($render($data['url'] ?? ''), 40)),
+            'react_message' => ($data['emoji'] ?? '') === ''
+                ? $err('Pick an emoji to react with.')
+                : $ok('Would react '.$data['emoji'].' to the trigger message.'),
             'send_location' => $ok('Would send location '.($data['latitude'] ?? '?').', '.($data['longitude'] ?? '?').'.'),
             'send_poll' => $ok('Would send a poll: "'.$this->snippet($render($data['question'] ?? '')).'"'),
             'run_chatbot' => empty($data['chatbot_id']) ? $err('No chatbot selected.') : $ok('Would run chatbot #'.$data['chatbot_id'].' and send the reply.', ['context_update' => ['last_ai_reply' => '[chatbot reply]']]),
@@ -476,6 +479,7 @@ class AutomationEngine
                 'assign_agent' => $this->executeAssignAgent($data, $run),
                 // ── ENGAGE ────────────────────────────────────────────────────
                 'cta_button' => $this->executeCtaButton($data, $run, $context),
+                'react_message' => $this->executeReactMessage($data, $run, $context),
                 'send_location' => $this->executeSendLocation($data, $run, $context),
                 'send_poll' => $this->executeSendPoll($data, $run, $context),
                 'run_chatbot' => $this->executeRunChatbot($data, $run, $context),
@@ -593,6 +597,8 @@ class AutomationEngine
             }
         }
 
+        $this->markInboundSeenIfPersonal($run, $context);
+
         if (! empty($data['chatbot_id'])) {
             $bot = AiChatbot::where('id', $data['chatbot_id'])
                 ->where('workspace_id', $workspaceId)
@@ -611,6 +617,7 @@ class AutomationEngine
             $tokens = $result['tokens_used'] ?? 0;
         } else {
             $system = $this->renderTokens($data['prompt'] ?? 'You are a helpful assistant.', $contact, $context);
+            $system .= "\n\nIf a short emoji reaction is a better response than words (e.g. the customer just said thanks), reply with exactly {\"action\":\"react\",\"emoji\":\"👍\"} and nothing else.";
             $messages = [['role' => 'system', 'content' => $system]];
             $messages[] = [
                 'role' => 'user',
@@ -649,6 +656,23 @@ class AutomationEngine
             return [
                 'status' => 'ok',
                 'message' => 'AI reply generated → {{response}}'.($var ? " / {{{$var}}}" : ''),
+                'output' => ['reply' => $reply, 'tokens_used' => $tokens],
+                'context_update' => $ctxUpdate,
+            ];
+        }
+
+        // A {"action":"react","emoji":"X"} reply reacts to the trigger message
+        // instead of sending text (only when there is a message to react to).
+        $reactEmoji = $this->parseAiReaction((string) $reply);
+        if ($reactEmoji !== null && ! empty($context['message_id'])) {
+            $res = $this->sendWhatsappPayload($run, 'reaction', null, [
+                'target_message_id' => (int) $context['message_id'],
+                'emoji' => $reactEmoji,
+            ]);
+
+            return [
+                'status' => $res['status'] ?? 'ok',
+                'message' => ($res['status'] ?? 'ok') === 'ok' ? "AI reacted {$reactEmoji}." : ($res['message'] ?? 'Reaction failed.'),
                 'output' => ['reply' => $reply, 'tokens_used' => $tokens],
                 'context_update' => $ctxUpdate,
             ];
@@ -1327,12 +1351,161 @@ class AutomationEngine
             return ['status' => 'error', 'message' => 'Question and options are required.'];
         }
 
-        // The Cloud API has no native poll — emulate with reply buttons (≤3) or an interactive list.
-        $interactive = count($options) <= 3
-            ? $this->buttonInteractive($question, $options)
-            : $this->listInteractive($question, (string) ($data['button_label'] ?? 'Vote'), 'Options', array_map(fn ($o) => ['title' => $o, 'description' => ''], $options));
+        $multiple = (bool) ($data['multiple'] ?? false);
+        $resultVar = ($data['result_var'] ?? '') ?: 'poll_answer';
 
-        return $this->sendWhatsappPayload($run, 'interactive', $question, ['interactive' => $interactive]);
+        // Remember which variable the vote lands in, and that this run may get a
+        // poll.vote later (see WahaEventProcessor / the poll.vote inbound handler).
+        $ctxUpdate = ['_poll_result_var' => $resultVar];
+
+        $target = $this->resolveChannelTarget($run->automation->workspace_id, $contact, 'whatsapp');
+        $isPersonal = $target['account']?->provider === 'whatsapp_web';
+
+        if ($isPersonal) {
+            // WhatsApp Web (WAHA) has a real poll — send it natively.
+            $res = $this->sendWhatsappPayload($run, 'poll', $question, [
+                'poll' => ['question' => $question, 'options' => $options, 'multiple' => $multiple],
+            ]);
+        } else {
+            // The Cloud API has no native poll — emulate with reply buttons (≤3) or an interactive list.
+            $interactive = count($options) <= 3
+                ? $this->buttonInteractive($question, $options)
+                : $this->listInteractive($question, (string) ($data['button_label'] ?? 'Vote'), 'Options', array_map(fn ($o) => ['title' => $o, 'description' => ''], $options));
+            $res = $this->sendWhatsappPayload($run, 'interactive', $question, ['interactive' => $interactive]);
+        }
+
+        if (($res['status'] ?? '') === 'ok') {
+            $res['context_update'] = array_merge($res['context_update'] ?? [], $ctxUpdate);
+        }
+
+        // Optionally park the run until the poll gets a vote (native polls only —
+        // the emulated interactive is handled by the button/list-reply resume path).
+        if ($isPersonal && ($data['wait_for_vote'] ?? false) && ($res['status'] ?? '') === 'ok') {
+            $edges = collect($run->automation->edges ?? []);
+            $resumeNodeId = $this->nextNodeId($edges, (string) $run->current_node_id, null);
+            $run->update(['status' => 'waiting', 'resume_node_id' => $resumeNodeId]);
+
+            return [
+                'status' => 'waiting',
+                'message' => 'Poll sent — waiting for a vote.',
+                'context_update' => array_merge($ctxUpdate, ['_awaiting_poll' => true]),
+            ];
+        }
+
+        return $res;
+    }
+
+    /** If the AI reply is a {"action":"react","emoji":"X"} object, return the emoji. */
+    private function parseAiReaction(string $reply): ?string
+    {
+        if (! str_contains($reply, '"react"')) {
+            return null;
+        }
+        if (preg_match('/\{[^{}]*"action"\s*:\s*"react"[^{}]*\}/', $reply, $m)) {
+            $obj = json_decode($m[0], true);
+            $emoji = is_array($obj) ? trim((string) ($obj['emoji'] ?? '')) : '';
+
+            return $emoji !== '' ? $emoji : null;
+        }
+
+        return null;
+    }
+
+    /**
+     * When an AI Reply / Chatbot node is about to answer an inbound message on a
+     * personal (WhatsApp Web) number whose send_receipts toggle is on, mark that
+     * message read first — so the customer sees the bot "read" their message
+     * before it replies. Best-effort; a failure never affects the reply.
+     */
+    private function markInboundSeenIfPersonal(AutomationRun $run, array $context): void
+    {
+        $contact = Contact::find($run->contact_id);
+        if (! $contact || ! $contact->phone_e164) {
+            return;
+        }
+
+        $target = $this->resolveChannelTarget($run->automation->workspace_id, $contact, 'whatsapp');
+        $account = $target['account'] ?? null;
+        if ($account?->provider !== 'whatsapp_web') {
+            return;
+        }
+
+        $ws = \App\Modules\WhatsappWeb\Models\WhatsappWebSession::where('session_name', $account->phone_number_id)->first();
+        if (! $ws?->send_receipts) {
+            return;
+        }
+
+        $providerId = ! empty($context['message_id'])
+            ? (string) (Message::whereKey($context['message_id'])->value('provider_message_id') ?? '')
+            : '';
+
+        try {
+            app(\App\Modules\WhatsappWeb\Services\EngineManager::class)->adapter()->sendSeen(
+                $ws->session_name,
+                preg_replace('/\D+/', '', (string) $contact->phone_e164).'@c.us',
+                $providerId ?: null,
+            );
+        } catch (\Throwable $e) {
+            Log::warning('automation.send_seen_failed', ['run' => $run->id, 'error' => $e->getMessage()]);
+        }
+    }
+
+    /**
+     * React to the message that triggered this automation (message.received runs).
+     * Emits a `reaction` Message targeting the local trigger-message PK; the
+     * WhatsappDriver resolves it to a provider id and reacts on Cloud or WAHA.
+     */
+    private function executeReactMessage(array $data, AutomationRun $run, array $context): array
+    {
+        $emoji = (string) ($data['emoji'] ?? '');
+        if ($emoji === '') {
+            return ['status' => 'error', 'message' => 'No emoji configured.'];
+        }
+
+        $targetId = $context['message_id'] ?? null;
+        if (! $targetId) {
+            return ['status' => 'skipped', 'message' => 'No trigger message to react to (this automation was not started by an inbound message).'];
+        }
+
+        return $this->sendWhatsappPayload($run, 'reaction', null, [
+            'target_message_id' => (int) $targetId,
+            'emoji' => $emoji,
+        ]);
+    }
+
+    /**
+     * A contact voted on a poll an automation sent. Write their choice into the
+     * run context and resume the run if it is parked after the poll node.
+     *
+     * @param  array<int,string>  $selectedOptions
+     */
+    public function applyPollVote(string $pollProviderMessageId, array $selectedOptions): void
+    {
+        $message = Message::where('provider_message_id', $pollProviderMessageId)
+            ->where('type', 'poll')
+            ->latest('id')
+            ->first();
+        if (! $message) {
+            return;
+        }
+
+        $run = AutomationRun::where('contact_id', $message->conversation->contact_id)
+            ->whereIn('status', ['waiting', 'running', 'completed'])
+            ->latest('id')
+            ->first();
+        if (! $run) {
+            return;
+        }
+
+        $context = $run->context ?? [];
+        $var = $context['_poll_result_var'] ?? 'poll_answer';
+        $context[$var] = implode(', ', $selectedOptions);
+        unset($context['_awaiting_poll']);
+        $run->update(['context' => $context]);
+
+        if ($run->status === 'waiting') {
+            $this->runNowOrQueue($run);
+        }
     }
 
     private function executeRunChatbot(array $data, AutomationRun $run, array $context): array
@@ -1358,10 +1531,29 @@ class AutomationEngine
             $message = 'Hello';
         }
 
+        $this->markInboundSeenIfPersonal($run, $context);
+
         $result = $this->chatbotRunner->runForApi($bot, $message, $workspaceId, $context['history'] ?? []);
         $reply = $result['reply'] ?? null;
         if (! $reply) {
             return ['status' => 'skipped', 'message' => 'Chatbot returned no reply.'];
+        }
+
+        // A {"action":"react","emoji":"X"} reply reacts to the trigger message
+        // instead of sending text (only when there is a message to react to).
+        $reactEmoji = $this->parseAiReaction((string) $reply);
+        if ($reactEmoji !== null && ! empty($context['message_id'])) {
+            $res = $this->sendWhatsappPayload($run, 'reaction', null, [
+                'target_message_id' => (int) $context['message_id'],
+                'emoji' => $reactEmoji,
+            ]);
+
+            return [
+                'status' => $res['status'] ?? 'ok',
+                'message' => ($res['status'] ?? 'ok') === 'ok' ? "Chatbot reacted {$reactEmoji}." : ($res['message'] ?? 'Reaction failed.'),
+                'output' => ['reply' => $reply, 'tokens_used' => $result['tokens_used'] ?? 0],
+                'context_update' => ['last_ai_reply' => $reply],
+            ];
         }
 
         $send = $this->sendTextViaChannel($run, $data['channel'] ?? 'whatsapp', $reply, 'bot');

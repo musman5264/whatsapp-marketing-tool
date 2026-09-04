@@ -23,6 +23,9 @@ use Illuminate\Support\Str;
  * @property string|null $webhook_token_hash
  * @property \Illuminate\Support\Carbon|null $last_seen_at
  * @property array<string,mixed>|null $meta_json
+ * @property bool $auto_reject_calls
+ * @property string|null $call_reject_message
+ * @property bool $send_receipts
  */
 class WhatsappWebSession extends Model
 {
@@ -32,6 +35,7 @@ class WhatsappWebSession extends Model
         'workspace_id', 'session_name', 'engine', 'phone_e164', 'push_name',
         'status', 'last_qr', 'webhook_token', 'webhook_token_hash',
         'last_seen_at', 'meta_json',
+        'auto_reject_calls', 'call_reject_message', 'send_receipts',
     ];
 
     protected $hidden = ['last_qr', 'webhook_token', 'webhook_token_hash'];
@@ -41,6 +45,8 @@ class WhatsappWebSession extends Model
         return [
             'meta_json' => 'array',
             'last_seen_at' => 'datetime',
+            'auto_reject_calls' => 'boolean',
+            'send_receipts' => 'boolean',
         ];
     }
 

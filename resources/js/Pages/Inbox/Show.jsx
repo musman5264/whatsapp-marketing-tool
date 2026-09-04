@@ -704,11 +704,59 @@ function SoundPrefsMenu() {
     );
 }
 
+const REACTION_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
+
 function MessageBubble({ msg, conversationId }) {
     const { props: pageProps } = usePage();
     const bubbleTz = pageProps.timezone || 'Asia/Dhaka';
     const isOut = msg.direction === 'out';
     const p     = msg.payload ?? {};
+    const [reactOpen, setReactOpen] = useState(false);
+    const [reacting, setReacting] = useState(false);
+
+    const sendReaction = (emoji) => {
+        if (reacting) return;
+        setReacting(true);
+        setReactOpen(false);
+        axios.post(route('client.inbox.messages.react', { conversation: conversationId, message: msg.id }), { emoji })
+            .then(() => router.reload({ only: ['conversation', 'messages'] }))
+            .finally(() => setReacting(false));
+    };
+
+    const reactionEmoji = msg.reaction_emoji;
+
+    const reactButton = (
+        <div className="relative self-center opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+            <button
+                type="button"
+                title="React"
+                onClick={() => setReactOpen(o => !o)}
+                className="p-1 rounded-full text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-800"
+            >
+                <Smile className="h-4 w-4" />
+            </button>
+            {reactOpen && (
+                <div className={`absolute z-20 top-full mt-1 ${isOut ? 'right-0' : 'left-0'} flex gap-0.5 rounded-full bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 shadow-lg px-1.5 py-1`}>
+                    {REACTION_EMOJIS.map(e => (
+                        <button
+                            key={e}
+                            type="button"
+                            onClick={() => sendReaction(e)}
+                            className="text-base leading-none p-1 rounded-full hover:bg-neutral-100 dark:hover:bg-neutral-700"
+                        >
+                            {e}
+                        </button>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+
+    const reactionBadge = reactionEmoji ? (
+        <span className={`absolute -bottom-2 ${isOut ? 'left-1' : 'right-1'} text-xs bg-white dark:bg-neutral-800 rounded-full px-1 border border-neutral-200 dark:border-neutral-700 shadow-sm`}>
+            {reactionEmoji}
+        </span>
+    ) : null;
 
     // Resolve media source: outbound has preview_url directly; inbound raw webhook nests under type key
     const mediaType   = msg.type ?? 'text';
@@ -768,8 +816,10 @@ function MessageBubble({ msg, conversationId }) {
     );
 
     return (
-        <div className={`flex ${isOut ? 'justify-end' : 'justify-start'} mb-2`}>
-            <div className={bubbleBase}>
+        <div className={`group flex items-start gap-1.5 ${isOut ? 'justify-end' : 'justify-start'} mb-2`}>
+            {isOut && reactButton}
+            <div className={`relative ${bubbleBase}`}>
+                {reactionBadge}
                 {/* Template header image/video/doc */}
                 {templateComponents && (
                     <TemplateHeaderMedia components={templateComponents} conversationId={conversationId} messageId={msg.id} />
@@ -855,6 +905,7 @@ function MessageBubble({ msg, conversationId }) {
                     {timeRow}
                 </div>
             </div>
+            {!isOut && reactButton}
         </div>
     );
 }

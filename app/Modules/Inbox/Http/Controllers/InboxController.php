@@ -77,7 +77,15 @@ class InboxController extends Controller
         $messages = $conversation->messages()->with('conversation')->orderBy('sent_at')->get();
 
         // Mark as read
+        $hadUnread = $conversation->unread_count > 0;
         $conversation->update(['unread_count' => 0]);
+
+        // On a personal (WhatsApp Web) number whose send_receipts toggle is on,
+        // also send the customer a read receipt for their unread messages when an
+        // agent opens the thread. Best-effort — never blocks the page.
+        if ($hadUnread && $conversation->channelAccount?->provider === 'whatsapp_web') {
+            $this->markWhatsappWebSeen($conversation);
+        }
 
         // Align UI with WhatsApp session rules (inbound-only window; see Conversation::isWhatsappWindowOpen).
         // isWhatsappWindowOpen() already returns true for non-Cloud-API conversations
@@ -697,9 +705,65 @@ class InboxController extends Controller
         return redirect()->route('client.inbox.show', $conversation);
     }
 
+    public function react(Request $request, Conversation $conversation, Message $message): JsonResponse
+    {
+        $this->authorise($request, $conversation);
+        abort_unless((int) $message->conversation_id === (int) $conversation->id, 404);
+
+        $validated = $request->validate(['emoji' => ['required', 'string', 'max:16']]);
+
+        $out = Message::create([
+            'conversation_id' => $conversation->id,
+            'direction' => 'out',
+            'channel' => $conversation->channelAccount?->channel ?? 'whatsapp',
+            'type' => 'reaction',
+            'body' => $validated['emoji'],
+            'payload' => ['target_message_id' => $message->id, 'emoji' => $validated['emoji']],
+            'status' => 'queued',
+            'sent_by' => 'human',
+            'user_id' => $request->user()->id,
+            'sent_at' => now(),
+        ]);
+
+        try {
+            $id = $this->channelManager->driver($out->channel)->send($out);
+            $out->update(['status' => 'sent', 'provider_message_id' => $id ?: null]);
+        } catch (\Throwable $e) {
+            $out->update(['status' => 'failed', 'error_json' => ['message' => $e->getMessage()]]);
+
+            return response()->json(['ok' => false, 'error' => $e->getMessage()], 422);
+        }
+
+        return response()->json(['ok' => true]);
+    }
+
     private function authorise(Request $request, Conversation $conversation): void
     {
         $workspaceId = $request->user()->current_workspace_id ?? $request->user()->workspace_id;
         abort_unless((int) $conversation->workspace_id === (int) $workspaceId, 403);
+    }
+
+    /** Send a WAHA read receipt for the contact's latest inbound message. Best-effort. */
+    private function markWhatsappWebSeen(Conversation $conversation): void
+    {
+        $ws = \App\Modules\WhatsappWeb\Models\WhatsappWebSession::where('session_name', $conversation->channelAccount?->phone_number_id)->first();
+        if (! $ws?->send_receipts || ! $conversation->contact?->phone_e164) {
+            return;
+        }
+
+        $lastInbound = $conversation->messages()
+            ->where('direction', 'in')
+            ->latest('id')
+            ->value('provider_message_id');
+
+        try {
+            app(\App\Modules\WhatsappWeb\Services\EngineManager::class)->adapter()->sendSeen(
+                $ws->session_name,
+                preg_replace('/\D+/', '', (string) $conversation->contact->phone_e164).'@c.us',
+                $lastInbound,
+            );
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('inbox.send_seen_failed', ['conversation' => $conversation->id, 'error' => $e->getMessage()]);
+        }
     }
 }

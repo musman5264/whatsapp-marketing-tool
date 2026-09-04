@@ -10,7 +10,7 @@ import {
     Image, Layers, MousePointerClick, List, HelpCircle, Workflow, Sparkles,
     UserCheck, ExternalLink, MapPin, BarChart3, CalendarClock, Video,
     ClipboardList, ClipboardCheck, Store, Sheet, LayoutTemplate, AlertTriangle, GripVertical,
-    FlaskConical, Loader2, CheckCircle2, MinusCircle, AlertCircle, ChevronDown,
+    FlaskConical, Loader2, CheckCircle2, MinusCircle, AlertCircle, ChevronDown, SmilePlus,
 } from 'lucide-react';
 import { ChannelBrandIcon } from '@/Components/BrandIcons';
 import MediaUpload from '@/Components/MediaUpload';
@@ -48,6 +48,8 @@ const TRIGGER_TYPES = [
     { value: 'order.cancelled',   labelKey: 'automation.trigger_order_cancelled',   Icon: XCircle        },
     { value: 'cart.abandoned',    labelKey: 'automation.trigger_cart_abandoned',    Icon: ShoppingCart   },
     { value: 'customer.created',  labelKey: 'automation.trigger_customer_created',  Icon: UserPlus       },
+    { value: 'reaction.received', labelKey: 'automation.trigger_reaction_received', Icon: SmilePlus      },
+    { value: 'call.received',     labelKey: 'automation.trigger_call_received',     Icon: Phone          },
 ];
 
 // Categories rendered (in order) in the node palette — mirrors the product node list.
@@ -84,8 +86,9 @@ const NODE_DEFS = {
     add_to_campaign:     { labelKey: 'automation.node_add_to_campaign',     color: '#f97316', bg: '#fff7ed', icon: Megaphone,         category: 'contact',      qr: true },
     // ── ENGAGE ────────────────────────────────────────────────────────────
     cta_button:          { labelKey: 'automation.node_cta_button',          color: '#e11d48', bg: '#fff1f2', icon: ExternalLink,      category: 'engage' },
+    react_message:       { labelKey: 'automation.node_react_message',       color: '#f59e0b', bg: '#fffbeb', icon: SmilePlus,         category: 'engage',       qr: true },
     send_location:       { labelKey: 'automation.node_send_location',       color: '#dc2626', bg: '#fef2f2', icon: MapPin,            category: 'engage',       qr: true },
-    send_poll:           { labelKey: 'automation.node_send_poll',           color: '#9333ea', bg: '#faf5ff', icon: BarChart3,         category: 'engage' },
+    send_poll:           { labelKey: 'automation.node_send_poll',           color: '#9333ea', bg: '#faf5ff', icon: BarChart3,         category: 'engage', qr: true },
     run_chatbot:         { labelKey: 'automation.node_run_chatbot',         color: '#7c3aed', bg: '#faf5ff', icon: Bot,               category: 'engage',       qr: true },
     book_appointment:    { labelKey: 'automation.node_book_appointment',    color: '#2563eb', bg: '#eff6ff', icon: CalendarClock,     category: 'engage',       qr: true },
     google_meet:         { labelKey: 'automation.node_google_meet',         color: '#16a34a', bg: '#f0fdf4', icon: Video,             category: 'engage',       qr: true },
@@ -417,6 +420,7 @@ const FIELD_COMPONENTS = {
     assign_agent: AssignAgentFields,
     add_to_campaign: CampaignFields,
     cta_button: CtaButtonFields,
+    react_message: ReactMessageFields,
     send_location: LocationFields,
     send_poll: PollFields,
     run_chatbot: RunChatbotFields,
@@ -1301,7 +1305,50 @@ function PollFields({ d, set }) {
             <Field label={t('automation.field_poll_options_required')}>
                 <textarea className={textareaCls} rows={4} value={d.options ?? ''} onChange={e => set('options', e.target.value)} placeholder={t('automation.placeholder_poll_options')} />
             </Field>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#374151' }}>
+                <input type="checkbox" checked={!!d.multiple} onChange={e => set('multiple', e.target.checked)} />
+                {t('automation.poll_multiple')}
+            </label>
+            <Field label={t('automation.field_poll_result_var')}>
+                <input className={inputCls} value={d.result_var ?? ''} onChange={e => set('result_var', e.target.value)} placeholder="poll_answer" />
+            </Field>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#374151' }}>
+                <input type="checkbox" checked={!!d.wait_for_vote} onChange={e => set('wait_for_vote', e.target.checked)} />
+                {t('automation.poll_wait_for_vote')}
+            </label>
             <p style={{ fontSize: 10, color: '#64748b' }}>{t('automation.poll_hint')}</p>
+        </>
+    );
+}
+
+const REACTION_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🙏', '🔥', '🎉', '✅'];
+
+function ReactMessageFields({ d, set }) {
+    const { t } = useTranslation();
+    return (
+        <>
+            <Field label={t('automation.field_reaction_emoji')}>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                    {REACTION_EMOJIS.map(e => (
+                        <button
+                            key={e}
+                            type="button"
+                            onClick={() => set('emoji', e)}
+                            style={{
+                                fontSize: 18, lineHeight: 1, padding: '6px 8px', borderRadius: 8,
+                                border: d.emoji === e ? '2px solid #f59e0b' : '1px solid #e5e7eb',
+                                background: d.emoji === e ? '#fffbeb' : '#fff', cursor: 'pointer',
+                            }}
+                        >
+                            {e}
+                        </button>
+                    ))}
+                </div>
+            </Field>
+            <Field label={t('automation.field_reaction_custom')}>
+                <input className={inputCls} maxLength={8} value={d.emoji ?? ''} onChange={e => set('emoji', e.target.value)} placeholder="👍" />
+            </Field>
+            <p style={{ fontSize: 10, color: '#64748b' }}>{t('automation.react_message_hint')}</p>
         </>
     );
 }

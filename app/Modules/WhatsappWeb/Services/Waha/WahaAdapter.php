@@ -30,7 +30,11 @@ class WahaAdapter implements EngineAdapter
     {
         $webhook = [
             'url' => $webhookUrl,
-            'events' => ['message', 'session.status', 'message.ack'],
+            'events' => [
+                'message', 'session.status', 'message.ack',
+                'message.reaction', 'poll.vote',
+                'call.received', 'call.accepted', 'call.rejected',
+            ],
         ];
         if ($hmacSecret !== null && $hmacSecret !== '') {
             // WAHA signs each webhook body: X-Webhook-Hmac = hmac_sha256(body, key)
@@ -213,6 +217,54 @@ class WahaAdapter implements EngineAdapter
             'longitude' => $longitude,
             'title' => trim(implode(' — ', array_filter([$name, $address]))) ?: null,
         ], fn ($v) => $v !== null));
+    }
+
+    public function sendPoll(string $session, string $toE164, string $question, array $options, bool $multipleAnswers): string
+    {
+        return $this->send('/api/sendPoll', [
+            'session' => $session,
+            'chatId' => $this->chatId($toE164),
+            'poll' => [
+                'name' => $question,
+                'options' => array_values($options),
+                'multipleAnswers' => $multipleAnswers,
+            ],
+        ]);
+    }
+
+    public function sendReaction(string $session, string $messageId, string $emoji): void
+    {
+        $resp = $this->client->put('/api/reaction', [
+            'session' => $session,
+            'messageId' => $messageId,
+            'reaction' => $emoji,
+        ]);
+
+        if (! $resp->successful()) {
+            throw new \RuntimeException('WAHA reaction failed ('.$resp->status().'): '.$resp->body());
+        }
+    }
+
+    public function sendSeen(string $session, string $chatId, ?string $messageId = null): void
+    {
+        $payload = ['session' => $session, 'chatId' => $chatId];
+        if ($messageId !== null && $messageId !== '') {
+            $payload['messageId'] = $messageId;
+        }
+        $this->client->post('/api/sendSeen', $payload);
+    }
+
+    public function sendTyping(string $session, string $toE164, bool $on): void
+    {
+        $this->client->post($on ? '/api/startTyping' : '/api/stopTyping', [
+            'session' => $session,
+            'chatId' => $this->chatId($toE164),
+        ]);
+    }
+
+    public function rejectCall(string $session, string $callId): void
+    {
+        $this->client->post("/api/{$session}/calls/reject", ['callId' => $callId]);
     }
 
     // ── internals ────────────────────────────────────────────────────────────

@@ -109,6 +109,29 @@ class WhatsappWebSessionController extends Controller
             'status' => $session->status,
             'phone_e164' => $session->phone_e164,
             'push_name' => $session->push_name,
+            'settings' => $session->only(['auto_reject_calls', 'call_reject_message', 'send_receipts']),
+        ]);
+    }
+
+    /**
+     * POST /app/whatsapp-web/settings — per-number call handling + read receipts.
+     * Creates the session record if the workspace has none yet so a user can set
+     * a preference before pairing.
+     */
+    public function updateSettings(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'auto_reject_calls' => ['sometimes', 'boolean'],
+            'call_reject_message' => ['sometimes', 'nullable', 'string', 'max:1000'],
+            'send_receipts' => ['sometimes', 'boolean'],
+        ]);
+
+        $session = $this->provisioner->ensure($this->workspaceId($request));
+        $session->update($validated);
+
+        return response()->json([
+            'ok' => true,
+            'settings' => $session->fresh()->only(['auto_reject_calls', 'call_reject_message', 'send_receipts']),
         ]);
     }
 
