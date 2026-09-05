@@ -15,6 +15,8 @@ use App\Modules\Shared\Models\Conversation;
 use App\Modules\Shared\Models\Message;
 use App\Modules\Whatsapp\Models\WhatsappTemplate;
 use App\Modules\Whatsapp\Services\CloudApiClient;
+use App\Modules\WhatsappWeb\Models\WhatsappWebSession;
+use App\Modules\WhatsappWeb\Services\EngineManager;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -72,20 +74,33 @@ class SendCampaignMessageJob implements ShouldQueue
 
         try {
             $trackingToken = $campaign->channel === 'email' ? Str::random(32) : null;
-            // Unsubscribe token is always generated for email — CAN-SPAM requires opt-out in every commercial email.
             $unsubscribeToken = $campaign->channel === 'email' ? Str::random(32) : null;
 
-            $sent = match ($campaign->channel) {
-                'whatsapp' => $this->sendWhatsApp($campaign, $contact, $personalizer),
-                'sms' => $this->sendSms($campaign, $contact, $personalizer),
-                'email' => $this->sendEmail($campaign, $contact, $personalizer, $trackingToken, $unsubscribeToken),
-            };
+            // WhatsApp Web multi-message path: send each message in sequence with a
+            // random delay (message_delay_min..message_delay_max seconds) between them
+            // to avoid triggering WhatsApp's spam-detection on QR/personal connections.
+            if ($campaign->channel === 'whatsapp' && $campaign->whatsapp_channel_type === 'whatsapp_web') {
+                $results = $this->sendWhatsAppWebMessages($campaign, $contact, $personalizer);
+                $sent = $results[0]; // first message is the primary for recipient tracking
+                $providerResponse = $results;
+                $channelType = 'whatsapp_web';
+            } else {
+                $sent = match ($campaign->channel) {
+                    'whatsapp' => $this->sendWhatsApp($campaign, $contact, $personalizer),
+                    'sms'      => $this->sendSms($campaign, $contact, $personalizer),
+                    'email'    => $this->sendEmail($campaign, $contact, $personalizer, $trackingToken, $unsubscribeToken),
+                };
+                $providerResponse = [$sent];
+                $channelType = $campaign->channel === 'whatsapp' ? 'cloud_api' : $campaign->channel;
+            }
 
             $updateData = [
-                'status' => 'sent',
+                'status'              => 'sent',
                 'provider_message_id' => $sent['id'],
-                'sent_at' => now(),
-                'failed_reason' => null,
+                'channel_type'        => $channelType,
+                'provider_response'   => $providerResponse,
+                'sent_at'             => now(),
+                'failed_reason'       => null,
             ];
 
             if ($trackingToken !== null) {
@@ -98,9 +113,6 @@ class SendCampaignMessageJob implements ShouldQueue
 
             $recipient?->update($updateData);
 
-            // Mirror the outbound send into the Inbox so conversations & reply threads
-            // stay coherent and the webhook status pipeline (which keys off
-            // provider_message_id) can update the inbox row too.
             $this->syncToInbox($campaign, $contact, $sent);
 
             UsageMeter::track($campaign->workspace_id, 'messages_'.$campaign->channel);
@@ -110,14 +122,15 @@ class SendCampaignMessageJob implements ShouldQueue
 
             Log::channel('json')->info('campaign.message.sent', [
                 'workspace_id' => $campaign->workspace_id,
-                'campaign_id' => $campaign->id,
-                'contact_id' => $contact->id,
-                'channel' => $campaign->channel,
-                'message_id' => $sent['id'],
+                'campaign_id'  => $campaign->id,
+                'contact_id'   => $contact->id,
+                'channel'      => $campaign->channel,
+                'channel_type' => $channelType,
+                'message_id'   => $sent['id'],
             ]);
         } catch (\Throwable $e) {
             $recipient?->update([
-                'status' => 'failed',
+                'status'        => 'failed',
                 'failed_reason' => substr($e->getMessage(), 0, 512),
             ]);
             Log::channel('json')->warning('campaign.message.failed', [
@@ -144,6 +157,71 @@ class SendCampaignMessageJob implements ShouldQueue
             'email' => ! $contact->opt_in_email || ! $contact->email,
             default => true,
         };
+    }
+
+    /**
+     * Send one or more custom messages via WhatsApp Web (WAHA) with a rate-limiting
+     * delay between each message to avoid WhatsApp spam detection.
+     *
+     * Returns an array of sent-result arrays (one per message).
+     *
+     * @return array<int, array{id: string, body: string, type: string, payload: array<string, mixed>}>
+     */
+    private function sendWhatsAppWebMessages(Campaign $campaign, Contact $contact, CampaignPersonalizer $personalizer): array
+    {
+        $session = WhatsappWebSession::where('workspace_id', $campaign->workspace_id)
+            ->where('status', 'active')
+            ->first();
+
+        if (! $session) {
+            throw new \RuntimeException('No active WhatsApp Web session for this workspace.');
+        }
+
+        $adapter = app(EngineManager::class)->adapter();
+        $messages = $campaign->campaign_messages ?? [];
+
+        if (empty($messages)) {
+            throw new \RuntimeException('Campaign has no messages configured.');
+        }
+
+        $phone = $contact->phone_e164;
+        if (! str_starts_with($phone, '+')) {
+            $phone = '+'.$phone;
+        }
+
+        $delayMin = max(1, (int) ($campaign->message_delay_min ?? 5));
+        $delayMax = max($delayMin, (int) ($campaign->message_delay_max ?? 8));
+
+        $results = [];
+        foreach ($messages as $i => $msg) {
+            // Rate-limit: random delay between messages (not before the first one).
+            if ($i > 0) {
+                $delaySecs = rand($delayMin, $delayMax);
+                sleep($delaySecs);
+            }
+
+            $type    = $msg['type'] ?? 'text';
+            $body    = $personalizer->renderText($msg['body'] ?? '', $contact);
+            $url     = $msg['url'] ?? '';
+            $caption = $personalizer->renderText($msg['caption'] ?? '', $contact);
+
+            $messageId = match ($type) {
+                'text'     => $adapter->sendText($session->session_name, $phone, $body),
+                'image'    => $adapter->sendMedia($session->session_name, $phone, 'image', $url, $caption ?: null, null),
+                'video'    => $adapter->sendMedia($session->session_name, $phone, 'video', $url, $caption ?: null, null),
+                'document' => $adapter->sendMedia($session->session_name, $phone, 'document', $url, $caption ?: null, $msg['filename'] ?? null),
+                default    => $adapter->sendText($session->session_name, $phone, $body),
+            };
+
+            $results[] = [
+                'id'      => $messageId,
+                'body'    => $type === 'text' ? $body : ($caption ?: $url),
+                'type'    => $type === 'text' ? 'text' : $type,
+                'payload' => ['type' => $type, 'body' => $body, 'url' => $url, 'caption' => $caption],
+            ];
+        }
+
+        return $results;
     }
 
     /**

@@ -79,10 +79,14 @@ class CampaignController extends Controller
             'name'                      => ['required', 'string', 'max:128'],
             'channel'                   => ['required', 'in:whatsapp,sms,email'],
             'whatsapp_phone_number_id'  => ['nullable', 'string'],
+            'whatsapp_channel_type'     => ['nullable', 'in:cloud_api,whatsapp_web'],
             'audience_type'             => ['nullable', 'in:segment,contact_list,tag,csv'],
             'audience_ref'              => ['nullable', 'string'],
             'template_ref'              => ['nullable', 'array'],
             'payload_json'              => ['nullable', 'array'],
+            'campaign_messages'         => ['nullable', 'array'],
+            'message_delay_min'         => ['nullable', 'integer', 'min:1', 'max:60'],
+            'message_delay_max'         => ['nullable', 'integer', 'min:1', 'max:60'],
             'schedule_at'               => ['nullable', 'date'],
             'timezone'                  => ['nullable', 'string', 'max:64'],
         ]);
@@ -91,10 +95,14 @@ class CampaignController extends Controller
             'name'                     => $validated['name'],
             'channel'                  => $validated['channel'],
             'whatsapp_phone_number_id' => $validated['whatsapp_phone_number_id'] ?? null,
+            'whatsapp_channel_type'    => $validated['whatsapp_channel_type'] ?? null,
             'audience_type'            => $validated['audience_type'] ?? null,
             'audience_ref'             => $validated['audience_ref'] ?? null,
             'template_ref'             => $validated['template_ref'] ?? null,
             'payload_json'             => $validated['payload_json'] ?? null,
+            'campaign_messages'        => $validated['campaign_messages'] ?? null,
+            'message_delay_min'        => $validated['message_delay_min'] ?? null,
+            'message_delay_max'        => $validated['message_delay_max'] ?? null,
             'schedule_at'              => $validated['schedule_at'] ?? null,
             'timezone'                 => $validated['timezone'] ?? null,
         ], fn ($v) => $v !== null);
@@ -129,8 +137,10 @@ class CampaignController extends Controller
         return Inertia::render('Broadcasting/Campaigns/Edit', array_merge(
             $this->wizardProps($request),
             ['campaign' => $campaign->only(
-                'id', 'uuid', 'name', 'channel', 'whatsapp_phone_number_id', 'audience_type', 'audience_ref',
-                'template_ref', 'payload_json', 'schedule_at', 'timezone', 'status',
+                'id', 'uuid', 'name', 'channel', 'whatsapp_phone_number_id', 'whatsapp_channel_type',
+                'audience_type', 'audience_ref', 'template_ref', 'payload_json',
+                'campaign_messages', 'message_delay_min', 'message_delay_max',
+                'schedule_at', 'timezone', 'status',
             )],
         ));
     }
@@ -376,10 +386,18 @@ class CampaignController extends Controller
             'name'                     => ['required', 'string', 'max:128'],
             'channel'                  => ['required', 'in:whatsapp,sms,email'],
             'whatsapp_phone_number_id' => ['nullable', 'string'],
+            'whatsapp_channel_type'    => ['nullable', 'in:cloud_api,whatsapp_web'],
             'audience_type'            => ['required', 'in:segment,contact_list,tag,csv'],
             'audience_ref'             => ['nullable', 'string'],
             'template_ref'             => ['nullable', 'array'],
             'payload_json'             => ['nullable', 'array'],
+            'campaign_messages'        => ['nullable', 'array'],
+            'campaign_messages.*.type' => ['sometimes', 'in:text,image,video,document'],
+            'campaign_messages.*.body' => ['sometimes', 'nullable', 'string'],
+            'campaign_messages.*.url'  => ['sometimes', 'nullable', 'string'],
+            'campaign_messages.*.caption' => ['sometimes', 'nullable', 'string'],
+            'message_delay_min'        => ['nullable', 'integer', 'min:1', 'max:60'],
+            'message_delay_max'        => ['nullable', 'integer', 'min:1', 'max:60'],
             'schedule_at'              => ['nullable', 'date'],
             'timezone'                 => ['nullable', 'string', 'max:64'],
         ]);
@@ -390,6 +408,22 @@ class CampaignController extends Controller
      */
     private function assertWhatsAppCampaignReady(Campaign $campaign): void
     {
+        // WhatsApp Web (WAHA) — validate that a WAHA session is active and messages are defined.
+        if ($campaign->whatsapp_channel_type === 'whatsapp_web') {
+            $session = \App\Modules\WhatsappWeb\Models\WhatsappWebSession::where('workspace_id', $campaign->workspace_id)
+                ->where('status', 'active')
+                ->first();
+            if (! $session) {
+                abort(422, 'No active WhatsApp Web session. Connect your phone number via QR code first.');
+            }
+            $messages = $campaign->campaign_messages ?? [];
+            if (empty($messages)) {
+                abort(422, 'Add at least one message to the campaign before launching.');
+            }
+            return;
+        }
+
+        // WhatsApp Cloud API — validate template.
         $client = $campaign->whatsapp_phone_number_id
             ? CloudApiClient::forPhoneNumber($campaign->whatsapp_phone_number_id, $campaign->workspace_id)
             : CloudApiClient::forWorkspace($campaign->workspace_id);
@@ -451,12 +485,21 @@ class CampaignController extends Controller
             ]))
             ->values();
 
+        $wahaSession = \App\Modules\WhatsappWeb\Models\WhatsappWebSession::where('workspace_id', $workspaceId)
+            ->where('status', 'active')
+            ->first(['id', 'phone_e164', 'push_name', 'status']);
+
         return [
             'whatsappTemplates'    => $whatsappTemplates,
             'whatsappPhoneNumbers' => $whatsappPhoneNumbers,
             'segments'             => $segments,
             'tags'                 => $tags,
             'contactTokens'        => CampaignPersonalizer::availableContactTokens(),
+            'wahaSession'          => $wahaSession ? [
+                'phone_e164' => $wahaSession->phone_e164,
+                'push_name'  => $wahaSession->push_name,
+                'status'     => $wahaSession->status,
+            ] : null,
         ];
     }
 

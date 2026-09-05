@@ -20,6 +20,7 @@ class CampaignRecipient extends Model
     protected $fillable = [
         'campaign_id', 'contact_id', 'status', 'provider_message_id', 'tracking_token', 'unsubscribe_token',
         'sent_at', 'delivered_at', 'read_at', 'clicked_at', 'opted_out_at', 'failed_reason',
+        'channel_type', 'provider_response',
     ];
 
     protected function casts(): array
@@ -30,6 +31,7 @@ class CampaignRecipient extends Model
             'read_at' => 'datetime',
             'clicked_at' => 'datetime',
             'opted_out_at' => 'datetime',
+            'provider_response' => 'array',
         ];
     }
 
