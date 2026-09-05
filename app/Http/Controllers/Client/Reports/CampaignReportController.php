@@ -61,13 +61,18 @@ class CampaignReportController extends Controller
             ->when($request->input('status'), fn ($q, $s) => $q->where('status', $s))
             ->orderByDesc('updated_at');
 
-        $recipients = $recipientsQuery->paginate(50)->withQueryString();
+        $recipients = $recipientsQuery->paginate(50)->withQueryString()->through(function ($r) {
+            return array_merge($r->toArray(), [
+                'channel_type'      => $r->channel_type,
+                'provider_response' => $r->provider_response,
+            ]);
+        });
 
         // Average lag (in seconds) between status transitions.
         $lag = $analytics->campaignDeliveryLag($campaign->id);
 
         return Inertia::render('client/Reports/Campaign/Show', [
-            'campaign' => $campaign->only('id', 'uuid', 'name', 'channel', 'status', 'created_at'),
+            'campaign' => $campaign->only('id', 'uuid', 'name', 'channel', 'whatsapp_channel_type', 'status', 'created_at'),
             'kpis' => $kpis,
             'funnel' => $analytics->campaignFunnel($campaign->id),
             'deliveryOverTime' => $analytics->campaignDeliveryOverTime($campaign->id),

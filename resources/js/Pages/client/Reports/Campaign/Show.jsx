@@ -173,6 +173,9 @@ export default function CampaignReportShow({
                                             {t('contacts_page.contact_alt')}
                                         </th>
                                         <th className="pb-2 text-left text-xs text-gray-500 dark:text-gray-400">
+                                            Channel
+                                        </th>
+                                        <th className="pb-2 text-left text-xs text-gray-500 dark:text-gray-400">
                                             {t('reports.col_status')}
                                         </th>
                                         <th className="pb-2 text-left text-xs text-gray-500 dark:text-gray-400">
@@ -185,7 +188,7 @@ export default function CampaignReportShow({
                                             {t('reports.col_read_at')}
                                         </th>
                                         <th className="pb-2 text-left text-xs text-gray-500 dark:text-gray-400">
-                                            {t('reports.col_reason')}
+                                            Response / Reason
                                         </th>
                                     </tr>
                                 </thead>
@@ -197,6 +200,22 @@ export default function CampaignReportShow({
                                             c.phone_e164 ||
                                             c.email ||
                                             `#${r.contact_id}`;
+
+                                        const channelTypeLabel =
+                                            r.channel_type === 'cloud_api' ? 'Meta API' :
+                                            r.channel_type === 'whatsapp_web' ? 'WA Web' :
+                                            r.channel_type ?? campaign.channel ?? '—';
+
+                                        const channelTypeColor =
+                                            r.channel_type === 'cloud_api' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300' :
+                                            r.channel_type === 'whatsapp_web' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300' :
+                                            'bg-gray-100 text-gray-600';
+
+                                        // Show provider message IDs from response array
+                                        const responseIds = Array.isArray(r.provider_response)
+                                            ? r.provider_response.map((p) => p?.id).filter(Boolean).join(', ')
+                                            : null;
+
                                         return (
                                             <tr key={r.id}>
                                                 <td className="py-2 text-gray-800 dark:text-gray-200">
@@ -204,6 +223,11 @@ export default function CampaignReportShow({
                                                     <div className="text-xs text-gray-400">
                                                         {c.phone_e164 || c.email}
                                                     </div>
+                                                </td>
+                                                <td className="py-2">
+                                                    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${channelTypeColor}`}>
+                                                        {channelTypeLabel}
+                                                    </span>
                                                 </td>
                                                 <td className="py-2">
                                                     <span
@@ -225,15 +249,23 @@ export default function CampaignReportShow({
                                                 <td className="py-2 text-gray-500">
                                                     {r.read_at ? formatInTz(r.read_at, userTz) : '—'}
                                                 </td>
-                                                <td className="py-2 text-gray-500 max-w-xs truncate" title={r.failed_reason ?? ''}>
-                                                    {r.failed_reason ?? '—'}
+                                                <td className="py-2 text-gray-500 max-w-xs">
+                                                    {r.failed_reason ? (
+                                                        <span className="text-red-500 truncate block" title={r.failed_reason}>
+                                                            {r.failed_reason}
+                                                        </span>
+                                                    ) : responseIds ? (
+                                                        <span className="truncate block text-xs font-mono text-gray-400" title={responseIds}>
+                                                            {responseIds.length > 30 ? responseIds.slice(0, 30) + '…' : responseIds}
+                                                        </span>
+                                                    ) : '—'}
                                                 </td>
                                             </tr>
                                         );
                                     })}
                                     {recipients.data.length === 0 && (
                                         <tr>
-                                            <td colSpan={6} className="py-6 text-center text-gray-400">
+                                            <td colSpan={7} className="py-6 text-center text-gray-400">
                                                 {t('reports.no_recipients')}
                                             </td>
                                         </tr>

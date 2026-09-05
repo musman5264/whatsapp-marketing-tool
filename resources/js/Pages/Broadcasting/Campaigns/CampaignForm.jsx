@@ -16,6 +16,11 @@ import {
     Save,
     Upload,
     Link as LinkIcon,
+    Plus,
+    Trash2,
+    Timer,
+    Smartphone,
+    MessageSquare,
 } from 'lucide-react';
 import { browserTz, formatInTz, tzLocalToUtcIso, utcToTzLocal } from '@/Utils/datetime';
 import { ChannelBrandIcon } from '@/Components/BrandIcons';
@@ -58,6 +63,7 @@ function defaultInitialData(campaign, userTz) {
             name: campaign.name ?? '',
             channel: campaign.channel ?? 'whatsapp',
             whatsapp_phone_number_id: campaign.whatsapp_phone_number_id ?? '',
+            whatsapp_channel_type: campaign.whatsapp_channel_type ?? 'cloud_api',
             audience_type: campaign.audience_type ?? 'segment',
             audience_ref: campaign.audience_ref ?? '',
             template_ref: {
@@ -74,6 +80,9 @@ function defaultInitialData(campaign, userTz) {
                 track_opens: campaign.payload_json?.track_opens ?? true,
                 track_clicks: campaign.payload_json?.track_clicks ?? false,
             },
+            campaign_messages: campaign.campaign_messages ?? [{ type: 'text', body: '', url: '', caption: '' }],
+            message_delay_min: campaign.message_delay_min ?? 5,
+            message_delay_max: campaign.message_delay_max ?? 8,
             schedule_at: campaign.schedule_at ? utcToTzLocal(campaign.schedule_at, tz) : '',
             timezone: tz,
         };
@@ -83,10 +92,14 @@ function defaultInitialData(campaign, userTz) {
         name: '',
         channel: 'whatsapp',
         whatsapp_phone_number_id: '',
+        whatsapp_channel_type: 'cloud_api',
         audience_type: 'segment',
         audience_ref: '',
         template_ref: { name: '', language: 'en', components: [] },
         payload_json: { subject: '', body: '', from_email: '', from_name: '', reply_to: '', track_opens: true, track_clicks: false },
+        campaign_messages: [{ type: 'text', body: '', url: '', caption: '' }],
+        message_delay_min: 5,
+        message_delay_max: 8,
         schedule_at: '',
         timezone: fallbackTz,
     };
@@ -246,6 +259,7 @@ export default function CampaignForm({
     segments = [],
     tags = [],
     contactTokens = [],
+    wahaSession = null,
 }) {
     const { t } = useTranslation();
     const [step, setStep] = useState(0);
@@ -390,10 +404,14 @@ export default function CampaignForm({
                 name: data.name,
                 channel: data.channel,
                 whatsapp_phone_number_id: data.whatsapp_phone_number_id || null,
+                whatsapp_channel_type: data.whatsapp_channel_type || 'cloud_api',
                 audience_type: data.audience_type,
                 audience_ref: data.audience_ref || null,
                 template_ref: data.template_ref,
                 payload_json: data.payload_json,
+                campaign_messages: data.campaign_messages,
+                message_delay_min: data.message_delay_min,
+                message_delay_max: data.message_delay_max,
                 timezone: data.timezone,
                 schedule_at: data.schedule_at
                     ? tzLocalToUtcIso(data.schedule_at, data.timezone || 'UTC')
@@ -436,6 +454,13 @@ export default function CampaignForm({
         }
         if (step === 2) {
             if (data.channel === 'whatsapp') {
+                if (data.whatsapp_channel_type === 'whatsapp_web') {
+                    // At least one message must have content
+                    return (data.campaign_messages || []).some((m) =>
+                        (m.type === 'text' && (m.body || '').trim()) ||
+                        (['image', 'video', 'document'].includes(m.type) && (m.url || '').trim())
+                    );
+                }
                 return !!data.template_ref.name;
             }
             if (data.channel === 'sms') return (data.payload_json.body || '').trim().length > 0;
@@ -561,6 +586,7 @@ export default function CampaignForm({
                                 setData={setData}
                                 errors={errors}
                                 whatsappPhoneNumbers={whatsappPhoneNumbers}
+                                wahaSession={wahaSession}
                             />
                         )}
 
@@ -587,6 +613,7 @@ export default function CampaignForm({
                                 insertTokenIntoTextarea={insertTokenIntoTextarea}
                                 errors={errors}
                                 campaignName={data.name}
+                                wahaSession={wahaSession}
                             />
                         )}
 
@@ -684,7 +711,7 @@ export default function CampaignForm({
 
 // ─── Step components ──────────────────────────────────────────────────────────
 
-function ChannelStep({ data, setData, errors, whatsappPhoneNumbers = [] }) {
+function ChannelStep({ data, setData, errors, whatsappPhoneNumbers = [], wahaSession = null }) {
     const { t } = useTranslation();
     return (
         <>
@@ -770,6 +797,45 @@ function ChannelStep({ data, setData, errors, whatsappPhoneNumbers = [] }) {
                         </div>
                     )}
                     <FieldError message={errors.whatsapp_phone_number_id} />
+                </div>
+            )}
+
+            {/* WhatsApp connection type — show when WAHA session is active */}
+            {data.channel === 'whatsapp' && wahaSession && (
+                <div>
+                    <label className="text-sm font-medium text-neutral-700 dark:text-neutral-300 block mb-2">
+                        WhatsApp Connection
+                    </label>
+                    <div className="grid grid-cols-2 gap-3">
+                        <button
+                            type="button"
+                            onClick={() => setData('whatsapp_channel_type', 'cloud_api')}
+                            className={`rounded-xl border p-4 text-sm font-medium transition flex flex-col items-center gap-2 ${
+                                data.whatsapp_channel_type === 'cloud_api'
+                                    ? 'border-brand-600 bg-brand-50 dark:bg-brand-900/20 text-brand-700 dark:text-brand-300'
+                                    : 'border-neutral-200 dark:border-neutral-700 text-neutral-700 dark:text-neutral-300 hover:border-brand-300'
+                            }`}
+                        >
+                            <MessageSquare className="h-6 w-6" />
+                            <span>Meta Cloud API</span>
+                            <span className="text-xs font-normal text-neutral-500">Templates only</span>
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setData('whatsapp_channel_type', 'whatsapp_web')}
+                            className={`rounded-xl border p-4 text-sm font-medium transition flex flex-col items-center gap-2 ${
+                                data.whatsapp_channel_type === 'whatsapp_web'
+                                    ? 'border-brand-600 bg-brand-50 dark:bg-brand-900/20 text-brand-700 dark:text-brand-300'
+                                    : 'border-neutral-200 dark:border-neutral-700 text-neutral-700 dark:text-neutral-300 hover:border-brand-300'
+                            }`}
+                        >
+                            <Smartphone className="h-6 w-6" />
+                            <span>WhatsApp Web (QR)</span>
+                            <span className="text-xs font-normal text-neutral-500">
+                                {wahaSession.push_name || wahaSession.phone_e164}
+                            </span>
+                        </button>
+                    </div>
                 </div>
             )}
 
@@ -978,13 +1044,189 @@ function ContentStep({
     insertTokenIntoTextarea,
     errors,
     campaignName,
+    wahaSession,
 }) {
     const { t } = useTranslation();
+
+    const updateMessage = (idx, patch) => {
+        const msgs = [...(data.campaign_messages || [])];
+        msgs[idx] = { ...msgs[idx], ...patch };
+        setData('campaign_messages', msgs);
+    };
+
+    const addMessage = () => {
+        setData('campaign_messages', [...(data.campaign_messages || []), { type: 'text', body: '', url: '', caption: '' }]);
+    };
+
+    const removeMessage = (idx) => {
+        const msgs = (data.campaign_messages || []).filter((_, i) => i !== idx);
+        setData('campaign_messages', msgs.length ? msgs : [{ type: 'text', body: '', url: '', caption: '' }]);
+    };
+
     return (
         <>
             <h3 className="font-medium text-neutral-800 dark:text-neutral-200">{t('campaign.message_content')}</h3>
 
-            {data.channel === 'whatsapp' && (
+            {data.channel === 'whatsapp' && data.whatsapp_channel_type === 'whatsapp_web' ? (
+                /* ── WhatsApp Web: custom multi-message composer ── */
+                <div className="space-y-4">
+                    <div className="flex items-center gap-2 text-xs text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded-lg px-3 py-2">
+                        <Smartphone className="h-4 w-4 shrink-0" />
+                        Sending via WhatsApp Web — compose any text, image, or video messages.
+                        Each message will be sent with a {data.message_delay_min}–{data.message_delay_max}s delay between them.
+                    </div>
+
+                    {(data.campaign_messages || []).map((msg, idx) => (
+                        <div key={idx} className="rounded-lg border border-neutral-200 dark:border-neutral-700 p-4 space-y-3">
+                            <div className="flex items-center justify-between">
+                                <span className="text-xs font-semibold uppercase tracking-wider text-neutral-500">
+                                    Message {idx + 1}
+                                </span>
+                                {(data.campaign_messages || []).length > 1 && (
+                                    <button
+                                        type="button"
+                                        onClick={() => removeMessage(idx)}
+                                        className="text-red-500 hover:text-red-700 transition"
+                                    >
+                                        <Trash2 className="h-4 w-4" />
+                                    </button>
+                                )}
+                            </div>
+
+                            {/* Message type selector */}
+                            <div className="flex gap-1.5">
+                                {[
+                                    { v: 'text', label: 'Text' },
+                                    { v: 'image', label: 'Image' },
+                                    { v: 'video', label: 'Video' },
+                                    { v: 'document', label: 'File' },
+                                ].map(({ v, label }) => (
+                                    <button
+                                        key={v}
+                                        type="button"
+                                        onClick={() => updateMessage(idx, { type: v })}
+                                        className={`rounded-md px-3 py-1 text-xs font-medium transition ${
+                                            msg.type === v
+                                                ? 'bg-brand-600 text-white'
+                                                : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-300 hover:bg-neutral-200 dark:hover:bg-neutral-700'
+                                        }`}
+                                    >
+                                        {label}
+                                    </button>
+                                ))}
+                            </div>
+
+                            {msg.type === 'text' ? (
+                                <div>
+                                    <div className="flex items-center justify-between gap-3 mb-1">
+                                        <label className="text-xs font-medium text-neutral-600 dark:text-neutral-400">Message text</label>
+                                        <TokenPicker tokens={contactTokens} onPick={(tok) => updateMessage(idx, { body: (msg.body || '') + tok })} />
+                                    </div>
+                                    <textarea
+                                        rows={4}
+                                        value={msg.body || ''}
+                                        onChange={(e) => updateMessage(idx, { body: e.target.value })}
+                                        placeholder="Type your message… Use {{contact.first_name}} for personalisation."
+                                        className={`${inputClass} resize-none`}
+                                    />
+                                </div>
+                            ) : (
+                                <>
+                                    <div>
+                                        <label className="text-xs font-medium text-neutral-600 dark:text-neutral-400">
+                                            {msg.type === 'document' ? 'File' : msg.type.charAt(0).toUpperCase() + msg.type.slice(1)} URL
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={msg.url || ''}
+                                            onChange={(e) => updateMessage(idx, { url: e.target.value })}
+                                            placeholder={
+                                                msg.type === 'image' ? 'https://example.com/photo.jpg' :
+                                                msg.type === 'video' ? 'https://example.com/video.mp4' :
+                                                'https://example.com/file.pdf'
+                                            }
+                                            className={inputClass}
+                                        />
+                                    </div>
+                                    {msg.type === 'document' && (
+                                        <div>
+                                            <label className="text-xs font-medium text-neutral-600 dark:text-neutral-400">Filename (optional)</label>
+                                            <input
+                                                type="text"
+                                                value={msg.filename || ''}
+                                                onChange={(e) => updateMessage(idx, { filename: e.target.value })}
+                                                placeholder="document.pdf"
+                                                className={inputClass}
+                                            />
+                                        </div>
+                                    )}
+                                    <div>
+                                        <div className="flex items-center justify-between gap-3 mb-1">
+                                            <label className="text-xs font-medium text-neutral-600 dark:text-neutral-400">
+                                                Caption <span className="font-normal text-neutral-400">(optional)</span>
+                                            </label>
+                                            <TokenPicker tokens={contactTokens} onPick={(tok) => updateMessage(idx, { caption: (msg.caption || '') + tok })} />
+                                        </div>
+                                        <textarea
+                                            rows={2}
+                                            value={msg.caption || ''}
+                                            onChange={(e) => updateMessage(idx, { caption: e.target.value })}
+                                            placeholder="Optional caption…"
+                                            className={`${inputClass} resize-none`}
+                                        />
+                                    </div>
+                                </>
+                            )}
+                        </div>
+                    ))}
+
+                    <button
+                        type="button"
+                        onClick={addMessage}
+                        className="flex items-center gap-2 rounded-lg border border-dashed border-brand-400 dark:border-brand-600 px-4 py-2.5 text-sm font-medium text-brand-600 dark:text-brand-400 hover:bg-brand-50 dark:hover:bg-brand-900/20 transition w-full justify-center"
+                    >
+                        <Plus className="h-4 w-4" /> Add Another Message
+                    </button>
+
+                    {/* Message frequency control */}
+                    <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 p-4 space-y-3">
+                        <div className="flex items-center gap-2 text-sm font-medium text-neutral-800 dark:text-neutral-200">
+                            <Timer className="h-4 w-4" /> Message Frequency (Anti-block Delay)
+                        </div>
+                        <p className="text-xs text-neutral-500 dark:text-neutral-400">
+                            Delay between messages to the same contact (recommended: 5–8 seconds for WhatsApp Web to avoid being blocked).
+                        </p>
+                        <div className="grid grid-cols-2 gap-3">
+                            <div>
+                                <label className="text-xs font-medium text-neutral-600 dark:text-neutral-400">Min delay (seconds)</label>
+                                <input
+                                    type="number"
+                                    min={1}
+                                    max={60}
+                                    value={data.message_delay_min}
+                                    onChange={(e) => setData('message_delay_min', parseInt(e.target.value) || 5)}
+                                    className={inputClass}
+                                />
+                            </div>
+                            <div>
+                                <label className="text-xs font-medium text-neutral-600 dark:text-neutral-400">Max delay (seconds)</label>
+                                <input
+                                    type="number"
+                                    min={1}
+                                    max={60}
+                                    value={data.message_delay_max}
+                                    onChange={(e) => setData('message_delay_max', parseInt(e.target.value) || 8)}
+                                    className={inputClass}
+                                />
+                            </div>
+                        </div>
+                        <div className="text-xs text-neutral-500 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-md px-3 py-2">
+                            ⚡ Current: random delay of {data.message_delay_min}–{data.message_delay_max}s between each message within a contact.
+                        </div>
+                    </div>
+                </div>
+            ) : data.channel === 'whatsapp' ? (
+                /* ── WhatsApp Cloud API: Meta templates ── */
                 <>
                     <div>
                         <label className="text-sm font-medium text-neutral-700 dark:text-neutral-300">
@@ -1066,7 +1308,7 @@ function ContentStep({
                         </p>
                     )}
                 </>
-            )}
+            ) : null}
 
             {data.channel === 'sms' && (
                 <BodyTextarea
@@ -1113,7 +1355,6 @@ function ContentStep({
 
 function ScheduleStep({ data, setData, errors }) {
     const { t } = useTranslation();
-    // Build a friendly preview that proves what UTC instant we'll persist.
     const tz = data.timezone || browserTz();
     const utcIso = data.schedule_at ? tzLocalToUtcIso(data.schedule_at, tz) : null;
     const localPreview = utcIso ? formatInTz(utcIso, tz) : null;
@@ -1170,6 +1411,45 @@ function ScheduleStep({ data, setData, errors }) {
                     )}
                 </div>
             )}
+
+            {/* Message frequency — shown for all channels but especially important for WAHA */}
+            <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 p-4 space-y-3 mt-2">
+                <div className="flex items-center gap-2 text-sm font-medium text-neutral-800 dark:text-neutral-200">
+                    <Timer className="h-4 w-4" /> Message Frequency Control
+                </div>
+                <p className="text-xs text-neutral-500 dark:text-neutral-400">
+                    {data.channel === 'whatsapp' && data.whatsapp_channel_type === 'whatsapp_web'
+                        ? 'Random delay between each message in a multi-message send. Keep 5–8s to avoid WhatsApp Web blocks.'
+                        : 'Delay between messages sent to each contact. Recommended 5–8 seconds for WhatsApp Web connections.'}
+                </p>
+                <div className="grid grid-cols-2 gap-3">
+                    <div>
+                        <label className="text-xs font-medium text-neutral-600 dark:text-neutral-400">Min delay (seconds)</label>
+                        <input
+                            type="number"
+                            min={1}
+                            max={60}
+                            value={data.message_delay_min}
+                            onChange={(e) => setData('message_delay_min', parseInt(e.target.value) || 5)}
+                            className={inputClass}
+                        />
+                    </div>
+                    <div>
+                        <label className="text-xs font-medium text-neutral-600 dark:text-neutral-400">Max delay (seconds)</label>
+                        <input
+                            type="number"
+                            min={1}
+                            max={60}
+                            value={data.message_delay_max}
+                            onChange={(e) => setData('message_delay_max', parseInt(e.target.value) || 8)}
+                            className={inputClass}
+                        />
+                    </div>
+                </div>
+                <p className="text-xs text-amber-700 dark:text-amber-400">
+                    ⚠ For WhatsApp Web (QR) sessions, keep the delay at 5–8 seconds to avoid your number being flagged or blocked.
+                </p>
+            </div>
         </>
     );
 }
@@ -1212,11 +1492,27 @@ function ReviewStep({
                         <dd className="text-neutral-900 dark:text-neutral-100">{v}</dd>
                     </div>
                 ))}
-                {data.channel === 'whatsapp' && data.template_ref?.name && (
+                {data.channel === 'whatsapp' && (
+                    <div className="flex gap-3 sm:col-span-2">
+                        <dt className="w-32 shrink-0 font-medium text-neutral-500 dark:text-neutral-400">Connection</dt>
+                        <dd className="text-neutral-900 dark:text-neutral-100">
+                            {data.whatsapp_channel_type === 'whatsapp_web' ? 'WhatsApp Web (QR)' : 'Meta Cloud API'}
+                        </dd>
+                    </div>
+                )}
+                {data.channel === 'whatsapp' && data.whatsapp_channel_type !== 'whatsapp_web' && data.template_ref?.name && (
                     <div className="flex gap-3 sm:col-span-2">
                         <dt className="w-32 shrink-0 font-medium text-neutral-500 dark:text-neutral-400">{t('campaign.template')}</dt>
                         <dd className="text-neutral-900 dark:text-neutral-100 font-mono">
                             {data.template_ref.name} ({data.template_ref.language})
+                        </dd>
+                    </div>
+                )}
+                {data.channel === 'whatsapp' && data.whatsapp_channel_type === 'whatsapp_web' && (
+                    <div className="flex gap-3 sm:col-span-2">
+                        <dt className="w-32 shrink-0 font-medium text-neutral-500 dark:text-neutral-400">Messages</dt>
+                        <dd className="text-neutral-900 dark:text-neutral-100">
+                            {(data.campaign_messages || []).length} message(s) · {data.message_delay_min}–{data.message_delay_max}s delay
                         </dd>
                     </div>
                 )}
@@ -1654,7 +1950,28 @@ function PreviewPane({ data, selectedTemplate, slots, contactTokens, audiencePre
     const { t } = useTranslation();
     let content = null;
 
-    if (data.channel === 'whatsapp') {
+    if (data.channel === 'whatsapp' && data.whatsapp_channel_type === 'whatsapp_web') {
+        const msgs = data.campaign_messages || [];
+        content = (
+            <div className="space-y-2">
+                {msgs.map((msg, i) => (
+                    <div key={i} className="rounded-2xl rounded-tl-none bg-emerald-50 dark:bg-emerald-900/20 px-3 py-2 text-sm text-neutral-800 dark:text-neutral-100 shadow-sm">
+                        {msg.type === 'text' ? (
+                            <span className="whitespace-pre-line">{msg.body || '—'}</span>
+                        ) : (
+                            <div className="flex flex-col gap-1">
+                                <span className="text-xs font-semibold uppercase text-neutral-400">{msg.type}</span>
+                                {msg.url && <span className="truncate text-xs text-blue-500">{msg.url}</span>}
+                                {msg.caption && <span className="whitespace-pre-line">{msg.caption}</span>}
+                                {!msg.url && !msg.caption && <span className="text-neutral-400">—</span>}
+                            </div>
+                        )}
+                    </div>
+                ))}
+                {msgs.length === 0 && <span className="text-neutral-400">No messages yet</span>}
+            </div>
+        );
+    } else if (data.channel === 'whatsapp') {
         const templateBody = pickPreviewText(selectedTemplate?.components ?? []);
         const rendered = renderPreview(templateBody, slots, contactTokens);
         content = (

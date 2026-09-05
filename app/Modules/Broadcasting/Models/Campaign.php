@@ -49,17 +49,22 @@ class Campaign extends Model
     }
 
     protected $fillable = [
-        'workspace_id', 'name', 'channel', 'whatsapp_phone_number_id', 'audience_type', 'audience_ref',
-        'template_ref', 'payload_json', 'schedule_at', 'timezone', 'status', 'totals_json', 'created_by',
+        'workspace_id', 'name', 'channel', 'whatsapp_phone_number_id', 'whatsapp_channel_type',
+        'audience_type', 'audience_ref', 'template_ref', 'payload_json',
+        'campaign_messages', 'message_delay_min', 'message_delay_max',
+        'schedule_at', 'timezone', 'status', 'totals_json', 'created_by',
     ];
 
     protected function casts(): array
     {
         return [
-            'template_ref' => 'array',
-            'payload_json' => 'array',
-            'totals_json' => 'array',
-            'schedule_at' => 'datetime',
+            'template_ref'      => 'array',
+            'payload_json'      => 'array',
+            'campaign_messages' => 'array',
+            'totals_json'       => 'array',
+            'schedule_at'       => 'datetime',
+            'message_delay_min' => 'integer',
+            'message_delay_max' => 'integer',
         ];
     }
 
