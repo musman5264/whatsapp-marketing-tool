@@ -12,8 +12,12 @@ COPY jsconfig.json* tsconfig.json* ./
 RUN npm run build
 
 # ── Stage 2: PHP dependencies ───────────────────────────────────────────────
+# composer install --optimize-autoloader needs every autoload path declared
+# in composer.json (app/ PSR-4 root, database/ factories+seeders, and the
+# app/Modules/Integrations/database/seeders/ classmap) present to scan.
 FROM composer:2 AS vendor
 WORKDIR /app
+COPY app app
 COPY database database
 COPY composer.json composer.lock ./
 RUN composer install \
