@@ -409,7 +409,16 @@ class AutomationEngine
             'wait' => $ok('Would wait '.((int) ($data['amount'] ?? 1)).' '.($data['unit'] ?? 'minutes').' (skipped in test).'),
             'webhook' => ($data['url'] ?? '') === ''
                 ? $err('Webhook URL missing.')
-                : $ok('Would call '.strtoupper($data['method'] ?? 'POST').' '.$this->snippet($render($data['url']), 50), ['context_update' => ['webhook_status' => 200]]),
+                : (function () use ($data, $ok, $render): array {
+                    $seed = ['webhook_status' => 200];
+                    $rv = trim((string) ($data['result_var'] ?? ''));
+                    if ($rv !== '') {
+                        $seed[$rv] = '{"found":true,"reply_text":"Sample response"}';
+                        $seed["{$rv}_found"] = 'true';
+                        $seed["{$rv}_reply_text"] = 'Sample response';
+                    }
+                    return $ok('Would call '.strtoupper($data['method'] ?? 'POST').' '.$this->snippet($render($data['url']), 50), ['context_update' => $seed]);
+                })(),
             'run_subflow' => $ok('Would run sub-flow '.($data['subflow_name'] ?? ($data['automation_uuid'] ?? '?')).'.'),
             'ai_reply' => $ok('Would generate an AI reply'.(! empty($data['chatbot_id']) ? ' via chatbot #'.$data['chatbot_id'] : '').' and send it.', ['context_update' => ['last_ai_reply' => '[AI generated reply]']]),
             'add_tag' => ($data['tag'] ?? '') === '' ? $skip('No tag name.') : $ok('Would add tag "'.$data['tag'].'".'),
@@ -952,11 +961,30 @@ class AutomationEngine
             ? $request->get($url, $payload)
             : $request->{$method}($url, array_merge($payload, ['context' => $context]));
 
+        $contextUpdate = ['webhook_status' => $response->status()];
+
+        $resultVar = trim((string) ($data['result_var'] ?? ''));
+        if ($resultVar !== '') {
+            $body = $response->json();
+            if (is_array($body)) {
+                // Full JSON string accessible as {{result_var}}
+                $contextUpdate[$resultVar] = $response->body();
+                // Each top-level scalar accessible as {{result_var_fieldname}}
+                foreach ($body as $key => $value) {
+                    if (is_scalar($value) || $value === null) {
+                        $contextUpdate["{$resultVar}_{$key}"] = (string) ($value ?? '');
+                    }
+                }
+            } else {
+                $contextUpdate[$resultVar] = $response->body();
+            }
+        }
+
         return [
             'status' => 'ok',
             'message' => "Webhook {$method} {$url} → {$response->status()}",
-            'output' => ['status' => $response->status()],
-            'context_update' => ['webhook_status' => $response->status()],
+            'output' => ['status' => $response->status(), 'result_var' => $resultVar ?: null],
+            'context_update' => $contextUpdate,
         ];
     }
 

@@ -174,6 +174,10 @@ function collectFlowVariables(nodes) {
         if (nt === 'update_contact' && typeof d.field === 'string' && d.field.startsWith('context.')) {
             vars.add(d.field.slice('context.'.length));
         }
+        if (nt === 'webhook' && d.result_var) {
+            const rv = String(d.result_var).trim();
+            if (rv) vars.add(rv);
+        }
 
         for (const k of TEXT_KEYS) {
             const v = d[k];
@@ -1551,6 +1555,7 @@ function GoogleFormsFields({ d, set }) {
 
 function WebhookFields({ d, set }) {
     const { t } = useTranslation();
+    const rv = (d.result_var ?? '').trim();
     return (
         <>
             <Field label={t('automation.field_url_required')}>
@@ -1569,6 +1574,20 @@ function WebhookFields({ d, set }) {
             </Field>
             <Field label={t('automation.field_payload_json_optional')}>
                 <textarea className={textareaCls} rows={4} value={d.payload ?? ''} onChange={e => set('payload', e.target.value)} placeholder={'{"contact_id": "{{contact.id}}"}'} />
+            </Field>
+            <Field label={t('automation.field_save_response_as', 'Save response as variable')}>
+                <input
+                    className={inputCls}
+                    value={d.result_var ?? ''}
+                    onChange={e => set('result_var', e.target.value.replace(/\s/g, '_'))}
+                    placeholder="e.g. customer"
+                />
+                {rv && (
+                    <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">
+                        Use <code className="font-mono">{`{{${rv}_fieldname}}`}</code> in messages below.
+                        e.g. <code className="font-mono">{`{{${rv}_reply_text}}`}</code>
+                    </p>
+                )}
             </Field>
         </>
     );
