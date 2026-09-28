@@ -244,4 +244,3 @@ EXPOSE 80
 ENTRYPOINT ["entrypoint.sh"]
 
 CMD ["supervisord", "-n", "-c", "/etc/supervisor/supervisord.conf"]
-```
