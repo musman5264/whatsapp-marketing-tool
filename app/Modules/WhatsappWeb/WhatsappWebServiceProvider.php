@@ -4,6 +4,7 @@ namespace App\Modules\WhatsappWeb;
 
 use App\Events\MessageReceived;
 use App\Modules\WhatsappWeb\Console\WhatsappWebCommand;
+use App\Modules\WhatsappWeb\Console\WhatsappWebDiagnoseCommand;
 use App\Modules\WhatsappWeb\Console\WhatsappWebResubscribeCommand;
 use App\Modules\WhatsappWeb\Console\WhatsappWebSyncCommand;
 use App\Modules\WhatsappWeb\Listeners\SaveContactToPhone;
@@ -43,6 +44,7 @@ class WhatsappWebServiceProvider extends ServiceProvider
                 WhatsappWebCommand::class,
                 WhatsappWebSyncCommand::class,
                 WhatsappWebResubscribeCommand::class,
+                WhatsappWebDiagnoseCommand::class,
             ]);
         }
     }

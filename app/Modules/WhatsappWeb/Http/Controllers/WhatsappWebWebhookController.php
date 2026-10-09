@@ -50,6 +50,9 @@ class WhatsappWebWebhookController extends Controller
         $event = (string) ($payload['event'] ?? '');
         $eventId = $this->eventKey($payload);
 
+        // Diagnostics: remember that WAHA reached us (read by the health check).
+        \App\Modules\WhatsappWeb\Services\WhatsappWebHealth::recordWebhook($session->session_name, $event);
+
         // Event-level dedup. WAHA re-sends the same event several times (and the
         // WEBJS engine emits related events for one message); the atomic
         // insertOrIgnore means only the first caller proceeds.

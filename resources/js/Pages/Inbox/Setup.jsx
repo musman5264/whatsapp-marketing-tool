@@ -1118,6 +1118,22 @@ function CallReceiptSettings({ initial = {} }) {
         }
     }, []);
 
+    const [health, setHealth] = useState({ state: 'idle', checks: [], error: null });
+    const runHealth = useCallback(async () => {
+        setHealth({ state: 'busy', checks: [], error: null });
+        try {
+            const res = await fetch(route('client.whatsapp-web.health'), { headers: { 'Accept': 'application/json' } });
+            const json = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                setHealth({ state: 'error', checks: [], error: json.message ?? 'Health check failed.' });
+                return;
+            }
+            setHealth({ state: 'done', checks: json.checks ?? [], error: null });
+        } catch {
+            setHealth({ state: 'error', checks: [], error: 'Could not reach the server.' });
+        }
+    }, []);
+
     const toggleAutoReject = () => {
         const next = !autoReject;
         setAutoReject(next);
@@ -1223,6 +1239,38 @@ function CallReceiptSettings({ initial = {} }) {
                 >
                     {syncState === 'busy' ? t('inbox.saving') : t('inbox.sync_now_button', 'Sync now')}
                 </button>
+            </div>
+
+            <div className="border-t border-neutral-100 dark:border-neutral-800 pt-3">
+                <div className="flex items-start justify-between gap-3">
+                    <div>
+                        <span className="text-xs text-neutral-600 dark:text-neutral-300">{t('inbox.health_check_label', 'Connection health check')}</span>
+                        <p className="mt-0.5 text-[10px] text-neutral-400 leading-relaxed">{t('inbox.health_check_help', 'Checks every step between WhatsApp and this inbox and tells you which one is broken.')}</p>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={runHealth}
+                        disabled={health.state === 'busy'}
+                        className="shrink-0 rounded-lg border border-neutral-300 dark:border-neutral-600 px-2.5 py-1 text-xs font-medium text-neutral-700 dark:text-neutral-200 hover:bg-neutral-50 dark:hover:bg-neutral-800 disabled:opacity-50"
+                    >
+                        {health.state === 'busy' ? t('inbox.health_check_running', 'Checking…') : t('inbox.health_check_button', 'Run check')}
+                    </button>
+                </div>
+                {health.state === 'error' && <p className="mt-2 text-[11px] text-red-500">{health.error}</p>}
+                {health.state === 'done' && (
+                    <ul className="mt-2 space-y-1.5">
+                        {health.checks.map((c) => (
+                            <li key={c.key} className="text-[11px] leading-relaxed">
+                                <span className={c.status === 'ok' ? 'text-emerald-600' : c.status === 'warn' ? 'text-amber-600' : 'text-red-600'}>
+                                    {c.status === 'ok' ? '✔' : c.status === 'warn' ? '▲' : '✖'}
+                                </span>{' '}
+                                <span className="font-medium text-neutral-700 dark:text-neutral-200">{c.label}</span>
+                                <span className="text-neutral-500 dark:text-neutral-400"> — {c.detail}</span>
+                                {c.status !== 'ok' && c.hint && <div className="ml-4 text-neutral-500 dark:text-neutral-400">→ {c.hint}</div>}
+                            </li>
+                        ))}
+                    </ul>
+                )}
             </div>
         </div>
     );

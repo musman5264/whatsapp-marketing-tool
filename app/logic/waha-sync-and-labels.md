@@ -29,3 +29,8 @@
 - Whether the label endpoints work on the live number, and whether the contact PUT succeeds on NOWEB.
 
 **Tests:** `tests/Feature/WhatsappWeb/WahaSyncCoreTest.php`, `WahaLabelSyncTest.php`, `WahaContactSaverTest.php`, `tests/Feature/Inbox/LabelRuleEvaluatorTest.php`.
+
+## Health check (why chats/messages are not arriving)
+- `WhatsappWebHealth` (`app/Modules/WhatsappWeb/Services/WhatsappWebHealth.php`): read-only checks for engine status, webhook URL + event list registered in WAHA (`GET /api/sessions/{s}` → `config.webhooks`), last webhook received (cache key `whatsapp_web:last_webhook:{session}`, written by `WhatsappWebWebhookController`), latest stored in/out messages, realtime (config + one test broadcast on channel `whatsapp-health-check`), queue (`queue.default` vs the `queue:work redis` workers in `docker/supervisor/whatsmine.conf`) and scheduler heartbeat.
+- Entry points: `php artisan whatsapp-web:diagnose [--workspace=]`, `GET /app/whatsapp-web/health`, button **Run check** in Inbox → Setup.
+- The webhook token is masked in all output. Tests: `tests/Feature/WhatsappWeb/WhatsappWebHealthTest.php`.
