@@ -15,6 +15,7 @@ use App\Modules\Shared\Models\Message;
 use App\Modules\Shared\Services\ChannelManager;
 use App\Modules\Whatsapp\Models\WhatsappTemplate;
 use App\Modules\Whatsapp\Services\CloudApiClient;
+use App\Modules\WhatsappWeb\Services\EngineManager;
 use App\Notifications\ConversationHandoverNotification;
 use App\Services\StorageManager;
 use App\Support\Demo;
@@ -22,6 +23,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
@@ -527,6 +529,14 @@ class InboxController extends Controller
         $type = $message->type ?? 'image';
         $mediaId = $payload[$type]['id'] ?? $payload['media_id'] ?? null;
 
+        // WhatsApp-Web (WAHA) messages carry a `link` instead of a Cloud media id.
+        // The link points at the engine's file store, which the browser cannot reach
+        // and which needs the engine API key, so fetch it server-side.
+        $wahaLink = $payload[$type]['link'] ?? null;
+        if (! $mediaId && is_string($wahaLink) && $wahaLink !== '') {
+            return $this->cacheWahaMedia($message, $payload, $wahaLink);
+        }
+
         if (! $mediaId) {
             abort(404, 'No media available.');
         }
@@ -556,6 +566,96 @@ class InboxController extends Controller
         } catch (\Throwable $e) {
             abort(502, 'Could not fetch media: '.$e->getMessage());
         }
+    }
+
+    /**
+     * Download a WhatsApp-Web (WAHA) media file, cache it with the same storage
+     * pattern as Cloud media, and redirect to the cached copy.
+     *
+     * The request always goes to the configured engine origin. The link's path and
+     * query are kept but its host is replaced by the engine base URL, so the engine
+     * API key never leaves for another host and no arbitrary URL from a webhook
+     * payload is fetched. Error responses never include the key.
+     *
+     * @param  array<string, mixed>  $payload
+     */
+    private function cacheWahaMedia(Message $message, array $payload, string $link): RedirectResponse
+    {
+        $creds = app(EngineManager::class)->credentials();
+        $base = $creds?->baseUrl();
+        $baseParts = $base ? parse_url($base) : false;
+        if (! is_array($baseParts) || empty($baseParts['scheme']) || empty($baseParts['host'])) {
+            abort(503, 'WhatsApp Web engine is not configured.');
+        }
+
+        $linkParts = parse_url($link);
+        $path = is_array($linkParts) ? (string) ($linkParts['path'] ?? '') : '';
+        if ($path === '') {
+            abort(404, 'No media available.');
+        }
+
+        $origin = $baseParts['scheme'].'://'.$baseParts['host'].(isset($baseParts['port']) ? ':'.$baseParts['port'] : '');
+        $url = $origin.'/'.ltrim($path, '/').(isset($linkParts['query']) ? '?'.$linkParts['query'] : '');
+
+        $apiKey = $creds->apiKey();
+        try {
+            $req = Http::timeout(30)->withOptions(['allow_redirects' => ['max' => 3]]);
+            if ($apiKey) {
+                $req = $req->withHeaders(['X-Api-Key' => $apiKey]);
+            }
+            $response = $req->get($url);
+        } catch (\Throwable $e) {
+            Log::warning('WAHA media fetch failed (connection)', ['message_id' => $message->id, 'error' => $e->getMessage()]);
+            abort(502, 'Could not reach the WhatsApp Web engine for this media.');
+        }
+
+        if ($response->status() === 404) {
+            abort(404, 'This media is no longer available on the WhatsApp Web engine.');
+        }
+        if (! $response->successful()) {
+            Log::warning('WAHA media fetch failed (status)', ['message_id' => $message->id, 'status' => $response->status()]);
+            abort(502, 'The WhatsApp Web engine could not provide this media (HTTP '.$response->status().').');
+        }
+
+        $bytes = $response->body();
+        if ($bytes === '' || strlen($bytes) > 64 * 1024 * 1024) {
+            abort(502, 'The WhatsApp Web engine returned an empty or oversized media file.');
+        }
+
+        $rawType = trim(explode(';', (string) $response->header('Content-Type'))[0]);
+        $mimeType = ($rawType === '' || $rawType === 'application/octet-stream')
+            ? (string) ($payload['mime_type'] ?? 'application/octet-stream')
+            : $rawType;
+        $ext = $this->extensionForMime($mimeType);
+
+        $filename = $this->storageManager->prefixedPath("message-media/{$message->id}.{$ext}");
+        try {
+            $this->storageManager->disk()->put($filename, $bytes);
+        } catch (\Throwable $e) {
+            Log::warning('WAHA media store failed', ['message_id' => $message->id, 'error' => $e->getMessage()]);
+            abort(502, 'Could not store media.');
+        }
+
+        $previewUrl = $this->storageManager->disk()->url($filename);
+        $message->update(['payload' => array_merge($payload, ['preview_url' => $previewUrl, 'mime_type' => $mimeType])]);
+
+        return redirect($previewUrl);
+    }
+
+    /** File extension for a MIME type, e.g. image/jpeg → jpg, audio/mpeg → mp3. */
+    private function extensionForMime(string $mimeType): string
+    {
+        [$major, $minor] = array_pad(explode('/', strtolower($mimeType), 2), 2, 'bin');
+        $sub = preg_replace('/[^a-z0-9]/', '', explode('+', $minor)[0]) ?: 'bin';
+
+        return match (true) {
+            $sub === 'jpeg' => 'jpg',
+            $sub === 'octetstream' => 'bin',
+            $sub === 'plain' => 'txt',
+            $sub === 'quicktime' => 'mov',
+            $sub === 'mpeg' && $major === 'audio' => 'mp3',
+            default => $sub,
+        };
     }
 
     /** Upload a media file to WhatsApp and return the media_id */

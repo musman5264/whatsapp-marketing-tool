@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use App\Modules\Integrations\Services\CredentialResolver;
+use App\Services\RealtimeConfig;
 use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -115,17 +116,20 @@ class SecureHeaders
             $sources[] = parse_url($url, PHP_URL_HOST) ?: $url;
         }
 
-        // Realtime WebSocket host — the browser opens a wss:// connection here for
-        // live inbox updates. Covers self-hosted Reverb and hosted Pusher.
-        foreach ($this->realtimeHosts() as $host) {
-            $sources[] = 'wss://'.$host;
-            $sources[] = 'https://'.$host;
+        // Realtime WebSocket origins — the browser opens wss:// (and XHR fallback)
+        // connections for live inbox updates. Derived from the same resolver as the
+        // Inertia `pusher` prop, so CSP never blocks a socket the frontend opens.
+        foreach (RealtimeConfig::resolve()->connectOrigins() as $origin) {
+            $sources[] = $origin;
         }
         if (filled(config('services.onesignal.app_id'))) {
             $sources[] = 'https://onesignal.com';
             $sources[] = 'https://*.onesignal.com';
         }
         if ($this->metaSdkEnabled()) {
+            // The Meta JS SDK fetches its config from connect.facebook.net (script-src
+            // alone is not enough; connect-src governs the fetch).
+            $sources[] = 'https://connect.facebook.net';
             $sources[] = 'https://graph.facebook.com';
             $sources[] = 'https://www.facebook.com';
             $sources[] = 'https://web.facebook.com';
@@ -151,35 +155,5 @@ class SecureHeaders
         } catch (\Throwable) {
             return false;
         }
-    }
-
-    /**
-     * WebSocket host(s) the frontend connects to for realtime, derived from the
-     * active broadcaster.
-     *
-     * @return list<string>
-     */
-    private function realtimeHosts(): array
-    {
-        $hosts = [];
-        try {
-            $driver = config('broadcasting.default');
-
-            if ($driver === 'reverb') {
-                $h = config('broadcasting.connections.reverb.options.host');
-                if ($h) {
-                    $hosts[] = $h;
-                }
-            } elseif ($driver === 'pusher') {
-                $cluster = config('broadcasting.connections.pusher.options.cluster', 'mt1');
-                $custom = config('broadcasting.connections.pusher.options.host');
-                $hosts[] = $custom ?: "ws-{$cluster}.pusher.com";
-                $hosts[] = "sockjs-{$cluster}.pusher.com";
-            }
-        } catch (\Throwable) {
-            // fall through with an empty list
-        }
-
-        return array_values(array_filter(array_unique($hosts)));
     }
 }

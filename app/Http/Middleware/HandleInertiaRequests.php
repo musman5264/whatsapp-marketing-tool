@@ -12,6 +12,7 @@ use App\Modules\Broadcasting\Models\UsageMeter;
 use App\Modules\Integrations\Services\CredentialResolver;
 use App\Services\I18n\I18nFileService;
 use App\Services\OnboardingService;
+use App\Services\RealtimeConfig;
 use App\Services\StorageManager;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -118,40 +119,16 @@ class HandleInertiaRequests extends Middleware
     private function pusherPublicConfig(): array
     {
         try {
-            // Reverb speaks the Pusher protocol. When it's the active broadcaster,
-            // hand the frontend Reverb's key + an explicit ws host/port so
-            // laravel-echo connects to our server instead of pusher.com.
-            if (config('broadcasting.default') === 'reverb') {
-                $key = (string) config('broadcasting.connections.reverb.key');
+            // Same resolver the CSP and the server broadcaster use, so the frontend
+            // never tries to open a socket the CSP or the server would reject.
+            $realtime = RealtimeConfig::resolve();
+            $realtime->warnIfMisconfigured();
 
-                return [
-                    'key' => $key,
-                    'cluster' => '',
-                    'enabled' => $key !== '',
-                    'wsHost' => (string) config('broadcasting.connections.reverb.options.host'),
-                    'wsPort' => (int) config('broadcasting.connections.reverb.options.port', 443),
-                    'forceTLS' => config('broadcasting.connections.reverb.options.scheme', 'https') === 'https',
-                ];
-            }
-
-            $key = SystemSetting::get('pusher_app_key') ?: env('PUSHER_APP_KEY', '');
-            $cluster = SystemSetting::get('pusher_app_cluster') ?: env('PUSHER_APP_CLUSTER', 'mt1');
-            $dbFlag = SystemSetting::get('pusher_enabled');
-
-            // If the admin panel has explicitly disabled Pusher, respect that.
-            // Otherwise (setting absent/null) treat a non-empty key as enabled,
-            // so the .env credentials work out-of-the-box without a DB toggle.
-            $enabled = $dbFlag === 'false' ? false : ! empty($key);
-
-            return [
-                'key' => $key,
-                'cluster' => $cluster,
-                'enabled' => $enabled,
-            ];
+            return $realtime->toFrontendArray();
         } catch (\Throwable) {
-            $key = env('PUSHER_APP_KEY', '');
+            $key = (string) config('broadcasting.connections.pusher.key', '');
 
-            return ['key' => $key, 'cluster' => env('PUSHER_APP_CLUSTER', 'mt1'), 'enabled' => ! empty($key)];
+            return ['key' => $key, 'cluster' => (string) config('broadcasting.connections.pusher.options.cluster', 'mt1') ?: 'mt1', 'enabled' => $key !== ''];
         }
     }
 

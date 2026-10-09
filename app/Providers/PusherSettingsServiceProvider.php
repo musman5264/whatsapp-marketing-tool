@@ -2,7 +2,7 @@
 
 namespace App\Providers;
 
-use App\Models\SystemSetting;
+use App\Services\RealtimeConfig;
 use Illuminate\Support\ServiceProvider;
 
 class PusherSettingsServiceProvider extends ServiceProvider
@@ -11,20 +11,18 @@ class PusherSettingsServiceProvider extends ServiceProvider
     {
         $this->app->booted(function () {
             try {
-                $key     = SystemSetting::get('pusher_app_key');
-                $secret  = SystemSetting::get('pusher_app_secret');
-                $appId   = SystemSetting::get('pusher_app_id');
-                $cluster = SystemSetting::get('pusher_app_cluster');
-                $enabled = SystemSetting::get('pusher_enabled', 'false');
+                // Same rule RealtimeConfig uses for the frontend and CSP: admin
+                // Pusher credentials apply only when key + secret + app_id are all set.
+                $creds = RealtimeConfig::adminPusherCredentials();
 
-                if ($key && $secret && $appId) {
+                if ($creds !== null) {
                     config([
                         'broadcasting.default' => 'pusher',
-                        'broadcasting.connections.pusher.key' => $key,
-                        'broadcasting.connections.pusher.secret' => $secret,
-                        'broadcasting.connections.pusher.app_id' => $appId,
-                        'broadcasting.connections.pusher.options.cluster' => $cluster ?: 'mt1',
-                        'broadcasting.connections.pusher.options.host' => 'api-'.($cluster ?: 'mt1').'.pusher.com',
+                        'broadcasting.connections.pusher.key' => $creds['key'],
+                        'broadcasting.connections.pusher.secret' => $creds['secret'],
+                        'broadcasting.connections.pusher.app_id' => $creds['app_id'],
+                        'broadcasting.connections.pusher.options.cluster' => $creds['cluster'],
+                        'broadcasting.connections.pusher.options.host' => 'api-'.$creds['cluster'].'.pusher.com',
                     ]);
                 }
             } catch (\Throwable) {
