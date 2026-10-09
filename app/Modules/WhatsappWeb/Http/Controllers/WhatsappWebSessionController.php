@@ -16,6 +16,12 @@ use Illuminate\Support\Facades\Log;
  */
 class WhatsappWebSessionController extends Controller
 {
+    /** Per-number settings returned to the UI. */
+    private const SETTING_KEYS = [
+        'auto_reject_calls', 'call_reject_message', 'send_receipts',
+        'auto_label_enabled', 'mirror_wa_labels', 'auto_save_contacts',
+    ];
+
     public function __construct(
         private readonly EngineManager $engines,
         private readonly SessionProvisioner $provisioner,
@@ -109,7 +115,7 @@ class WhatsappWebSessionController extends Controller
             'status' => $session->status,
             'phone_e164' => $session->phone_e164,
             'push_name' => $session->push_name,
-            'settings' => $session->only(['auto_reject_calls', 'call_reject_message', 'send_receipts']),
+            'settings' => $session->only(self::SETTING_KEYS),
         ]);
     }
 
@@ -124,6 +130,9 @@ class WhatsappWebSessionController extends Controller
             'auto_reject_calls' => ['sometimes', 'boolean'],
             'call_reject_message' => ['sometimes', 'nullable', 'string', 'max:1000'],
             'send_receipts' => ['sometimes', 'boolean'],
+            'auto_label_enabled' => ['sometimes', 'boolean'],
+            'mirror_wa_labels' => ['sometimes', 'boolean'],
+            'auto_save_contacts' => ['sometimes', 'boolean'],
         ]);
 
         $session = $this->provisioner->ensure($this->workspaceId($request));
@@ -131,7 +140,7 @@ class WhatsappWebSessionController extends Controller
 
         return response()->json([
             'ok' => true,
-            'settings' => $session->fresh()->only(['auto_reject_calls', 'call_reject_message', 'send_receipts']),
+            'settings' => $session->fresh()->only(self::SETTING_KEYS),
         ]);
     }
 

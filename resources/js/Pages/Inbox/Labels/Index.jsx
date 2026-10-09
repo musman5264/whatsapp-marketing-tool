@@ -3,6 +3,7 @@ import ClientLayout from '@/Layouts/ClientLayout';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Plus, Pencil, Trash2, X, Check } from 'lucide-react';
+import LabelRulesSection from './LabelRulesSection';
 
 const PRESET_COLORS = [
     '#6366f1', '#8b5cf6', '#ec4899', '#f43f5e',
@@ -10,7 +11,7 @@ const PRESET_COLORS = [
     '#06b6d4', '#3b82f6', '#64748b', '#1f2937',
 ];
 
-export default function LabelsIndex({ labels }) {
+export default function LabelsIndex({ labels, rules = [], channelAccounts = [] }) {
     const { t } = useTranslation();
     const { flash } = usePage().props;
     const [showForm, setShowForm] = useState(false);
@@ -152,6 +153,8 @@ export default function LabelsIndex({ labels }) {
                         ))
                     )}
                 </div>
+
+                <LabelRulesSection rules={rules} labels={labels} channelAccounts={channelAccounts} />
             </div>
         </ClientLayout>
     );

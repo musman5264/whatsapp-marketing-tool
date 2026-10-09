@@ -3,6 +3,7 @@
 namespace App\Modules\Whatsapp\Services;
 
 use App\Events\MessageReceived;
+use App\Events\MessageSent;
 use App\Events\MessageStatusUpdated;
 use App\Modules\Broadcasting\Models\CampaignRecipient;
 use App\Modules\Shared\Contracts\ChannelDriverInterface;
@@ -335,9 +336,22 @@ class WhatsappDriver implements ChannelDriverInterface
      * @param  array<string,mixed>  $value
      * @param  array<string,mixed>  $msg
      */
-    public function ingestNormalizedInbound(array $value, array $msg): Message
+    public function ingestNormalizedInbound(array $value, array $msg, bool $historical = false): Message
     {
-        return $this->processInboundMessage($value, $msg);
+        return $this->processInboundMessage($value, $msg, $historical);
+    }
+
+    /**
+     * Ingest a message the account sent from the phone / another linked device
+     * (WAHA fromMe=true). Stored as direction 'out'; no MessageReceived, no unread
+     * bump; clears the chat's unread count because the owner has replied.
+     *
+     * @param  array<string,mixed>  $value
+     * @param  array<string,mixed>  $msg
+     */
+    public function ingestNormalizedOutbound(array $value, array $msg, string $status = 'sent', bool $historical = false): Message
+    {
+        return $this->processInboundMessage($value, $msg, $historical, outbound: true, outboundStatus: $status);
     }
 
     /**
@@ -476,7 +490,7 @@ class WhatsappDriver implements ChannelDriverInterface
         return true;
     }
 
-    private function processInboundMessage(array $value, array $msg): Message
+    private function processInboundMessage(array $value, array $msg, bool $historical = false, bool $outbound = false, string $outboundStatus = 'sent'): Message
     {
         $msgId = $msg['id'] ?? null;
 
@@ -494,6 +508,26 @@ class WhatsappDriver implements ChannelDriverInterface
             throw new \RuntimeException("Duplicate webhook skipped (concurrent): {$msgId}");
         }
 
+        // If storing fails after the idempotency key was taken, release the key so
+        // a retry (webhook redelivery, backfill) is not mistaken for a duplicate
+        // and the message is not lost.
+        try {
+            return $this->storeNormalizedMessage($value, $msg, $historical, $outbound, $outboundStatus);
+        } catch (\Throwable $e) {
+            if ($msgId) {
+                app(WebhookIdempotencyService::class)->release('whatsapp_msg', (string) $msgId);
+            }
+
+            throw $e;
+        }
+    }
+
+    /**
+     * @param  array<string,mixed>  $value
+     * @param  array<string,mixed>  $msg
+     */
+    private function storeNormalizedMessage(array $value, array $msg, bool $historical, bool $outbound, string $outboundStatus): Message
+    {
         // TEMP DIAGNOSTIC (remove once incoming poll shape is confirmed):
         // log the raw payload of unsupported / error-bearing messages so we can
         // see exactly how WhatsApp delivers polls and other unsupported types.
@@ -535,20 +569,25 @@ class WhatsappDriver implements ChannelDriverInterface
             ->where('phone_e164', '+'.$fromPhone)
             ->first();
 
-        $upsertData = [
-            'phone_e164' => '+'.$fromPhone,
-            'opt_in_whatsapp' => true,
-            'source' => 'whatsapp_inbound',
-        ];
-        if ($waName !== '' && (! $existing || trim((string) $existing->full_name) === '')) {
-            $parts = preg_split('/\s+/', $waName, 2);
-            $upsertData['first_name'] = $parts[0] ?? $waName;
-            if (! empty($parts[1])) {
-                $upsertData['last_name'] = $parts[1];
+        if ($outbound && $existing) {
+            // A phone-sent message must not overwrite the contact's source or opt-in.
+            $contact = $existing;
+        } else {
+            $upsertData = [
+                'phone_e164' => '+'.$fromPhone,
+                'opt_in_whatsapp' => ! $outbound,
+                'source' => $outbound ? 'whatsapp_web' : 'whatsapp_inbound',
+            ];
+            if ($waName !== '' && (! $existing || trim((string) $existing->full_name) === '')) {
+                $parts = preg_split('/\s+/', $waName, 2);
+                $upsertData['first_name'] = $parts[0] ?? $waName;
+                if (! empty($parts[1])) {
+                    $upsertData['last_name'] = $parts[1];
+                }
             }
-        }
 
-        $contact = $this->contactService->upsert($workspaceId, $upsertData);
+            $contact = $this->contactService->upsert($workspaceId, $upsertData);
+        }
 
         // Remember the raw WhatsApp push-name so {{whatsapp.name}} can use it
         // verbatim even if first/last name get edited later.
@@ -606,16 +645,48 @@ class WhatsappDriver implements ChannelDriverInterface
 
         $message = Message::create([
             'conversation_id' => $conversation->id,
-            'direction' => 'in',
+            'direction' => $outbound ? 'out' : 'in',
             'channel' => 'whatsapp',
             'type' => in_array($type, $allowedTypes, true) ? $type : 'unsupported',
             'payload' => $msg,
             'body' => $body,
-            'status' => 'delivered',
+            'status' => $outbound ? $outboundStatus : 'delivered',
             'provider_message_id' => $msg['id'] ?? null,
             'sent_by' => 'human',
             'sent_at' => now()->createFromTimestamp($msg['timestamp'] ?? time()),
         ]);
+
+        // Historical (backfilled) or outbound: never fire inbound automations/AI,
+        // never bump unread for old messages, and never move the thread backwards.
+        $isOld = $message->sent_at->lt(now()->subMinutes(5));
+        if ($outbound) {
+            $patch = [
+                'last_message_at' => $this->laterOf($conversation->last_message_at, $message->sent_at),
+            ];
+            if (! $historical) {
+                // The owner replied from their phone: the chat is no longer unread.
+                $patch['unread_count'] = 0;
+                if ($conversation->last_inbound_at && ! $conversation->first_response_at) {
+                    $patch['first_response_at'] = $message->sent_at;
+                }
+            }
+            $conversation->update($patch);
+            $message->load('conversation');
+            if (! $historical) {
+                MessageSent::dispatch($message);
+            }
+
+            return $message;
+        }
+
+        if ($historical && $isOld) {
+            $conversation->update([
+                'last_message_at' => $this->laterOf($conversation->last_message_at, $message->sent_at),
+                'last_inbound_at' => $this->laterOf($conversation->last_inbound_at, $message->sent_at),
+            ]);
+
+            return $message;
+        }
 
         $conversation->update([
             'last_message_at' => $message->sent_at,
@@ -632,6 +703,19 @@ class WhatsappDriver implements ChannelDriverInterface
         MessageReceived::dispatch($message);
 
         return $message;
+    }
+
+    /** The later of two timestamps (either may be null). */
+    private function laterOf(mixed $a, mixed $b): mixed
+    {
+        if (! $a) {
+            return $b;
+        }
+        if (! $b) {
+            return $a;
+        }
+
+        return $a->gt($b) ? $a : $b;
     }
 
     private function processStatusUpdate(array $status): void

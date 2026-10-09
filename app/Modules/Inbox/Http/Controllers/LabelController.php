@@ -5,10 +5,14 @@ namespace App\Modules\Inbox\Http\Controllers;
 use App\Http\Controllers\Controller;
 use App\Modules\Inbox\Models\ConversationActivity;
 use App\Modules\Inbox\Models\InboxLabel;
+use App\Modules\Inbox\Models\InboxLabelRule;
+use App\Modules\Shared\Models\ChannelAccount;
 use App\Modules\Shared\Models\Conversation;
+use App\Modules\WhatsappWeb\Services\Waha\WahaLabelSync;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -22,11 +26,26 @@ class LabelController extends Controller
 
     public function index(Request $request): Response
     {
-        $labels = InboxLabel::where('workspace_id', $this->workspaceId($request))
+        $wid = $this->workspaceId($request);
+        $labels = InboxLabel::where('workspace_id', $wid)
             ->orderBy('name')
             ->get();
 
-        return Inertia::render('Inbox/Labels/Index', ['labels' => $labels]);
+        $rules = InboxLabelRule::with(['label:id,name,color', 'channelAccount:id,display_name'])
+            ->where('workspace_id', $wid)
+            ->orderBy('priority')
+            ->orderBy('id')
+            ->get();
+
+        $channelAccounts = ChannelAccount::where('workspace_id', $wid)
+            ->orderBy('display_name')
+            ->get(['id', 'display_name', 'channel']);
+
+        return Inertia::render('Inbox/Labels/Index', [
+            'labels' => $labels,
+            'rules' => $rules,
+            'channelAccounts' => $channelAccounts,
+        ]);
     }
 
     public function store(Request $request): RedirectResponse
@@ -78,6 +97,7 @@ class LabelController extends Controller
         $changes = $conversation->labels()->syncWithoutDetaching([$label->id]);
         if (! empty($changes['attached'])) {
             ConversationActivity::log($conversation, 'label_added', ['label' => $label->name]);
+            $this->mirrorToWhatsapp($conversation);
         }
 
         return response()->json(['ok' => true, 'label' => $label]);
@@ -90,9 +110,20 @@ class LabelController extends Controller
 
         if ($conversation->labels()->detach($label->id)) {
             ConversationActivity::log($conversation, 'label_removed', ['label' => $label->name]);
+            $this->mirrorToWhatsapp($conversation, $label);
         }
 
         return response()->json(['ok' => true]);
+    }
+
+    /** Soft-fail push of the local label set to a WhatsApp Web chat (no-op for other channels). */
+    private function mirrorToWhatsapp(Conversation $conversation, ?InboxLabel $removed = null): void
+    {
+        try {
+            WahaLabelSync::fromSystem()?->syncConversationLabels($conversation, $removed);
+        } catch (\Throwable $e) {
+            Log::warning('inbox.label_mirror.failed', ['conversation_id' => $conversation->id, 'error' => $e->getMessage()]);
+        }
     }
 
     private function authorise(Request $request, InboxLabel $label): void

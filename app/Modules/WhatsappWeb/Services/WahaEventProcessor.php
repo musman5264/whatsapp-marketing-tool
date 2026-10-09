@@ -9,6 +9,7 @@ use App\Modules\Shared\Models\Contact;
 use App\Modules\Shared\Models\Conversation;
 use App\Modules\Shared\Models\Message;
 use App\Modules\Whatsapp\Services\WhatsappDriver;
+use App\Modules\WhatsappWeb\Jobs\SyncWhatsappWebHistoryJob;
 use App\Modules\WhatsappWeb\Models\WhatsappWebSession;
 use App\Services\WebhookIdempotencyService;
 use Illuminate\Support\Facades\Log;
@@ -46,6 +47,8 @@ class WahaEventProcessor
             $event === 'message.reaction' => $this->handleReaction($payload),
             $event === 'call.received' || $event === 'call.accepted' || $event === 'call.rejected'
                 => $this->handleCall($payload, $session, $event),
+            str_starts_with($event, 'label.')
+                => \App\Modules\WhatsappWeb\Services\Waha\WahaLabelSync::fromSystem()?->handleWebhook($payload, $session->session_name),
             default => Log::info('whatsapp_web.event.ignored', ['event' => $event]),
         };
     }
@@ -63,16 +66,124 @@ class WahaEventProcessor
         return WhatsappWebSession::find($sessionId);
     }
 
-    /** @param array<string,mixed> $payload */
+    /**
+     * `message.any` carries both directions. fromMe=false is a customer message;
+     * fromMe=true is something the account sent from the phone or another linked
+     * device (our own API sends are skipped — they are already stored).
+     *
+     * @param  array<string,mixed>  $payload
+     */
     private function handleInbound(array $payload, WhatsappWebSession $session): void
     {
+        if (($payload['payload']['fromMe'] ?? false) === true) {
+            $this->handleOwnMessage($payload, $session);
+
+            return;
+        }
+
         $normalized = $this->normalizer->normalize($payload, $session);
         if ($normalized === null) {
-            return; // outbound echo, group message, or unparseable
+            return; // group message, or unparseable
         }
 
         [$value, $msg] = $normalized;
         $this->driver->ingestNormalizedInbound($value, $msg);
+    }
+
+    /**
+     * A message sent from the phone / another linked device, seen by WAHA as
+     * fromMe=true. Stored as an outbound message in the 1:1 thread so the agent
+     * sees the reply, and the chat's unread count is cleared.
+     *
+     * @param  array<string,mixed>  $payload
+     */
+    private function handleOwnMessage(array $payload, WhatsappWebSession $session): void
+    {
+        $p = is_array($payload['payload'] ?? null) ? $payload['payload'] : [];
+
+        // WAHA: source = 'api' when the message was sent through the WAHA API (i.e.
+        // by this app — the send path already stored it), 'app' when sent from a
+        // WhatsApp client. Absent on some engines.
+        $source = strtolower((string) ($p['source'] ?? $payload['source'] ?? ''));
+        if ($source === 'api') {
+            return;
+        }
+
+        $normalized = $this->normalizer->normalizeFromMe($payload, $session);
+        if ($normalized === null) {
+            return; // group / broadcast / unparseable
+        }
+
+        [$value, $msg] = $normalized;
+        $providerId = (string) $msg['id'];
+
+        if ($this->findOwnMessage($providerId) !== null) {
+            return; // already stored (e.g. redelivered webhook)
+        }
+
+        // Unknown source: only treat as an echo of our own send when we stored the
+        // same text to this contact in the last 20 seconds.
+        if ($source === '' && $this->recentOwnSendMatches($msg, (string) ($p['body'] ?? ''), $session)) {
+            return;
+        }
+
+        $status = InboundNormalizer::statusFromAck($p['ack'] ?? null) ?? 'sent';
+        $this->driver->ingestNormalizedOutbound($value, $msg, $status);
+    }
+
+    /**
+     * Unknown-source echo guard. Looks for an outbound message with the same text
+     * to the same contact created within the last 20 seconds.
+     *
+     * @param  array<string,mixed>  $msg
+     */
+    private function recentOwnSendMatches(array $msg, string $body, WhatsappWebSession $session): bool
+    {
+        if (trim($body) === '') {
+            return false;
+        }
+
+        $digits = (string) ($msg['from'] ?? '');
+
+        return Message::query()
+            ->where('direction', 'out')
+            ->where('body', $body)
+            ->where('created_at', '>=', now()->subSeconds(20))
+            ->whereHas('conversation', fn ($q) => $q
+                ->where('workspace_id', $session->workspace_id)
+                ->whereHas('contact', fn ($c) => $c->where('phone_e164', '+'.$digits)))
+            ->exists();
+    }
+
+    /**
+     * Find our stored copy of an engine message id. Tolerates the id being stored
+     * in a different shape than the webhook sends it (full serialized
+     * `true_<chat>_<id>` vs bare `<id>`).
+     */
+    private function findOwnMessage(string $engineId): ?Message
+    {
+        if ($engineId === '') {
+            return null;
+        }
+
+        $bare = $this->bareMessageId($engineId);
+        $found = Message::whereIn('provider_message_id', array_values(array_unique(array_filter([$engineId, $bare]))))->first();
+        if ($found || strlen($bare) < 8) {
+            return $found;
+        }
+
+        // Last resort: stored as the serialized form, looked up by the bare id.
+        return Message::where('direction', 'out')
+            ->where('provider_message_id', 'like', '%_'.$bare)
+            ->first();
+    }
+
+    /** `true_<chat>@c.us_3EB0ABC` -> `3EB0ABC`; a bare id is returned unchanged. */
+    private function bareMessageId(string $engineId): string
+    {
+        $pos = strrpos($engineId, '_');
+
+        return $pos === false ? $engineId : substr($engineId, $pos + 1);
     }
 
     /** @param array<string,mixed> $payload */
@@ -93,36 +204,62 @@ class WahaEventProcessor
         }
 
         if ($status === 'active') {
+            $wasActive = $session->status === 'active';
             $this->provisioner->markActive($session, $session->phone_e164, $session->push_name);
+
+            // Newly connected (or reconnected): backfill what arrived while offline.
+            if (! $wasActive) {
+                SyncWhatsappWebHistoryJob::dispatch($session->id)
+                    ->onQueue('whatsapp')
+                    ->delay(now()->addSeconds(20));
+            }
         } else {
             $this->provisioner->syncStatus($session, $status);
         }
     }
 
-    /** @param array<string,mixed> $payload */
+    /**
+     * Delivery / read ticks for a message we sent (or a phone-sent one we stored).
+     * WAHA ack: -1 error, 0 pending, 1 server, 2 device, 3 read, 4 played.
+     * Ticks can arrive before the message itself was ingested — then there is
+     * nothing to update and the ingest picks up the ack from its own payload.
+     *
+     * @param  array<string,mixed>  $payload
+     */
     private function handleAck(array $payload): void
     {
-        $p = $payload['payload'] ?? [];
-        $id = (string) ($p['id']['_serialized'] ?? $p['id'] ?? '');
+        $p = is_array($payload['payload'] ?? null) ? $payload['payload'] : [];
+        $id = InboundNormalizer::idOf($p['id'] ?? '');
         if ($id === '') {
             return;
         }
 
-        // WAHA ack: 1=sent(server) 2=delivered(device) 3=read 4=played; -1=error
-        $ack = (int) ($p['ack'] ?? 0);
-        $status = match (true) {
-            $ack < 0 => 'failed',
-            $ack === 1 => 'sent',
-            $ack === 2 => 'delivered',
-            $ack >= 3 => 'read',
-            default => null,
-        };
-
-        if ($status === null || ! Message::where('provider_message_id', $id)->exists()) {
+        $ack = $p['ack'] ?? $this->ackFromName($p['ackName'] ?? null);
+        $status = InboundNormalizer::statusFromAck($ack);
+        if ($status === null) {
             return;
         }
 
-        $this->driver->applyStatusUpdate(['id' => $id, 'status' => $status]);
+        $stored = $this->findOwnMessage($id);
+        if ($stored === null) {
+            return;
+        }
+
+        // Use the id as stored so the driver's exact-match lookup finds the row.
+        $this->driver->applyStatusUpdate(['id' => (string) $stored->provider_message_id, 'status' => $status]);
+    }
+
+    private function ackFromName(mixed $name): ?int
+    {
+        return match (strtoupper((string) $name)) {
+            'ERROR' => -1,
+            'PENDING' => 0,
+            'SERVER' => 1,
+            'DEVICE' => 2,
+            'READ' => 3,
+            'PLAYED' => 4,
+            default => null,
+        };
     }
 
     /**

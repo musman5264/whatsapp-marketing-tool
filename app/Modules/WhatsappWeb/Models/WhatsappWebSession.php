@@ -26,6 +26,9 @@ use Illuminate\Support\Str;
  * @property bool $auto_reject_calls
  * @property string|null $call_reject_message
  * @property bool $send_receipts
+ * @property bool $auto_label_enabled
+ * @property bool $mirror_wa_labels
+ * @property bool $auto_save_contacts
  */
 class WhatsappWebSession extends Model
 {
@@ -36,6 +39,7 @@ class WhatsappWebSession extends Model
         'status', 'last_qr', 'webhook_token', 'webhook_token_hash',
         'last_seen_at', 'meta_json',
         'auto_reject_calls', 'call_reject_message', 'send_receipts',
+        'auto_label_enabled', 'mirror_wa_labels', 'auto_save_contacts',
     ];
 
     protected $hidden = ['last_qr', 'webhook_token', 'webhook_token_hash'];
@@ -47,6 +51,9 @@ class WhatsappWebSession extends Model
             'last_seen_at' => 'datetime',
             'auto_reject_calls' => 'boolean',
             'send_receipts' => 'boolean',
+            'auto_label_enabled' => 'boolean',
+            'mirror_wa_labels' => 'boolean',
+            'auto_save_contacts' => 'boolean',
         ];
     }
 

@@ -11,6 +11,9 @@ use Illuminate\Support\Facades\Log;
  * WAHA REST reference: https://waha.devlike.pro/docs/how-to/
  *  - POST   /api/sessions                       create a session
  *  - POST   /api/sessions/{s}/start             start it
+ *  - PUT    /api/sessions/{s}                   update config (webhooks); restarts a running session
+ *  - GET    /api/{s}/chats/overview?limit=      recent chats (history sync)
+ *  - GET    /api/{s}/chats/{chatId}/messages    recent messages of a chat (history sync)
  *  - GET    /api/sessions/{s}                   status ({status: STARTING|SCAN_QR_CODE|WORKING|FAILED|STOPPED})
  *  - GET    /api/{s}/auth/qr?format=image       QR (binary PNG) — we request base64
  *  - GET    /api/sessions/{s}/me                paired account ({id, pushName})
@@ -24,24 +27,25 @@ use Illuminate\Support\Facades\Log;
  */
 class WahaAdapter implements EngineAdapter
 {
+    /**
+     * Webhook events subscribed on every session. Append new engine events
+     * (e.g. label.*) here — this is the single source of truth.
+     *
+     * `message.any` (not `message`) so messages the user sends from the phone or
+     * another linked device are delivered too (payload.fromMe = true). Our own
+     * API sends come back with payload.source = 'api' and are skipped downstream.
+     */
+    public const WEBHOOK_EVENTS = [
+        'message.any', 'session.status', 'message.ack',
+        'message.reaction', 'poll.vote',
+        'call.received', 'call.accepted', 'call.rejected',
+        'label.upsert', 'label.deleted', 'label.chat.added', 'label.chat.deleted',
+    ];
+
     public function __construct(private readonly WahaClient $client) {}
 
     public function startSession(string $session, string $webhookUrl, ?string $hmacSecret = null): void
     {
-        $webhook = [
-            'url' => $webhookUrl,
-            'events' => [
-                'message', 'session.status', 'message.ack',
-                'message.reaction', 'poll.vote',
-                'call.received', 'call.accepted', 'call.rejected',
-            ],
-        ];
-        if ($hmacSecret !== null && $hmacSecret !== '') {
-            // WAHA signs each webhook body: X-Webhook-Hmac = hmac_sha256(body, key)
-            $webhook['hmac'] = ['key' => $hmacSecret];
-        }
-        $config = ['webhooks' => [$webhook]];
-
         // Does the session already exist? (WAHA Core allows only one, and returns
         // 403/409/422 on a duplicate create — treat any of those as "exists".)
         $existing = $this->client->get("/api/sessions/{$session}");
@@ -50,7 +54,7 @@ class WahaAdapter implements EngineAdapter
             $create = $this->client->post('/api/sessions', [
                 'name' => $session,
                 'start' => true,
-                'config' => $config,
+                'config' => $this->config($webhookUrl, $hmacSecret),
             ]);
 
             if (! $create->successful() && ! in_array($create->status(), [403, 409, 422], true)) {
@@ -58,9 +62,78 @@ class WahaAdapter implements EngineAdapter
             }
         }
 
-        // Bring the (new or pre-existing) session up to date and running.
-        $this->client->post("/api/sessions/{$session}", ['config' => $config]);
+        // Pre-existing session: bring its webhook config up to date and running.
+        $this->resubscribe($session, $webhookUrl, $hmacSecret);
+    }
+
+    /**
+     * WAHA: `PUT /api/sessions/{session}` updates the config. If the session is
+     * not STOPPED, WAHA stops and starts it with the new config (the device stays
+     * linked — no logout, no QR). A follow-up `start` covers the STOPPED case;
+     * its 422 when already running is expected and ignored.
+     */
+    public function resubscribe(string $session, string $webhookUrl, ?string $hmacSecret = null): void
+    {
+        $put = $this->client->put("/api/sessions/{$session}", [
+            'name' => $session,
+            'config' => $this->config($webhookUrl, $hmacSecret),
+        ]);
+
+        if (! $put->successful()) {
+            throw new \RuntimeException("WAHA could not update session config ({$put->status()}): ".$put->body());
+        }
+
         $this->client->post("/api/sessions/{$session}/start");
+    }
+
+    /** @return array{webhooks: list<array<string,mixed>>} */
+    private function config(string $webhookUrl, ?string $hmacSecret): array
+    {
+        $webhook = [
+            'url' => $webhookUrl,
+            'events' => self::WEBHOOK_EVENTS,
+        ];
+        if ($hmacSecret !== null && $hmacSecret !== '') {
+            // WAHA signs each webhook body: X-Webhook-Hmac = hmac_sha256(body, key)
+            $webhook['hmac'] = ['key' => $hmacSecret];
+        }
+
+        return ['webhooks' => [$webhook]];
+    }
+
+    /** @return list<array<string,mixed>> */
+    public function listChats(string $session, int $limit): array
+    {
+        $resp = $this->client->get("/api/{$session}/chats/overview", [
+            'limit' => $limit,
+            'offset' => 0,
+        ]);
+        if (! $resp->successful()) {
+            throw new \RuntimeException("WAHA chats overview failed ({$resp->status()}): ".$resp->body());
+        }
+
+        $rows = $resp->json();
+
+        return is_array($rows) ? array_values(array_filter($rows, 'is_array')) : [];
+    }
+
+    /** @return list<array<string,mixed>> */
+    public function chatMessages(string $session, string $chatId, int $limit): array
+    {
+        $resp = $this->client->get('/api/'.$session.'/chats/'.rawurlencode($chatId).'/messages', [
+            'limit' => $limit,
+            'offset' => 0,
+            'downloadMedia' => 'false',
+            'sortBy' => 'timestamp',
+            'sortOrder' => 'desc',
+        ]);
+        if (! $resp->successful()) {
+            throw new \RuntimeException("WAHA chat messages failed ({$resp->status()}): ".$resp->body());
+        }
+
+        $rows = $resp->json();
+
+        return is_array($rows) ? array_values(array_filter($rows, 'is_array')) : [];
     }
 
     private function createError(string $session, int $status, string $body): string

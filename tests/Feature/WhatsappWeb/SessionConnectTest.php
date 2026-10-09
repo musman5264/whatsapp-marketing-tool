@@ -3,6 +3,7 @@
 namespace Tests\Feature\WhatsappWeb;
 
 use App\Modules\Integrations\Models\IntegrationConfig;
+use App\Modules\WhatsappWeb\Models\WhatsappWebSession;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 use PHPUnit\Framework\Attributes\Test;
@@ -95,15 +96,17 @@ class SessionConnectTest extends TestCase
 
         $this->actingAs($this->ctx['user'])->postJson(route('client.whatsapp-web.connect'))->assertOk();
 
+        // The session already exists in this fake, so connect updates it with PUT
+        // (WAHA: PUT /api/sessions/{session}); POST there is not a WAHA route.
         Http::assertSent(function ($r) {
-            if (! str_contains($r->url(), '/api/sessions') || $r->method() !== 'POST') {
+            if (! str_ends_with($r->url(), '/api/sessions/'.WhatsappWebSession::sessionNameFor($this->ctx['workspace']->id)) || $r->method() !== 'PUT') {
                 return false;
             }
             $events = data_get($r->data(), 'config.webhooks.0.events', []);
             if ($events === []) {
                 return false;
             }
-            foreach (['message', 'session.status', 'message.ack', 'message.reaction', 'poll.vote', 'call.received', 'call.accepted', 'call.rejected'] as $want) {
+            foreach (['message.any', 'session.status', 'message.ack', 'message.reaction', 'poll.vote', 'call.received', 'call.accepted', 'call.rejected'] as $want) {
                 if (! in_array($want, $events, true)) {
                     return false;
                 }

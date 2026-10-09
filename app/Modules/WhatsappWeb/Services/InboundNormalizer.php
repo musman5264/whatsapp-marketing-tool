@@ -7,14 +7,20 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 
 /**
- * Converts a WAHA `message` webhook payload into the ($value, $msg) array pair
- * that WhatsappDriver::processInboundMessage() already understands (the Meta
- * Cloud API `entry.changes.value` shape). This lets the entire inbound path —
- * contact upsert, conversation creation, body extraction, idempotency and the
- * MessageReceived event (auto-replies / AI) — be reused unchanged.
+ * Converts a WAHA `message` / `message.any` payload into the ($value, $msg) array
+ * pair that WhatsappDriver::processInboundMessage() already understands (the Meta
+ * Cloud API `entry.changes.value` shape). This lets the entire ingest path —
+ * contact upsert, conversation creation, body extraction, idempotency — be reused.
+ *
+ * Two directions share one parser:
+ *  - normalize():        incoming (fromMe=false). The chat is `from`.
+ *  - normalizeFromMe():  sent from the phone / another linked device (fromMe=true).
+ *                        The chat is `to`; `from` is our own number.
+ * In both cases `$msg['from']` is the CHAT's phone digits, so the contact and
+ * conversation resolve to the same person either way.
  *
  * Handles both `@c.us` (phone-number) and `@lid` (Linked ID — number hidden)
- * senders; a LID is resolved to a real number via the engine's contacts API.
+ * chat ids; a LID is resolved to a real number via the engine's contacts API.
  */
 class InboundNormalizer
 {
@@ -31,30 +37,90 @@ class InboundNormalizer
             return null;
         }
 
-        $fromJid = (string) ($p['from'] ?? '');
-        if ($fromJid === '') {
+        return $this->parse($p, $session, fromMe: false);
+    }
+
+    /**
+     * A message the account sent itself (phone or another linked device).
+     * Returns null for anything that is not fromMe or not a 1:1 chat.
+     *
+     * @param  array<string,mixed>  $wahaPayload
+     * @return array{0: array<string,mixed>, 1: array<string,mixed>}|null
+     */
+    public function normalizeFromMe(array $wahaPayload, WhatsappWebSession $session): ?array
+    {
+        $p = $wahaPayload['payload'] ?? [];
+        if (! is_array($p) || ($p['fromMe'] ?? false) !== true) {
+            return null;
+        }
+
+        return $this->parse($p, $session, fromMe: true);
+    }
+
+    /**
+     * Map a WAHA/WhatsApp ack level to our delivery status. Null = no change
+     * (pending / unknown).
+     */
+    public static function statusFromAck(mixed $ack): ?string
+    {
+        $level = (int) $ack;
+
+        return match (true) {
+            $level < 0 => 'failed',
+            $level === 1 => 'sent',
+            $level === 2 => 'delivered',
+            $level >= 3 => 'read',
+            default => null,
+        };
+    }
+
+    /**
+     * WAHA ids are either a serialized string (`true_123@c.us_3EB0...`) or an
+     * object (`{_serialized, id, fromMe, remote}`). Always reduce to the string.
+     */
+    public static function idOf(mixed $id): string
+    {
+        if (is_array($id)) {
+            $serialized = $id['_serialized'] ?? $id['id'] ?? '';
+
+            return is_scalar($serialized) ? (string) $serialized : '';
+        }
+
+        return is_scalar($id) ? (string) $id : '';
+    }
+
+    /**
+     * @param  array<string,mixed>  $p  the WAHA message payload
+     * @return array{0: array<string,mixed>, 1: array<string,mixed>}|null
+     */
+    private function parse(array $p, WhatsappWebSession $session, bool $fromMe): ?array
+    {
+        // The chat we are talking to: the sender for inbound, the recipient for fromMe.
+        $chatJid = self::idOf($fromMe ? ($p['to'] ?? '') : ($p['from'] ?? ''));
+        if ($chatJid === '') {
             return null;
         }
 
         // Only 1:1 chats. Skip groups, broadcasts, newsletters, status.
-        if (str_contains($fromJid, '@g.us')
-            || str_contains($fromJid, '@broadcast')
-            || str_contains($fromJid, '@newsletter')
-            || str_contains($fromJid, 'status@')) {
+        if (str_contains($chatJid, '@g.us')
+            || str_contains($chatJid, '@broadcast')
+            || str_contains($chatJid, '@newsletter')
+            || str_contains($chatJid, 'status@')) {
             return null;
         }
 
-        // Resolve the sender to a real phone number.
-        [$phoneDigits, $contactName] = $this->resolveSender($fromJid, $session);
+        // Resolve the chat to a real phone number.
+        [$phoneDigits, $contactName] = $this->resolveSender($chatJid, $session);
         if ($phoneDigits === '') {
-            Log::warning('whatsapp_web.inbound.unresolved_sender', ['from' => $fromJid, 'session' => $session->session_name]);
+            Log::warning('whatsapp_web.inbound.unresolved_sender', ['from' => $chatJid, 'session' => $session->session_name]);
 
             return null;
         }
 
         $type = $this->mapType((string) ($p['type'] ?? 'chat'), $p);
+        $id = self::idOf($p['id'] ?? '');
         $msg = [
-            'id' => (string) ($p['id'] ?? ('wa-web-'.md5(json_encode($p)))),
+            'id' => $id !== '' ? $id : ('wa-web-'.md5(json_encode($p))),
             'from' => $phoneDigits,
             'timestamp' => (int) ($p['timestamp'] ?? time()),
             'type' => $type,
@@ -97,9 +163,13 @@ class InboundNormalizer
                 }
         }
 
-        $name = $contactName
-            ?? ($p['notifyName'] ?? null)
-            ?? (is_array($p['_data'] ?? null) ? ($p['_data']['notifyName'] ?? null) : null);
+        // The push name belongs to the CHAT's contact. On fromMe the notifyName is
+        // our own name, so only the resolved contact name is used there.
+        $name = $contactName;
+        if (! $fromMe) {
+            $name ??= $p['notifyName'] ?? null;
+            $name ??= is_array($p['_data'] ?? null) ? ($p['_data']['notifyName'] ?? null) : null;
+        }
         // Drop unusable notifyName (WhatsApp sometimes sends garbled single chars).
         if (is_string($name) && mb_strlen(trim($name)) < 2) {
             $name = null;

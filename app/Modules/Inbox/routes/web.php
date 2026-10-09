@@ -6,6 +6,7 @@ use App\Modules\Inbox\Http\Controllers\InboxController;
 use App\Modules\Inbox\Http\Controllers\InboxSetupController;
 use App\Modules\Inbox\Http\Controllers\InternalNoteController;
 use App\Modules\Inbox\Http\Controllers\LabelController;
+use App\Modules\Inbox\Http\Controllers\LabelRuleController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware(['web', 'client-app'])->prefix('app/inbox')->name('client.inbox.')->group(function () {
@@ -40,6 +41,9 @@ Route::middleware(['web', 'client-app'])->prefix('app/inbox')->name('client.inbo
     Route::post('/labels', [LabelController::class, 'store'])->name('labels.store');
     Route::put('/labels/{label}', [LabelController::class, 'update'])->name('labels.update');
     Route::delete('/labels/{label}', [LabelController::class, 'destroy'])->name('labels.destroy');
+    Route::post('/labels/rules', [LabelRuleController::class, 'store'])->name('labels.rules.store');
+    Route::put('/labels/rules/{rule}', [LabelRuleController::class, 'update'])->name('labels.rules.update');
+    Route::delete('/labels/rules/{rule}', [LabelRuleController::class, 'destroy'])->name('labels.rules.destroy');
     Route::post('/conversations/{conversation}/labels', [LabelController::class, 'attach'])->name('labels.attach');
     Route::delete('/conversations/{conversation}/labels/{label}', [LabelController::class, 'detach'])->name('labels.detach');
 

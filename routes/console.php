@@ -81,6 +81,14 @@ Schedule::command('queue:work --queue=whatsapp,broadcast,social,ai,leads,automat
     ->name('drain-queues')
     ->withoutOverlapping(10);
 
+// Backfill WhatsApp Web chats/messages missed while offline, and clear unread
+// read on the owner's phone. Only active numbers; queued so the drain cron runs it.
+Schedule::command('whatsapp-web:sync --queue --quiet-output')
+    ->everyTenMinutes()
+    ->name('whatsapp-web-sync')
+    ->withoutOverlapping(15)
+    ->onOneServer();
+
 // Sync subscription statuses with payment gateways (hourly)
 Schedule::command('billing:sync')
     ->hourly()

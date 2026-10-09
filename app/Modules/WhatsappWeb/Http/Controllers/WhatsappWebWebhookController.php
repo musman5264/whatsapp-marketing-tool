@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Modules\Integrations\Services\CredentialResolver;
 use App\Modules\WhatsappWeb\Jobs\ProcessWahaEventJob;
 use App\Modules\WhatsappWeb\Models\WhatsappWebSession;
+use App\Modules\WhatsappWeb\Services\InboundNormalizer;
 use App\Modules\WhatsappWeb\Services\WahaEventProcessor;
 use App\Services\WebhookIdempotencyService;
 use Illuminate\Http\JsonResponse;
@@ -96,8 +97,8 @@ class WhatsappWebWebhookController extends Controller
         $event = (string) ($payload['event'] ?? '');
         $p = $payload['payload'] ?? [];
 
-        $id = $p['id']['_serialized'] ?? $p['id'] ?? null;
-        if (is_string($id) && $id !== '') {
+        $id = InboundNormalizer::idOf($p['id'] ?? null);
+        if ($id !== '') {
             // ack transitions must each be processed, so fold the ack level in.
             $suffix = $event === 'message.ack' ? ':'.($p['ack'] ?? '') : '';
 

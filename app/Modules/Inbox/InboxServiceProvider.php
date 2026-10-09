@@ -2,9 +2,12 @@
 
 namespace App\Modules\Inbox;
 
+use App\Events\MessageReceived;
+use App\Modules\Inbox\Listeners\ApplyInboxLabelRules;
 use App\Modules\Inbox\Services\InstagramDriver;
 use App\Modules\Inbox\Services\MessengerDriver;
 use App\Modules\Shared\Services\ChannelManager;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\ServiceProvider;
 
 class InboxServiceProvider extends ServiceProvider
@@ -13,6 +16,8 @@ class InboxServiceProvider extends ServiceProvider
     {
         $this->loadRoutesFrom(__DIR__.'/routes/web.php');
         $this->loadMigrationsFrom(__DIR__.'/database/migrations');
+
+        Event::listen(MessageReceived::class, [ApplyInboxLabelRules::class, 'handle']);
 
         // Register Messenger / Instagram drivers so the inbox can dispatch
         // outbound replies via ChannelManager::driver(...) without errors.

@@ -1071,6 +1071,9 @@ function CallReceiptSettings({ initial = {} }) {
     const [autoReject, setAutoReject] = useState(initial.auto_reject_calls ?? false);
     const [rejectMsg, setRejectMsg] = useState(initial.call_reject_message ?? '');
     const [sendReceipts, setSendReceipts] = useState(initial.send_receipts ?? true);
+    const [autoLabel, setAutoLabel] = useState(initial.auto_label_enabled ?? true);
+    const [mirrorLabels, setMirrorLabels] = useState(initial.mirror_wa_labels ?? true);
+    const [autoSaveContacts, setAutoSaveContacts] = useState(initial.auto_save_contacts ?? true);
     const [saving, setSaving] = useState(false);
     const [saved, setSaved] = useState(false);
 
@@ -1096,6 +1099,25 @@ function CallReceiptSettings({ initial = {} }) {
         }
     }, []);
 
+    const [syncState, setSyncState] = useState('idle');
+    const syncNow = useCallback(async () => {
+        setSyncState('busy');
+        try {
+            const res = await fetch(route('client.whatsapp-web.sync'), {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+                    'Accept': 'application/json',
+                },
+                body: JSON.stringify({ resubscribe: true }),
+            });
+            setSyncState(res.ok ? 'queued' : 'error');
+        } catch {
+            setSyncState('error');
+        }
+    }, []);
+
     const toggleAutoReject = () => {
         const next = !autoReject;
         setAutoReject(next);
@@ -1106,6 +1128,24 @@ function CallReceiptSettings({ initial = {} }) {
         const next = !sendReceipts;
         setSendReceipts(next);
         save({ send_receipts: next });
+    };
+
+    const toggleAutoLabel = () => {
+        const next = !autoLabel;
+        setAutoLabel(next);
+        save({ auto_label_enabled: next });
+    };
+
+    const toggleMirrorLabels = () => {
+        const next = !mirrorLabels;
+        setMirrorLabels(next);
+        save({ mirror_wa_labels: next });
+    };
+
+    const toggleAutoSaveContacts = () => {
+        const next = !autoSaveContacts;
+        setAutoSaveContacts(next);
+        save({ auto_save_contacts: next });
     };
 
     return (
@@ -1142,6 +1182,47 @@ function CallReceiptSettings({ initial = {} }) {
                     <p className="mt-0.5 text-[10px] text-neutral-400 leading-relaxed">{t('inbox.send_receipts_help')}</p>
                 </div>
                 <SettingSwitch checked={sendReceipts} onChange={toggleSendReceipts} disabled={saving} />
+            </div>
+
+            <div className="flex items-start justify-between gap-3 border-t border-neutral-100 dark:border-neutral-800 pt-3">
+                <div>
+                    <span className="text-xs text-neutral-600 dark:text-neutral-300">{t('inbox.auto_label_label', 'Auto-label conversations')}</span>
+                    <p className="mt-0.5 text-[10px] text-neutral-400 leading-relaxed">{t('inbox.auto_label_help', 'Applies your Labels rules to incoming messages (Inbox → Labels).')}</p>
+                </div>
+                <SettingSwitch checked={autoLabel} onChange={toggleAutoLabel} disabled={saving} />
+            </div>
+
+            <div className="flex items-start justify-between gap-3">
+                <div>
+                    <span className="text-xs text-neutral-600 dark:text-neutral-300">{t('inbox.mirror_wa_labels_label', 'Mirror labels to WhatsApp')}</span>
+                    <p className="mt-0.5 text-[10px] text-neutral-400 leading-relaxed">{t('inbox.mirror_wa_labels_help', 'Copies labels onto the chat in WhatsApp. Requires a WhatsApp Business number; personal accounts are skipped automatically.')}</p>
+                </div>
+                <SettingSwitch checked={mirrorLabels} onChange={toggleMirrorLabels} disabled={saving} />
+            </div>
+
+            <div className="flex items-start justify-between gap-3">
+                <div>
+                    <span className="text-xs text-neutral-600 dark:text-neutral-300">{t('inbox.auto_save_contacts_label', 'Save new contacts to phone')}</span>
+                    <p className="mt-0.5 text-[10px] text-neutral-400 leading-relaxed">{t('inbox.auto_save_contacts_help', 'Tries to save each new sender to the linked phone\'s address book, once per contact. Whether this works depends on the WhatsApp engine; the contact always stays in your inbox.')}</p>
+                </div>
+                <SettingSwitch checked={autoSaveContacts} onChange={toggleAutoSaveContacts} disabled={saving} />
+            </div>
+
+            <div className="flex items-start justify-between gap-3 border-t border-neutral-100 dark:border-neutral-800 pt-3">
+                <div>
+                    <span className="text-xs text-neutral-600 dark:text-neutral-300">{t('inbox.sync_now_label', 'Sync chats & messages')}</span>
+                    <p className="mt-0.5 text-[10px] text-neutral-400 leading-relaxed">{t('inbox.sync_now_help', 'Re-registers the webhook (briefly restarts the session, the number stays linked) and imports recent chats and replies sent from your phone.')}</p>
+                    {syncState === 'queued' && <p className="mt-1 text-[10px] text-emerald-500">{t('inbox.sync_now_queued', 'Sync started. New messages will appear shortly.')}</p>}
+                    {syncState === 'error' && <p className="mt-1 text-[10px] text-red-500">{t('inbox.sync_now_error', 'Could not start the sync. Is the number connected?')}</p>}
+                </div>
+                <button
+                    type="button"
+                    onClick={syncNow}
+                    disabled={syncState === 'busy'}
+                    className="shrink-0 rounded-lg border border-neutral-300 dark:border-neutral-600 px-2.5 py-1 text-xs font-medium text-neutral-700 dark:text-neutral-200 hover:bg-neutral-50 dark:hover:bg-neutral-800 disabled:opacity-50"
+                >
+                    {syncState === 'busy' ? t('inbox.saving') : t('inbox.sync_now_button', 'Sync now')}
+                </button>
             </div>
         </div>
     );

@@ -12,7 +12,7 @@ class InboxLabel extends Model
 {
     protected $table = 'inbox_labels';
 
-    protected $fillable = ['workspace_id', 'name', 'color'];
+    protected $fillable = ['workspace_id', 'name', 'color', 'wa_label_id'];
 
     public function workspace(): BelongsTo
     {

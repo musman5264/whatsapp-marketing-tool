@@ -20,6 +20,30 @@ interface EngineAdapter
      */
     public function startSession(string $session, string $webhookUrl, ?string $hmacSecret = null): void;
 
+    /**
+     * Re-apply the webhook config (URL, subscribed events, HMAC) to an existing
+     * engine session and make sure it is running. Does NOT log the device out.
+     * Idempotent. Throws when the engine rejects the update.
+     */
+    public function resubscribe(string $session, string $webhookUrl, ?string $hmacSecret = null): void;
+
+    /**
+     * Recent chats, most recent first (raw engine rows; each has an id and may
+     * carry an unread count). Throws on engine failure.
+     *
+     * @return list<array<string,mixed>>
+     */
+    public function listChats(string $session, int $limit): array;
+
+    /**
+     * Recent messages of one chat, newest first, in the same shape as a webhook
+     * `payload` (id, from, to, fromMe, body, type, ack, timestamp, source …).
+     * Media is never downloaded. Throws on engine failure.
+     *
+     * @return list<array<string,mixed>>
+     */
+    public function chatMessages(string $session, string $chatId, int $limit): array;
+
     /** Current QR as a data URI (image/png;base64). Null once paired or not in scan state. */
     public function getQr(string $session): ?string;
 
