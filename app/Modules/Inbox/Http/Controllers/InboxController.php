@@ -15,15 +15,18 @@ use App\Modules\Shared\Models\Message;
 use App\Modules\Shared\Services\ChannelManager;
 use App\Modules\Whatsapp\Models\WhatsappTemplate;
 use App\Modules\Whatsapp\Services\CloudApiClient;
-use App\Modules\WhatsappWeb\Services\EngineManager;
+use App\Modules\WhatsappWeb\Services\WahaMediaException;
+use App\Modules\WhatsappWeb\Services\WahaMediaStore;
 use App\Notifications\ConversationHandoverNotification;
 use App\Services\StorageManager;
 use App\Support\Demo;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
@@ -32,29 +35,26 @@ use Inertia\Response;
 
 class InboxController extends Controller
 {
+    /** Messages per page in a chat (newest first on open, then older pages on scroll-up). */
+    private const MESSAGE_PAGE = 50;
+
     public function __construct(
         private ChannelManager $channelManager,
         private StorageManager $storageManager,
+        private WahaMediaStore $wahaMedia,
     ) {}
 
-    public function index(Request $request): Response
+    public function index(Request $request): Response|JsonResponse
     {
         $workspaceId = $request->user()->current_workspace_id ?? $request->user()->workspace_id;
         $userId = $request->user()->id;
 
-        $conversations = Conversation::where('workspace_id', $workspaceId)
-            ->with(['contact', 'channelAccount', 'lastMessage', 'labels'])
-            ->when($request->folder === 'mine', fn ($q) => $q->where('assigned_user_id', $userId))
-            ->when($request->folder === 'unassigned', fn ($q) => $q->whereNull('assigned_user_id'))
-            ->when($request->channel, fn ($q) => $q->whereHas('channelAccount', fn ($q) => $q->where('channel', $request->channel)))
-            ->when($request->account_id, fn ($q) => $q->where('channel_account_id', $request->account_id))
-            ->when(! in_array($request->folder, ['resolved', 'snoozed'], true), fn ($q) => $q->where('status', 'open'))
-            ->when($request->folder === 'resolved', fn ($q) => $q->where('status', 'resolved'))
-            ->when($request->folder === 'snoozed', fn ($q) => $q->where('status', 'snoozed'))
-            ->when($request->label, fn ($q) => $q->whereHas('labels', fn ($q) => $q->where('inbox_labels.id', $request->label)))
-            ->orderByDesc('last_message_at')
-            ->paginate(30)
-            ->withQueryString();
+        $conversations = $this->conversationPage($request->only('folder', 'channel', 'label', 'account_id'), $workspaceId, $userId);
+
+        // The list's "load more" asks for JSON; a normal visit renders the page.
+        if ($request->wantsJson()) {
+            return response()->json($conversations);
+        }
 
         $labels = InboxLabel::where('workspace_id', $workspaceId)->orderBy('name')->get(['id', 'name', 'color']);
         $channelAccounts = ChannelAccount::where('workspace_id', $workspaceId)
@@ -76,7 +76,7 @@ class InboxController extends Controller
         $this->authorise($request, $conversation);
 
         $conversation->load(['contact', 'channelAccount', 'labels']);
-        $messages = $conversation->messages()->with('conversation')->orderBy('sent_at')->get();
+        [$messages, $hasMoreMessages] = $this->latestMessagePage($conversation);
 
         // Mark as read
         $hadUnread = $conversation->unread_count > 0;
@@ -114,19 +114,7 @@ class InboxController extends Controller
 
         // Pass conversation list so the left panel stays populated on the show page
         $filters = $request->only('folder', 'channel', 'label', 'account_id');
-        $conversations = Conversation::where('workspace_id', $workspaceId)
-            ->with(['contact', 'channelAccount', 'lastMessage', 'labels'])
-            ->when(($filters['folder'] ?? null) === 'mine', fn ($q) => $q->where('assigned_user_id', $userId))
-            ->when(($filters['folder'] ?? null) === 'unassigned', fn ($q) => $q->whereNull('assigned_user_id'))
-            ->when($filters['channel'] ?? null, fn ($q, $ch) => $q->whereHas('channelAccount', fn ($q) => $q->where('channel', $ch)))
-            ->when($filters['account_id'] ?? null, fn ($q, $aid) => $q->where('channel_account_id', $aid))
-            ->when(! in_array($filters['folder'] ?? null, ['resolved', 'snoozed'], true), fn ($q) => $q->where('status', 'open'))
-            ->when(($filters['folder'] ?? null) === 'resolved', fn ($q) => $q->where('status', 'resolved'))
-            ->when(($filters['folder'] ?? null) === 'snoozed', fn ($q) => $q->where('status', 'snoozed'))
-            ->when($filters['label'] ?? null, fn ($q, $lid) => $q->whereHas('labels', fn ($q) => $q->where('inbox_labels.id', $lid)))
-            ->orderByDesc('last_message_at')
-            ->paginate(30)
-            ->withQueryString();
+        $conversations = $this->conversationPage($filters, $workspaceId, $userId);
 
         $channelAccounts = ChannelAccount::where('workspace_id', $workspaceId)
             ->where('status', 'active')
@@ -145,6 +133,7 @@ class InboxController extends Controller
         return Inertia::render('Inbox/Show', [
             'conversation' => $conversation,
             'messages' => $messages,
+            'hasMoreMessages' => $hasMoreMessages,
             'allLabels' => $allLabels,
             'conversations' => $conversations,
             'filters' => $filters,
@@ -153,6 +142,32 @@ class InboxController extends Controller
             'channelAccounts' => $channelAccounts,
             'hasEcommerceStore' => $hasEcommerceStore,
         ]);
+    }
+
+    /**
+     * One page of the conversation list, newest activity first (id breaks ties so
+     * pages never repeat or skip a row). The inbox page, the chat page's left list
+     * and the JSON pages all use this query.
+     *
+     * @param  array<string, mixed>  $filters
+     * @return LengthAwarePaginator<int, Conversation>
+     */
+    private function conversationPage(array $filters, int $workspaceId, int $userId): LengthAwarePaginator
+    {
+        return Conversation::where('workspace_id', $workspaceId)
+            ->with(['contact', 'channelAccount', 'lastMessage', 'labels'])
+            ->when(($filters['folder'] ?? null) === 'mine', fn ($q) => $q->where('assigned_user_id', $userId))
+            ->when(($filters['folder'] ?? null) === 'unassigned', fn ($q) => $q->whereNull('assigned_user_id'))
+            ->when($filters['channel'] ?? null, fn ($q, $ch) => $q->whereHas('channelAccount', fn ($q) => $q->where('channel', $ch)))
+            ->when($filters['account_id'] ?? null, fn ($q, $aid) => $q->where('channel_account_id', $aid))
+            ->when(! in_array($filters['folder'] ?? null, ['resolved', 'snoozed'], true), fn ($q) => $q->where('status', 'open'))
+            ->when(($filters['folder'] ?? null) === 'resolved', fn ($q) => $q->where('status', 'resolved'))
+            ->when(($filters['folder'] ?? null) === 'snoozed', fn ($q) => $q->where('status', 'snoozed'))
+            ->when($filters['label'] ?? null, fn ($q, $lid) => $q->whereHas('labels', fn ($q) => $q->where('inbox_labels.id', $lid)))
+            ->orderByDesc('last_message_at')
+            ->orderByDesc('id')
+            ->paginate(30)
+            ->withQueryString();
     }
 
     public function reply(Request $request, Conversation $conversation): JsonResponse|RedirectResponse
@@ -509,15 +524,11 @@ class InboxController extends Controller
 
         $payload = $message->payload ?? [];
 
-        // Already cached locally — verify the file still exists before redirecting
+        // Already stored: find that one known path (no folder listing) and redirect.
         if (! empty($payload['preview_url'])) {
-            $storagePath = "message-media/{$message->id}";
-            $disk = $this->storageManager->disk();
-            $files = $disk->files($this->storageManager->prefixedPath('message-media'));
-            $cached = collect($files)->first(fn ($f) => str_starts_with($f, $this->storageManager->prefixedPath($storagePath)));
-
-            if ($cached && $disk->exists($cached)) {
-                return redirect($disk->url($cached));
+            $path = $this->wahaMedia->existingPath($message, $payload);
+            if ($path) {
+                return redirect($this->storageManager->disk()->url($path));
             }
 
             // File missing — clear stale preview_url and fall through to re-download
@@ -534,7 +545,13 @@ class InboxController extends Controller
         // and which needs the engine API key, so fetch it server-side.
         $wahaLink = $payload[$type]['link'] ?? null;
         if (! $mediaId && is_string($wahaLink) && $wahaLink !== '') {
-            return $this->cacheWahaMedia($message, $payload, $wahaLink);
+            try {
+                $stored = $this->wahaMedia->store($message, $payload, $wahaLink);
+            } catch (WahaMediaException $e) {
+                abort($e->status, $e->getMessage());
+            }
+
+            return redirect($stored['preview_url']);
         }
 
         if (! $mediaId) {
@@ -560,102 +577,12 @@ class InboxController extends Controller
             $previewUrl = $this->storageManager->disk()->url($filename);
 
             // Cache for next request
-            $message->update(['payload' => array_merge($payload, ['preview_url' => $previewUrl, 'mime_type' => $mimeType])]);
+            $message->update(['payload' => array_merge($payload, ['preview_url' => $previewUrl, 'mime_type' => $mimeType, 'media_path' => $filename])]);
 
             return redirect($previewUrl);
         } catch (\Throwable $e) {
             abort(502, 'Could not fetch media: '.$e->getMessage());
         }
-    }
-
-    /**
-     * Download a WhatsApp-Web (WAHA) media file, cache it with the same storage
-     * pattern as Cloud media, and redirect to the cached copy.
-     *
-     * The request always goes to the configured engine origin. The link's path and
-     * query are kept but its host is replaced by the engine base URL, so the engine
-     * API key never leaves for another host and no arbitrary URL from a webhook
-     * payload is fetched. Error responses never include the key.
-     *
-     * @param  array<string, mixed>  $payload
-     */
-    private function cacheWahaMedia(Message $message, array $payload, string $link): RedirectResponse
-    {
-        $creds = app(EngineManager::class)->credentials();
-        $base = $creds?->baseUrl();
-        $baseParts = $base ? parse_url($base) : false;
-        if (! is_array($baseParts) || empty($baseParts['scheme']) || empty($baseParts['host'])) {
-            abort(503, 'WhatsApp Web engine is not configured.');
-        }
-
-        $linkParts = parse_url($link);
-        $path = is_array($linkParts) ? (string) ($linkParts['path'] ?? '') : '';
-        if ($path === '') {
-            abort(404, 'No media available.');
-        }
-
-        $origin = $baseParts['scheme'].'://'.$baseParts['host'].(isset($baseParts['port']) ? ':'.$baseParts['port'] : '');
-        $url = $origin.'/'.ltrim($path, '/').(isset($linkParts['query']) ? '?'.$linkParts['query'] : '');
-
-        $apiKey = $creds->apiKey();
-        try {
-            $req = Http::timeout(30)->withOptions(['allow_redirects' => ['max' => 3]]);
-            if ($apiKey) {
-                $req = $req->withHeaders(['X-Api-Key' => $apiKey]);
-            }
-            $response = $req->get($url);
-        } catch (\Throwable $e) {
-            Log::warning('WAHA media fetch failed (connection)', ['message_id' => $message->id, 'error' => $e->getMessage()]);
-            abort(502, 'Could not reach the WhatsApp Web engine for this media.');
-        }
-
-        if ($response->status() === 404) {
-            abort(404, 'This media is no longer available on the WhatsApp Web engine.');
-        }
-        if (! $response->successful()) {
-            Log::warning('WAHA media fetch failed (status)', ['message_id' => $message->id, 'status' => $response->status()]);
-            abort(502, 'The WhatsApp Web engine could not provide this media (HTTP '.$response->status().').');
-        }
-
-        $bytes = $response->body();
-        if ($bytes === '' || strlen($bytes) > 64 * 1024 * 1024) {
-            abort(502, 'The WhatsApp Web engine returned an empty or oversized media file.');
-        }
-
-        $rawType = trim(explode(';', (string) $response->header('Content-Type'))[0]);
-        $mimeType = ($rawType === '' || $rawType === 'application/octet-stream')
-            ? (string) ($payload['mime_type'] ?? 'application/octet-stream')
-            : $rawType;
-        $ext = $this->extensionForMime($mimeType);
-
-        $filename = $this->storageManager->prefixedPath("message-media/{$message->id}.{$ext}");
-        try {
-            $this->storageManager->disk()->put($filename, $bytes);
-        } catch (\Throwable $e) {
-            Log::warning('WAHA media store failed', ['message_id' => $message->id, 'error' => $e->getMessage()]);
-            abort(502, 'Could not store media.');
-        }
-
-        $previewUrl = $this->storageManager->disk()->url($filename);
-        $message->update(['payload' => array_merge($payload, ['preview_url' => $previewUrl, 'mime_type' => $mimeType])]);
-
-        return redirect($previewUrl);
-    }
-
-    /** File extension for a MIME type, e.g. image/jpeg → jpg, audio/mpeg → mp3. */
-    private function extensionForMime(string $mimeType): string
-    {
-        [$major, $minor] = array_pad(explode('/', strtolower($mimeType), 2), 2, 'bin');
-        $sub = preg_replace('/[^a-z0-9]/', '', explode('+', $minor)[0]) ?: 'bin';
-
-        return match (true) {
-            $sub === 'jpeg' => 'jpg',
-            $sub === 'octetstream' => 'bin',
-            $sub === 'plain' => 'txt',
-            $sub === 'quicktime' => 'mov',
-            $sub === 'mpeg' && $major === 'audio' => 'mp3',
-            default => $sub,
-        };
     }
 
     /** Upload a media file to WhatsApp and return the media_id */
@@ -834,7 +761,58 @@ class InboxController extends Controller
             return response()->json(['ok' => false, 'error' => $e->getMessage()], 422);
         }
 
-        return response()->json(['ok' => true]);
+        // The new reaction row, so the open chat can show it without a reload.
+        return response()->json(['ok' => true, 'message' => $out->fresh()]);
+    }
+
+    /**
+     * The newest page of a thread, oldest first, and whether older messages exist.
+     *
+     * @return array{0: Collection, 1: bool}
+     */
+    private function latestMessagePage(Conversation $conversation): array
+    {
+        $rows = $conversation->messages()->with('conversation')
+            ->orderByDesc('sent_at')
+            ->orderByDesc('id')
+            ->limit(self::MESSAGE_PAGE + 1)
+            ->get();
+
+        return [
+            $rows->take(self::MESSAGE_PAGE)->reverse()->values(),
+            $rows->count() > self::MESSAGE_PAGE,
+        ];
+    }
+
+    /**
+     * Older messages before a cursor (sent_at, id), oldest first, for the chat's
+     * scroll-up loading. The cursor comes from the oldest message on screen.
+     */
+    public function messagesPage(Request $request, Conversation $conversation): JsonResponse
+    {
+        $this->authorise($request, $conversation);
+
+        $validated = $request->validate([
+            'before_sent_at' => ['required', 'date'],
+            'before_id' => ['required', 'integer', 'min:1'],
+        ]);
+
+        // Stored times are in the app timezone; compare in that zone.
+        $sentAt = Carbon::parse($validated['before_sent_at'])->setTimezone(config('app.timezone'));
+        $beforeId = (int) $validated['before_id'];
+
+        $rows = $conversation->messages()->with('conversation')
+            ->where(fn ($q) => $q->where('sent_at', '<', $sentAt)
+                ->orWhere(fn ($q) => $q->where('sent_at', $sentAt)->where('id', '<', $beforeId)))
+            ->orderByDesc('sent_at')
+            ->orderByDesc('id')
+            ->limit(self::MESSAGE_PAGE + 1)
+            ->get();
+
+        return response()->json([
+            'messages' => $rows->take(self::MESSAGE_PAGE)->reverse()->values(),
+            'has_more' => $rows->count() > self::MESSAGE_PAGE,
+        ]);
     }
 
     private function authorise(Request $request, Conversation $conversation): void

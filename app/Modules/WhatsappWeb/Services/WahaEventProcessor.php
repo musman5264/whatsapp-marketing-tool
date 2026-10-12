@@ -30,6 +30,7 @@ class WahaEventProcessor
         private readonly SessionProvisioner $provisioner,
         private readonly AutomationEngine $engine,
         private readonly EngineManager $engines,
+        private readonly WahaMediaStore $media,
     ) {}
 
     /**
@@ -87,7 +88,8 @@ class WahaEventProcessor
         }
 
         [$value, $msg] = $normalized;
-        $this->driver->ingestNormalizedInbound($value, $msg);
+        $message = $this->driver->ingestNormalizedInbound($value, $msg);
+        $this->media->storeInbound($message);
     }
 
     /**

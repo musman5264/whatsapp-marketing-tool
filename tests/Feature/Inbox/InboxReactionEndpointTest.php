@@ -106,6 +106,26 @@ class InboxReactionEndpointTest extends TestCase
     }
 
     #[Test]
+    public function the_reaction_response_returns_the_new_row_so_the_chat_shows_it_without_a_reload(): void
+    {
+        $conv = $this->wahaConversation();
+        $inbound = $this->inbound($conv);
+
+        Http::fake(['waha.test/api/reaction' => Http::response([], 200)]);
+
+        $response = $this->actingAs($this->ctx['user'])
+            ->postJson(route('client.inbox.messages.react', [
+                'conversation' => $conv->uuid,
+                'message' => $inbound->id,
+            ]), ['emoji' => '👍'])
+            ->assertOk();
+
+        $response->assertJsonPath('message.type', 'reaction');
+        $response->assertJsonPath('message.body', '👍');
+        $response->assertJsonPath('message.direction', 'out');
+    }
+
+    #[Test]
     public function reacting_on_a_conversation_in_another_workspace_is_forbidden(): void
     {
         $other = $this->createWorkspaceContext();

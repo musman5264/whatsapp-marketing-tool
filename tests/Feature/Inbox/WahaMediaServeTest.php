@@ -165,4 +165,26 @@ class WahaMediaServeTest extends TestCase
         $this->actingAs($this->user)->get($this->mediaUrl($message))->assertNotFound();
         Http::assertNothingSent();
     }
+
+    public function test_cached_copy_is_found_by_its_recorded_path_without_listing_the_folder(): void
+    {
+        Storage::disk('public')->put('message-media/other-1.jpg', 'NOT THIS ONE');
+        Storage::disk('public')->put('message-media/other-2.jpg', 'NOT THIS ONE EITHER');
+        Storage::disk('public')->put('message-media/777.jpg', 'JPEG');
+        $message = $this->mediaMessage([
+            'id' => 'wa-777',
+            'image' => ['link' => self::BASE.'/api/files/z.jpeg'],
+            'preview_url' => '/storage/message-media/777.jpg',
+            'mime_type' => 'image/jpeg',
+            'media_path' => 'message-media/777.jpg',
+        ]);
+        Http::fake(function () {
+            $this->fail('A stored copy must not contact the engine.');
+        });
+
+        $response = $this->actingAs($this->user)->get($this->mediaUrl($message));
+
+        $response->assertRedirect();
+        $this->assertStringContainsString('message-media/777.jpg', (string) $response->headers->get('Location'));
+    }
 }
