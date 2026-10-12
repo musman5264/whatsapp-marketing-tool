@@ -36,22 +36,29 @@ class DispatchWebhookJob implements ShouldQueue
 
         $signature = $this->endpoint->signature($payloadJson);
 
+        $headers = [
+            'Content-Type' => 'application/json',
+            'X-Webhook-Event' => $this->event,
+            'X-Webhook-Signature' => $signature,
+            'User-Agent' => config('app.name') . ' Webhooks/1.0',
+        ];
+
+        // Store the exact bytes and headers sent, so the Deliveries page shows what the receiver got.
         $delivery = WebhookDelivery::create([
             'webhook_endpoint_id' => $this->endpoint->id,
             'event' => $this->event,
             'payload' => $this->payload,
+            'request_body' => $payloadJson,
+            'request_headers' => $headers,
             'attempts' => 1,
         ]);
 
         try {
+            // Send the exact bytes that were signed. Passing the string to post() would JSON-encode it a second time.
             $response = Http::timeout(10)
-                ->withHeaders([
-                    'Content-Type' => 'application/json',
-                    'X-Webhook-Event' => $this->event,
-                    'X-Webhook-Signature' => $signature,
-                    'User-Agent' => config('app.name') . ' Webhooks/1.0',
-                ])
-                ->post($this->endpoint->url, $payloadJson);
+                ->withHeaders($headers)
+                ->withBody($payloadJson, 'application/json')
+                ->post($this->endpoint->url);
 
             $delivery->update([
                 'response_status' => $response->status(),

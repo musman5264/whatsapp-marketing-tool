@@ -1507,7 +1507,14 @@
         "col_date": "Date",
         "status_ok": "OK",
         "status_failed": "Failed",
-        "no_deliveries": "No deliveries yet."
+        "no_deliveries": "No deliveries yet.",
+        "col_details": "Details",
+        "show_details": "Show body",
+        "hide_details": "Hide body",
+        "request_headers": "Request headers",
+        "request_body": "Request body (as sent)",
+        "response_body": "Response body",
+        "no_body": "Not stored for this delivery (sent before this was recorded)."
     },
     "reports": {
         "exports": {

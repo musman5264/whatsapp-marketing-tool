@@ -11,6 +11,8 @@ class WebhookDelivery extends Model
         'webhook_endpoint_id',
         'event',
         'payload',
+        'request_body',
+        'request_headers',
         'response_status',
         'response_body',
         'attempts',
@@ -20,6 +22,7 @@ class WebhookDelivery extends Model
 
     protected $casts = [
         'payload' => 'array',
+        'request_headers' => 'array',
         'attempts' => 'integer',
         'delivered_at' => 'datetime',
         'next_retry_at' => 'datetime',

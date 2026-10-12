@@ -13,6 +13,7 @@ _Last updated: 2026-10-09 15:05_
 ## Completed (most recent first)
 | ID | Task | Plan / Phase | Completed |
 |----|------|--------------|-----------|
+| T-0008 | Show the exact body and headers of each WhatsMine webhook delivery (also fixes the double-encoded body) | PLAN-000 / phase-01 | 2026-10-13 00:08 |
 | T-0006 | CANCELLED: temporary WhatsMine capture endpoint, removed from this repo (kept in esystematics, commit 2b143de) | PLAN-000 / phase-01 | 2026-10-12 22:58 |
 | T-0004 | Project CLAUDE.md from mnrdev | PLAN-000 / phase-01 | 2026-10-09 16:35 |
 | T-0003 | Auto labels + contact save | PLAN-000 / phase-01 | 2026-10-09 17:00 |
@@ -24,5 +25,5 @@ _Last updated: 2026-10-09 15:05_
 |------|------|---------------|--------------------|
 | PLAN-000-general | One-off tasks | phase-01-ongoing | 0 / 0 |
 
-Next task ID: T-0007
+Next task ID: T-0009   (T-0006 and T-0007 are also in tasks/working from another session; IDs are never reused)
 Next plan ID: PLAN-001
