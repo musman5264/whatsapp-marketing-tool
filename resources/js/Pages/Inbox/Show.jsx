@@ -12,7 +12,9 @@ import {
 import { ChannelBrandIcon, CHANNEL_LABELS } from '@/Components/BrandIcons';
 import { formatTimeTz, formatInTz } from '@/Utils/datetime';
 import { playInboundSound, getSoundPrefs, setChannelSoundEnabled, SOUND_CHANNELS } from '@/Utils/notificationSound';
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useLayoutEffect } from 'react';
+import { mergeById, mergeMessages, fetchPage } from '@/Utils/inboxPaging';
+import useLoadWhenVisible from '@/hooks/useLoadWhenVisible';
 import { useTranslation } from 'react-i18next';
 import axios from 'axios';
 
@@ -183,7 +185,7 @@ function MediaImage({ src, alt, conversationId, messageId, isOut }) {
             <button
                 type="button"
                 onClick={() => setOpen(true)}
-                className="relative block rounded-xl overflow-hidden mb-1 bg-black/10 min-h-[80px] cursor-zoom-in"
+                className="relative block w-64 max-w-full h-48 rounded-xl overflow-hidden mb-1 bg-black/10 cursor-zoom-in"
                 title={t('inbox.view_full_size')}
             >
                 {!loaded && <div className="absolute inset-0 flex items-center justify-center"><Loader2 className="h-5 w-5 animate-spin opacity-40" /></div>}
@@ -192,7 +194,7 @@ function MediaImage({ src, alt, conversationId, messageId, isOut }) {
                     alt={alt || 'image'}
                     onLoad={() => setLoaded(true)}
                     onError={() => setErrored(true)}
-                    className={`max-w-full max-h-72 object-contain rounded-xl transition-opacity ${loaded ? 'opacity-100' : 'opacity-0'}`}
+                    className={`w-full h-full object-contain transition-opacity ${loaded ? 'opacity-100' : 'opacity-0'}`}
                 />
             </button>
             {open && (
@@ -209,7 +211,7 @@ function MediaImage({ src, alt, conversationId, messageId, isOut }) {
 
 function MediaVideo({ src, conversationId, messageId }) {
     const proxyUrl = src ?? route('client.inbox.message-media', { conversation: conversationId, message: messageId });
-    return <video src={proxyUrl} controls className="rounded-xl max-w-full max-h-64 mb-1 bg-black" />;
+    return <video src={proxyUrl} controls className="w-64 max-w-full h-48 rounded-xl mb-1 bg-black object-contain" />;
 }
 
 // Images sent together as an album arrive from WhatsApp as separate messages
@@ -706,7 +708,7 @@ function SoundPrefsMenu() {
 
 const REACTION_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
 
-function MessageBubble({ msg, conversationId }) {
+function MessageBubble({ msg, conversationId, onAppend }) {
     const { props: pageProps } = usePage();
     const bubbleTz = pageProps.timezone || 'Asia/Dhaka';
     const isOut = msg.direction === 'out';
@@ -719,7 +721,7 @@ function MessageBubble({ msg, conversationId }) {
         setReacting(true);
         setReactOpen(false);
         axios.post(route('client.inbox.messages.react', { conversation: conversationId, message: msg.id }), { emoji })
-            .then(() => router.reload({ only: ['conversation', 'messages'] }))
+            .then(({ data }) => { if (data?.message) onAppend?.(data.message); })
             .finally(() => setReacting(false));
     };
 
@@ -1500,6 +1502,7 @@ function AgentDropdown({ teamMembers, currentUserId, conversationId, onAssigned,
 export default function InboxShow({
     conversation,
     messages: initialMessages,
+    hasMoreMessages = false,
     allLabels = [],
     conversations: initialConversations,
     filters = {},
@@ -1538,6 +1541,18 @@ export default function InboxShow({
     const [showNewModal, setShowNewModal]   = useState(false);
     const [sending, setSending]             = useState(false);
     const [sendError, setSendError]         = useState(null);
+    const [hasMoreOlder, setHasMoreOlder]   = useState(hasMoreMessages);
+    const [loadingOlder, setLoadingOlder]   = useState(false);
+    const [newCount, setNewCount]           = useState(0);
+    const [listHasMore, setListHasMore]     = useState(Boolean(initialConversations?.next_page_url));
+    const [listMoreLoading, setListMoreLoading] = useState(false);
+    const scrollRef       = useRef(null);
+    const nearBottomRef   = useRef(true);
+    const lastIdRef       = useRef(null);
+    const restoreRef      = useRef(null);
+    const loadingOlderRef = useRef(false);
+    const listSentinelRef = useRef(null);
+    const loadingListRef  = useRef(false);
 
     // When Inertia navigates between conversations the page component is
     // re-used, so seed local state from the new server props on conversation
@@ -1549,11 +1564,15 @@ export default function InboxShow({
         setAssignedTo(conversation.assigned_to ?? 'bot');
         setAssignedUserId(conversation.assigned_user_id ?? null);
         setSendError(null);
+        setHasMoreOlder(hasMoreMessages);
+        setNewCount(0);
+        lastIdRef.current = null;
     }, [conversation.id]);
 
     useEffect(() => {
         setConversations(initialConversations);
         setListLoading(false);
+        setListHasMore(Boolean(initialConversations?.next_page_url));
     }, [initialConversations]);
 
     // Toolbar state
@@ -1563,13 +1582,64 @@ export default function InboxShow({
     const [showAgentDrop, setShowAgentDrop]   = useState(false);
     const [attachPreview, setAttachPreview]   = useState(null); // { file, url, type }
     const fileRef = useRef(null);
-    const bottomRef = useRef(null);
-
     const { data, setData, reset } = useForm({ body: '', type: 'text', payload: null });
 
     const scrollToBottom = useCallback(() => {
-        bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+        const el = scrollRef.current;
+        if (el) el.scrollTop = el.scrollHeight;
+        nearBottomRef.current = true;
+        setNewCount(0);
     }, []);
+
+    const onMessagesScroll = () => {
+        const el = scrollRef.current;
+        if (!el) return;
+        nearBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+        if (nearBottomRef.current && newCount > 0) setNewCount(0);
+        if (el.scrollTop < 120 && hasMoreOlder && !loadingOlderRef.current) loadOlder();
+    };
+
+    // Loads the page of messages older than the oldest one on screen. The reading
+    // position is restored by the layout effect below once the page is in place.
+    const loadOlder = async () => {
+        const first = messages[0];
+        if (!first || loadingOlderRef.current) return;
+        loadingOlderRef.current = true;
+        setLoadingOlder(true);
+        try {
+            const page = await fetchPage(
+                route('client.inbox.messages.index', conversation.uuid),
+                { before_sent_at: first.sent_at, before_id: first.id },
+            );
+            const el = scrollRef.current;
+            restoreRef.current = el ? el.scrollHeight - el.scrollTop : null;
+            setMessages(prev => mergeMessages(page.messages, prev));
+            setHasMoreOlder(page.has_more);
+        } catch {
+            // Keep what is on screen; scrolling up again retries.
+        } finally {
+            loadingOlderRef.current = false;
+            setLoadingOlder(false);
+        }
+    };
+
+    const loadMoreConversations = async () => {
+        if (!conversations?.next_page_url || loadingListRef.current) return;
+        loadingListRef.current = true;
+        setListMoreLoading(true);
+        try {
+            const page = await fetchPage(conversations.next_page_url);
+            setConversations(prev => ({ ...page, data: mergeById(prev?.data ?? [], page.data) }));
+            setListHasMore(Boolean(page.next_page_url));
+        } catch {
+            // Scrolling to the end of the list again retries.
+        } finally {
+            loadingListRef.current = false;
+            setListMoreLoading(false);
+        }
+    };
+
+    useLoadWhenVisible(listSentinelRef, listHasMore && !listMoreLoading, loadMoreConversations);
 
     useEffect(() => {
         axios.get(route('client.inbox.canned-replies.list'))
@@ -1577,7 +1647,28 @@ export default function InboxShow({
             .catch(() => {});
     }, []);
 
-    useEffect(() => { scrollToBottom(); }, [messages]);
+    // Keeps the reading position. Opening a chat lands at the bottom; a new message
+    // follows only when the reader is already at the bottom (or sent it); older
+    // messages added above keep the view where it was; otherwise the reader is
+    // told how many arrived (the "new messages" button).
+    useLayoutEffect(() => {
+        const last = messages[messages.length - 1];
+        const lastId = last?.id ?? null;
+
+        if (restoreRef.current !== null && scrollRef.current) {
+            scrollRef.current.scrollTop = scrollRef.current.scrollHeight - restoreRef.current;
+            restoreRef.current = null;
+        } else if (lastId !== lastIdRef.current) {
+            if (lastIdRef.current === null) {
+                scrollToBottom();
+            } else if (last?.direction === 'out' || nearBottomRef.current) {
+                scrollToBottom();
+            } else {
+                setNewCount(c => c + 1);
+            }
+        }
+        lastIdRef.current = lastId;
+    }, [messages, scrollToBottom]);
 
     // WS: conversation events
     useEffect(() => {
@@ -1603,6 +1694,11 @@ export default function InboxShow({
                 setMessages(prev => prev.map(m =>
                     m.id === e.id ? { ...m, status: e.status } : m
                 ));
+            })
+            .listen('.MessageMediaReady', (e) => {
+                setMessages(prev => prev.map(m => m.id === e.id
+                    ? { ...m, payload: { ...(m.payload ?? {}), preview_url: e.preview_url, mime_type: e.mime_type } }
+                    : m));
             })
             .listen('.ConversationAssigned', () => {
                 router.reload({ only: ['conversation'] });
@@ -1882,6 +1978,11 @@ export default function InboxShow({
                         ) : filteredList.map(conv => (
                             <ConversationCard key={conv.id} conv={conv} isActive={conv.uuid === conversation.uuid} userTz={userTz} />
                         ))}
+                        {listHasMore && (
+                            <div ref={listSentinelRef} className="py-3 text-center text-xs text-neutral-400">
+                                {listMoreLoading ? t('inbox.loading_more') : null}
+                            </div>
+                        )}
                     </div>
                 </div>
 
@@ -1972,16 +2073,27 @@ export default function InboxShow({
 
                     {/* Messages tab */}
                     {activeTab === 'messages' && (
-                        <div className="flex-1 overflow-y-auto p-4 space-y-1">
-                            {groupMessagesForRender(messages).map(item => (
-                                item.kind === 'album'
-                                    ? <ImageGallery key={item.key} messages={item.messages} conversationId={conversation.uuid} />
-                                    : <MessageBubble key={item.key} msg={item.msg} conversationId={conversation.uuid} />
-                            ))}
-                            {messages.length === 0 && (
-                                <div className="py-8"><EmptyState icon={<MessageSquare className="h-8 w-8" />} title={t('inbox.no_messages_yet')} description={t('inbox.no_messages_desc')} /></div>
+                        <div className="relative flex-1 min-h-0 flex flex-col">
+                            <div ref={scrollRef} onScroll={onMessagesScroll}
+                                className="flex-1 overflow-y-auto p-4 space-y-1">
+                                {loadingOlder && (
+                                    <p className="text-center text-xs text-neutral-400 py-2">{t('inbox.loading_older')}</p>
+                                )}
+                                {groupMessagesForRender(messages).map(item => (
+                                    item.kind === 'album'
+                                        ? <ImageGallery key={item.key} messages={item.messages} conversationId={conversation.uuid} />
+                                        : <MessageBubble key={item.key} msg={item.msg} conversationId={conversation.uuid} onAppend={appendMessage} />
+                                ))}
+                                {messages.length === 0 && (
+                                    <div className="py-8"><EmptyState icon={<MessageSquare className="h-8 w-8" />} title={t('inbox.no_messages_yet')} description={t('inbox.no_messages_desc')} /></div>
+                                )}
+                            </div>
+                            {newCount > 0 && (
+                                <button type="button" onClick={scrollToBottom}
+                                    className="absolute bottom-4 left-1/2 -translate-x-1/2 rounded-full bg-brand-600 hover:bg-brand-700 text-white text-xs font-medium px-3 py-1.5 shadow-lg">
+                                    {t('inbox.new_messages', { count: newCount })}
+                                </button>
                             )}
-                            <div ref={bottomRef} />
                         </div>
                     )}
 

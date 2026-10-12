@@ -10,6 +10,14 @@
 - `fromMe=true` (sent from the phone / linked device) → `normalizeFromMe` → `ingestNormalizedOutbound`: stored as `direction=out`, clears `unread_count`, fires `MessageSent`, no automations. `source=api` (our own sends) is skipped.
 - Acks: `handleAck` matches the stored provider id in full or bare form; status never downgrades.
 
+## Media (images, video, audio/voice notes, documents)
+- Arrival: right after `WhatsappDriver::ingestNormalizedInbound` saves a live inbound message, `WahaEventProcessor::handleInbound` calls `WahaMediaStore::storeInbound()`. It downloads the WAHA link through the configured engine only (API key attached, host rebased to the engine origin), stores it as `message-media/{id}.{ext}` and records `preview_url`, `mime_type` and `media_path` on the payload. Then `MessageMediaReady` tells an open chat (private channel `conversation.{id}`) to show it.
+- Soft-fail: any failure is logged (`whatsapp_web.media.arrival_failed`); the message stays, and the copy is fetched lazily when someone opens it.
+- Lazy fallback: `InboxController::serveMedia` (route `client.inbox.message-media`) uses the stored copy when there is one, otherwise downloads it through `WahaMediaStore::store()` and redirects. Errors map to 404 (gone on the engine), 502 (engine unreachable or failed), 503 (engine not configured).
+- Stored-copy lookup: `WahaMediaStore::existingPath()` checks the recorded `media_path` (or, for older copies, the name derived from `mime_type`). It never lists the media folder.
+- Historical (backfilled) media is not fetched at arrival; it keeps the lazy path.
+- Not verified on the live site: whether the arrival download finishes before PHP's time limit on the host (30 s engine timeout), and playback of WhatsApp voice notes (ogg/opus) in every browser.
+
 ## History sync
 - `WahaHistorySync` (`whatsapp-web:sync {--workspace} {--chats=50} {--messages=30} {--queue} {--resubscribe}`), job `SyncWhatsappWebHistoryJob` (queue `whatsapp`), scheduled every 10 minutes in `routes/console.php`, run once after the session becomes active, and by `POST /app/whatsapp-web/sync`.
 - Backfilled inbound older than 5 minutes: no `MessageReceived`, no unread bump, thread never moves backwards.

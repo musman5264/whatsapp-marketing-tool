@@ -7,10 +7,12 @@ import {
     MessageSquare, Inbox, CheckCircle, Clock, User, RefreshCw,
     Search, Plus,
 } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ChannelBrandIcon, CHANNEL_LABELS } from '@/Components/BrandIcons';
 import { formatTimeTz } from '@/Utils/datetime';
+import { mergeById, fetchPage } from '@/Utils/inboxPaging';
+import useLoadWhenVisible from '@/hooks/useLoadWhenVisible';
 
 const FOLDERS = [
     { key: null,         labelKey: 'inbox.folder_all',        icon: Inbox },
@@ -224,6 +226,9 @@ export default function InboxIndex({ conversations: initialConversations, filter
     const [loading, setLoading]             = useState(false);
     const [search, setSearch]               = useState('');
     const [showNewModal, setShowNewModal]   = useState(false);
+    const [listMoreLoading, setListMoreLoading] = useState(false);
+    const listSentinelRef = useRef(null);
+    const loadingListRef  = useRef(false);
 
     useEffect(() => {
         setConversations(initialConversations);
@@ -258,6 +263,24 @@ export default function InboxIndex({ conversations: initialConversations, filter
             });
         return () => { window.Echo.leave(`workspace.${workspaceId}`); };
     }, [workspaceId]);
+
+    // "Load more" for the list: the next page of the same filters, appended.
+    const loadMoreConversations = async () => {
+        if (!conversations?.next_page_url || loadingListRef.current) return;
+        loadingListRef.current = true;
+        setListMoreLoading(true);
+        try {
+            const page = await fetchPage(conversations.next_page_url);
+            setConversations(prev => ({ ...page, data: mergeById(prev?.data ?? [], page.data) }));
+        } catch {
+            // Scrolling to the end of the list again retries.
+        } finally {
+            loadingListRef.current = false;
+            setListMoreLoading(false);
+        }
+    };
+
+    useLoadWhenVisible(listSentinelRef, Boolean(conversations?.next_page_url) && !listMoreLoading, loadMoreConversations);
 
     const navigate = (params) => {
         setLoading(true);
@@ -369,6 +392,11 @@ export default function InboxIndex({ conversations: initialConversations, filter
                                     userTz={userTz}
                                 />
                             ))
+                        )}
+                        {conversations?.next_page_url && (
+                            <div ref={listSentinelRef} className="py-3 text-center text-xs text-neutral-400">
+                                {listMoreLoading ? t('inbox.loading_more') : null}
+                            </div>
                         )}
                     </div>
                 </div>
