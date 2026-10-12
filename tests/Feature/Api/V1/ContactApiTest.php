@@ -75,6 +75,46 @@ class ContactApiTest extends TestCase
         $this->assertDatabaseHas('contacts', ['phone_e164' => '+8801700000001', 'workspace_id' => $workspace->id]);
     }
 
+    public function test_create_existing_phone_returns_200_with_same_contact(): void
+    {
+        ['user' => $user, 'workspace' => $workspace] = $this->createWorkspaceContext();
+        $token = $user->createToken('t', [ApiAbilities::CONTACTS_WRITE])->plainTextToken;
+        $existing = Contact::factory()->create([
+            'workspace_id' => $workspace->id,
+            'phone_e164' => '+923216927688',
+            'first_name' => 'Old',
+        ]);
+
+        $this->withToken($token)
+            ->postJson('/api/v1/contacts', [
+                'phone_e164' => '+923216927688',
+                'first_name' => 'New',
+            ])
+            ->assertStatus(200)
+            ->assertJsonPath('data.id', $existing->id)
+            ->assertJsonPath('data.first_name', 'New');
+
+        $this->assertSame(1, Contact::where('workspace_id', $workspace->id)->where('phone_e164', '+923216927688')->count());
+    }
+
+    public function test_create_restores_soft_deleted_contact_with_same_phone(): void
+    {
+        ['user' => $user, 'workspace' => $workspace] = $this->createWorkspaceContext();
+        $token = $user->createToken('t', [ApiAbilities::CONTACTS_WRITE])->plainTextToken;
+        $deleted = Contact::factory()->create([
+            'workspace_id' => $workspace->id,
+            'phone_e164' => '+923216927688',
+        ]);
+        $deleted->delete();
+
+        $this->withToken($token)
+            ->postJson('/api/v1/contacts', ['phone_e164' => '+923216927688'])
+            ->assertStatus(200)
+            ->assertJsonPath('data.id', $deleted->id);
+
+        $this->assertNull(Contact::find($deleted->id)?->deleted_at);
+    }
+
     public function test_create_contact_invalid_phone_returns_422(): void
     {
         ['user' => $user] = $this->createWorkspaceContext();

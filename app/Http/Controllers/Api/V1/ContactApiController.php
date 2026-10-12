@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Resources\Api\V1\ContactResource;
 use App\Modules\Shared\Models\Contact;
+use App\Modules\Shared\Services\ContactService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -56,8 +57,12 @@ class ContactApiController extends WorkspaceScopedController
 
     /**
      * POST /api/v1/contacts
+     *
+     * Upserts by phone (or email when no phone): a new contact returns 201, a
+     * number that already exists returns 200 with that contact (fields sent in
+     * the request overwrite the stored ones), and a soft-deleted match is restored.
      */
-    public function store(Request $request): JsonResponse
+    public function store(Request $request, ContactService $contacts): JsonResponse
     {
         $validated = $request->validate([
             'phone_e164' => ['nullable', 'string', 'regex:/^\+[1-9]\d{6,14}$/'],
@@ -74,12 +79,14 @@ class ContactApiController extends WorkspaceScopedController
             'source' => ['nullable', 'string', 'max:100'],
         ]);
 
-        $contact = Contact::create(array_merge($validated, ['workspace_id' => $this->workspaceId($request)]));
+        // No created-event here: this endpoint never fired contact.created before, and
+        // firing it now would start automations and webhooks for every API import.
+        $contact = $contacts->upsert($this->workspaceId($request), $validated, dispatchCreatedEvent: false);
         $contact->load('tags');
 
         return (new ContactResource($contact))
             ->response()
-            ->setStatusCode(201);
+            ->setStatusCode($contact->wasRecentlyCreated ? 201 : 200);
     }
 
     /**
