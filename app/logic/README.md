@@ -9,7 +9,6 @@ Tracked write-ups of what is **built and working now**. Update a file in place w
 | [waha-api-coverage.md](waha-api-coverage.md) | Audit of WAHA endpoints vs what the app calls (copy of the old git-ignored `docs/` file; keep this one current) |
 | [api-message-send.md](api-message-send.md) | Public `POST /api/v1/messages/send`: async WhatsApp send (202), job, failure handling |
 | [api-contacts-upsert.md](api-contacts-upsert.md) | Public `POST /api/v1/contacts`: 201 new / 200 existing / restores deleted, no more 500 on repeated numbers |
-| [whatsmine-capture.md](whatsmine-capture.md) | TEMPORARY WhatsMine webhook capture (off by default): records raw deliveries to storage for contract discovery |
 
 ## How to write one
 Short sections: what it does, where the code is (file paths), the data flow, failure behaviour, how to test, known unverified points.

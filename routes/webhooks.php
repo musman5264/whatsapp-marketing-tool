@@ -17,7 +17,6 @@ use App\Modules\Broadcasting\Http\Controllers\SmsStatusWebhookController;
 use App\Modules\Ecommerce\Http\Controllers\EcommerceOAuthController;
 use App\Modules\Ecommerce\Http\Controllers\EcommerceWebhookController;
 use App\Modules\Inbox\Http\Controllers\MetaWebhookController;
-use App\Modules\Integrations\Http\Controllers\WhatsMineCaptureController;
 use App\Modules\Whatsapp\Http\Controllers\WhatsappWebhookController;
 use App\Modules\WhatsappWeb\Http\Controllers\WhatsappWebWebhookController;
 use Illuminate\Support\Facades\Route;
@@ -38,10 +37,6 @@ Route::middleware('throttle:webhooks')->group(function () {
     // ─── WhatsApp Web (QR / unofficial engine — WAHA) ───────────────────────────
     Route::post('webhooks/whatsapp-web/{token}', [WhatsappWebWebhookController::class, 'receive'])
         ->name('webhooks.whatsapp-web.receive');
-
-    // ─── TEMPORARY WhatsMine capture (T-0006): logs deliveries only, off unless WHATSMINE_CAPTURE_ENABLED=true ───
-    Route::post('webhooks/whatsmine-capture/{token}', [WhatsMineCaptureController::class, 'receive'])
-        ->name('webhooks.whatsmine-capture.receive');
 
     // ─── Meta (Instagram + Messenger) ───────────────────────────────────────────
     Route::prefix('webhooks/meta')->name('webhooks.meta.')->group(function () {

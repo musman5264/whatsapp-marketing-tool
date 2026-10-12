@@ -1,7 +1,7 @@
 ---
 id: T-0006
 title: Temporary WhatsMine capture endpoint in this repo (off by default)
-status: completed
+status: cancelled
 priority: high
 type: feature
 plan: tasks/plans/PLAN-000-general/PLAN.md
@@ -83,3 +83,9 @@ none
 - Static analysis: `php -d memory_limit=1G vendor/bin/phpstan analyse --memory-limit=1G <controller> <config>` → `[OK] No errors`. (Without the memory flag phpstan ran out of memory, which is an environment limit, not a code finding.)
 - Not run live: no public address yet and no webhook registration on WhatsMine. Both need the owner's go-ahead.
 - Not deployed to wa.esystematics.com.
+
+## Cancelled 2026-10-12 22:58
+- Reason: the capture belongs in esystematics, where the real ticket webhook will live. The whatsapp repo's copy would have needed a second deploy of a different product and a second cleanup. The esystematics copy (commit `2b143de`) is kept there.
+- Removed from this repo in the commit that adds this note: the controller, config, test and `app/logic/whatsmine-capture.md`, the route in `routes/webhooks.php`, the CSRF entry in `bootstrap/app.php`, and the logic index row.
+- Still in git history at commit `d9b8e7b`, so it can be restored if needed.
+- This file is kept as the record of the work, per the tracker rules (task files are never deleted).
