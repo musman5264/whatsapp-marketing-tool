@@ -69,3 +69,20 @@ Source questionnaire: [WHATSMINE-QUESTIONS-2026-10-12.md](WHATSMINE-QUESTIONS-20
 - **Unknown:** the rest. The most important is **IN-14 (inbound images)**: nothing in our workspace shows whether WhatsMine delivers them.
 
 Anything in "Code" or "Unknown" needs WhatsMine's own answer or a live test before esystematics builds on it. The four live test messages in the questionnaire (section 6) are the way to settle the inbound items.
+
+## Live evidence: WhatsMine admin, Webhooks page (screenshot, 12 Oct 2026, GMT+5)
+
+WhatsMine runs on wa.esystematics.com. Its Webhooks page lists two endpoints, and each shows its recent deliveries with a status code.
+
+| Item | What the screen shows | Status |
+|---|---|---|
+| IN-1 | The admin lets you add an endpoint with a URL and a list of events. The event `message.received` is selectable and appears as `message.received`. The API request shape is still unknown. | Live (UI); API Unknown |
+| IN-2 | Endpoints can be listed and deleted from the admin. The API calls are still unconfirmed. | Live (UI); API Unknown |
+| IN-3 | Yes. Two endpoints are subscribed to `message.received`, and both recorded deliveries at the same times (21:50, 20:49). | Live (UI) |
+| IN-10 | **Problem.** Every `message.received` delivery to the isinternet endpoint returned **401**. The sibling's controller returns 401 when the signature does not match, when the header is missing, or when the stored secret is empty. The cause is not yet known. | Live (UI); cause Unknown |
+| OPS-4 | Yes, partly. Each delivery shows its time and status code. The response body is behind the eye icon, which has not been checked yet. | Live (UI) |
+| IN-5 / IN-6 / IN-7 / IN-8 | The delivery details (eye icon) should show the real payload. Not yet captured. | Open |
+
+Also: the admin has a Settings > Tokens page and a Usage page. The Usage page logs every API call with its status, timing and payload. The error rate there was 23% over 24 hours.
+
+**Not to click:** the rotate icon on an endpoint changes its secret. On the isinternet endpoint that would break signing for the live site.
