@@ -2,14 +2,13 @@
 
 namespace App\Http\Controllers\Api\V1;
 
-use App\Events\MessageSent;
 use App\Modules\Broadcasting\Services\Sms\SmsDriverManager;
 use App\Modules\Shared\Models\ChannelAccount;
 use App\Modules\Shared\Models\Contact;
 use App\Modules\Shared\Models\Conversation;
 use App\Modules\Shared\Models\Message;
-use App\Modules\Shared\Services\ChannelManager;
 use App\Modules\Whatsapp\Exceptions\WhatsappWindowClosedException;
+use App\Modules\Whatsapp\Jobs\SendQueuedWhatsappMessageJob;
 use App\Modules\Whatsapp\Services\CloudApiClient;
 use App\Services\StorageManager;
 use Illuminate\Http\JsonResponse;
@@ -23,7 +22,6 @@ class MessageApiController extends WorkspaceScopedController
     private const MEDIA_TYPES = ['image', 'video', 'audio', 'document'];
 
     public function __construct(
-        private ChannelManager $channelManager,
         private StorageManager $storageManager,
     ) {}
 
@@ -82,8 +80,15 @@ class MessageApiController extends WorkspaceScopedController
         $channel = $validated['channel'];
 
         try {
+            if ($channel === 'whatsapp') {
+                // Queued: the provider call (WAHA / Cloud API) can be slow, so it runs
+                // on the whatsapp queue and the caller gets 202 right away.
+                $result = $this->queueWhatsapp($request, $wsId, $contact, $validated, $isMedia);
+
+                return response()->json(array_merge(['status' => 'queued'], $result), 202);
+            }
+
             $result = match ($channel) {
-                'whatsapp' => $this->sendWhatsapp($request, $wsId, $contact, $validated, $isMedia),
                 'sms' => ['provider_message_id' => $this->sendSms($wsId, $contact, $validated)],
                 default => throw new \InvalidArgumentException("Channel '{$channel}' send not yet implemented."),
             };
@@ -97,14 +102,16 @@ class MessageApiController extends WorkspaceScopedController
     }
 
     /**
-     * Resolve the WhatsApp account, build a conversation + outbound message, and
-     * send it through the shared WhatsApp driver — which branches Cloud API vs.
-     * WhatsApp Web (WAHA) internally, exactly like the inbox and mobile paths.
+     * Resolve the WhatsApp account, record an outbound message as `queued`, and
+     * dispatch the send to the whatsapp queue. Validation, account resolution,
+     * the 24-hour window check and media upload stay synchronous, so the caller
+     * still gets a clear error for those. Provider failures are recorded on the
+     * message row (status `failed`), not returned here.
      *
      * @param  array<string, mixed>  $payload
-     * @return array{provider_message_id: string, degraded_to_text?: bool}
+     * @return array{message_id: int, degraded_to_text?: bool}
      */
-    private function sendWhatsapp(Request $request, int $wsId, Contact $contact, array $payload, bool $isMedia): array
+    private function queueWhatsapp(Request $request, int $wsId, Contact $contact, array $payload, bool $isMedia): array
     {
         if (! $contact->phone_e164) {
             throw new \RuntimeException('Contact has no E.164 phone number.');
@@ -159,20 +166,9 @@ class MessageApiController extends WorkspaceScopedController
             'sent_at' => now(),
         ]);
 
-        try {
-            $providerMessageId = (string) $this->channelManager->driver('whatsapp')->send($message);
-        } catch (\Throwable $e) {
-            $message->update(['status' => 'failed', 'error_json' => ['message' => $e->getMessage()]]);
-            throw new \RuntimeException($e->getMessage());
-        }
+        SendQueuedWhatsappMessageJob::dispatch($message->id)->onQueue('whatsapp');
 
-        $message->update(['status' => 'sent', 'provider_message_id' => $providerMessageId]);
-        $conversation->update(['last_message_at' => now()]);
-
-        $message->load('conversation');
-        MessageSent::dispatch($message);
-
-        $result = ['provider_message_id' => $providerMessageId];
+        $result = ['message_id' => $message->id];
 
         // A template sent through a WhatsApp Web account is rendered to plain text
         // by the driver — flag it so the caller knows it was not a real template.

@@ -121,14 +121,15 @@ class MessageSendApiTest extends TestCase
                 'channel' => 'whatsapp',
                 'body' => 'Hello from API',
             ])
-            ->assertOk()
-            ->assertJsonPath('status', 'sent')
-            ->assertJsonPath('provider_message_id', 'wamid.CLOUD');
+            ->assertStatus(202)
+            ->assertJsonPath('status', 'queued')
+            ->assertJsonStructure(['message_id']);
 
         $this->assertNotNull($holder->message);
         $this->assertSame('text', $holder->message->type);
         $this->assertSame($cloud->id, $holder->message->conversation->channel_account_id);
 
+        // The queue runs inline in tests (QUEUE_CONNECTION=sync), so the send has finished.
         $this->assertDatabaseHas('messages', [
             'conversation_id' => $conversation->id,
             'direction' => 'out',
@@ -152,8 +153,10 @@ class MessageSendApiTest extends TestCase
                 'channel' => 'whatsapp',
                 'body' => 'Hi via personal number',
             ])
-            ->assertOk()
-            ->assertJsonPath('provider_message_id', 'wamid.WAHA');
+            ->assertStatus(202)
+            ->assertJsonPath('status', 'queued');
+
+        $this->assertSame('wamid.WAHA', $holder->message->fresh()->provider_message_id);
 
         $conversation = Conversation::where('workspace_id', $ws->id)
             ->where('contact_id', $contact->id)
@@ -178,7 +181,7 @@ class MessageSendApiTest extends TestCase
                 'channel' => 'whatsapp',
                 'template_name' => 'welcome',
             ])
-            ->assertOk();
+            ->assertStatus(202);
 
         $conversation = Conversation::where('contact_id', $contact->id)->first();
         $this->assertSame($cloud->id, $conversation->channel_account_id);
@@ -200,7 +203,7 @@ class MessageSendApiTest extends TestCase
                 'body' => 'Force WAHA',
                 'channel_account_id' => $waha->id,
             ])
-            ->assertOk();
+            ->assertStatus(202);
 
         $conversation = Conversation::where('contact_id', $contact->id)->first();
         $this->assertSame($waha->id, $conversation->channel_account_id);
@@ -247,7 +250,7 @@ class MessageSendApiTest extends TestCase
                 'channel' => 'whatsapp',
                 'body' => 'reply on existing thread',
             ])
-            ->assertOk();
+            ->assertStatus(202);
 
         $this->assertSame(1, Conversation::where('contact_id', $contact->id)->count());
         $this->assertDatabaseHas('messages', [
@@ -271,7 +274,7 @@ class MessageSendApiTest extends TestCase
                 'template_name' => 'order_update',
                 'template_vars' => ['12345', 'shipped'],
             ])
-            ->assertOk()
+            ->assertStatus(202)
             ->assertJsonPath('degraded_to_text', true);
 
         $this->assertSame('template', $holder->message->type);
@@ -293,11 +296,11 @@ class MessageSendApiTest extends TestCase
                 'template_name' => 'order_update',
                 'template_vars' => ['12345'],
             ])
-            ->assertOk()
+            ->assertStatus(202)
             ->assertJsonMissingPath('degraded_to_text');
     }
 
-    public function test_whatsapp_send_failure_marks_message_failed_and_returns_422(): void
+    public function test_whatsapp_send_failure_marks_message_failed(): void
     {
         ['user' => $user, 'workspace' => $ws] = $this->createWorkspaceContext();
         $token = $user->createToken('t', [ApiAbilities::MESSAGES_WRITE])->plainTextToken;
@@ -323,13 +326,18 @@ class MessageSendApiTest extends TestCase
                 'channel' => 'whatsapp',
                 'body' => 'will fail',
             ])
-            ->assertStatus(422)
-            ->assertJsonPath('error', 'WhatsApp send failed: boom');
+            ->assertStatus(202)
+            ->assertJsonPath('status', 'queued');
 
+        // The provider error is stored on the message, not returned to the caller.
         $this->assertDatabaseHas('messages', [
             'conversation_id' => $conversation->id,
             'status' => 'failed',
         ]);
+        $this->assertSame(
+            'WhatsApp send failed: boom',
+            Message::where('conversation_id', $conversation->id)->where('direction', 'out')->sole()->error_json['message'],
+        );
     }
 
     public function test_cloud_send_blocked_when_24h_window_closed_and_not_template(): void
