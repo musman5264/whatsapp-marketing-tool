@@ -45,6 +45,33 @@ The job now sends the exact string with `withBody($json, 'application/json')`. T
 
 **Effect on receivers:** a receiver that parsed the old body as a JSON string will now receive a JSON object. This must be checked on each receiving site before it relies on the change.
 
+## message.received payload
+
+Sent for every inbound message, to each endpoint subscribed to `message.received` (all channels):
+
+```json
+{
+  "event": "message.received",
+  "message": {
+    "id": 123,
+    "conversation_id": 45,
+    "direction": "inbound",
+    "channel": "whatsapp",
+    "body": "REPLY-TK-0004\nHI this is the reply",
+    "sent_at": "2026-10-12T23:44:00+00:00",
+    "from": "+923001234567",
+    "media": null
+  },
+  "timestamp": "2026-10-12T23:44:01+00:00"
+}
+```
+
+- `message.id` is the WhatsMine database id. It is stable for a message, so receivers can use it to ignore repeats.
+- `from` is the sender's number as stored on the contact. It is `null` when the conversation has no contact.
+- `media` is `null` for text. For an attachment it is `{"id": 7, "mime_type": "image/jpeg"}`. The file itself and a download link are not in the payload yet.
+- Source: `app/Listeners/DispatchOutboundWebhookListener.php` (`messageReceivedPayload()`). Test: `tests/Feature/Webhooks/MessageReceivedPayloadTest.php`.
+- `from` and `media` appear on live endpoints only after this code is deployed.
+
 ## Known receiver problem (not fixed here)
 
 The isinternet endpoint (`rana7070.isinternet.com.pk/api/whatsmine/webhook/...`) returned **401** on every `message.received` delivery. Its check reads `X-Signature-256` and expects `sha256=` + HMAC of the raw body. WhatsMine sends `X-Webhook-Signature` in the `t=,v1=` format above. The receiver needs to be changed to verify this format; that change is in the isinternet code, not in this repo.

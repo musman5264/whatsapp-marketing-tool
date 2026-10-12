@@ -5,7 +5,10 @@ namespace App\Listeners;
 use App\Events\CampaignCompleted;
 use App\Events\ContactCreated;
 use App\Events\MessageReceived;
+use App\Models\Media;
 use App\Models\User;
+use App\Modules\Shared\Models\Contact;
+use App\Modules\Shared\Models\Message;
 use App\Services\WebhookDispatchService;
 
 /**
@@ -48,7 +51,23 @@ class DispatchOutboundWebhookListener
             return;
         }
 
-        $this->webhookService->dispatch($user, 'message.received', [
+        $this->webhookService->dispatch($user, 'message.received', $this->messageReceivedPayload($message));
+    }
+
+    /**
+     * What subscribers receive for a message. `from` is the sender's number as stored on the contact (null when
+     * unknown). `media` is null for text, or the media id and MIME type for an attachment.
+     *
+     * @return array<string, mixed>
+     */
+    public function messageReceivedPayload(Message $message): array
+    {
+        $media = $message->media_id ? Media::find($message->media_id) : null;
+
+        $contactId = $message->conversation?->getAttribute('contact_id');
+        $from = $contactId ? Contact::query()->whereKey($contactId)->value('phone_e164') : null;
+
+        return [
             'event' => 'message.received',
             'message' => [
                 'id' => $message->id,
@@ -57,8 +76,10 @@ class DispatchOutboundWebhookListener
                 'channel' => $message->channel,
                 'body' => $message->body,
                 'sent_at' => $message->sent_at?->toIso8601String(),
+                'from' => $from,
+                'media' => $media ? ['id' => $media->id, 'mime_type' => $media->mime_type] : null,
             ],
-        ]);
+        ];
     }
 
     public function handleCampaignCompleted(CampaignCompleted $event): void

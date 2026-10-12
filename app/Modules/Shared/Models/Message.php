@@ -6,6 +6,9 @@ use App\Support\Concerns\MasksDemoData;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
+/**
+ * @property int|null $media_id
+ */
 class Message extends Model
 {
     use MasksDemoData;
