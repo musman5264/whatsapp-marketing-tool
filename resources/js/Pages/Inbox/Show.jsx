@@ -173,12 +173,18 @@ function WaText({ text, className = '' }) {
 
 /* ─── message type renderers ─────────────────────────── */
 
+// A media URL in a message payload can be typed by an agent (outbound payloads are
+// stored as sent), so only web and same-site paths are used as src or href.
+function safeMediaUrl(url) {
+    return typeof url === 'string' && /^(https?:\/\/|\/(?!\/))/i.test(url) ? url : null;
+}
+
 function MediaImage({ src, alt, conversationId, messageId, isOut }) {
     const { t } = useTranslation();
     const [loaded, setLoaded]   = useState(false);
     const [errored, setErrored] = useState(false);
     const [open, setOpen]       = useState(false);
-    const proxyUrl = src ?? route('client.inbox.message-media', { conversation: conversationId, message: messageId });
+    const proxyUrl = safeMediaUrl(src) ?? route('client.inbox.message-media', { conversation: conversationId, message: messageId });
     if (errored) return <span className="text-xs opacity-60 italic">{t('inbox.image_unavailable')}</span>;
     return (
         <>
@@ -210,7 +216,7 @@ function MediaImage({ src, alt, conversationId, messageId, isOut }) {
 }
 
 function MediaVideo({ src, conversationId, messageId }) {
-    const proxyUrl = src ?? route('client.inbox.message-media', { conversation: conversationId, message: messageId });
+    const proxyUrl = safeMediaUrl(src) ?? route('client.inbox.message-media', { conversation: conversationId, message: messageId });
     return <video src={proxyUrl} controls className="w-64 max-w-full h-48 rounded-xl mb-1 bg-black object-contain" />;
 }
 
@@ -290,7 +296,7 @@ function groupMessagesForRender(messages) {
 }
 
 function galleryImageSrc(msg, conversationId) {
-    return msg.payload?.preview_url
+    return safeMediaUrl(msg.payload?.preview_url)
         ?? route('client.inbox.message-media', { conversation: conversationId, message: msg.id });
 }
 
@@ -397,13 +403,13 @@ function ImageLightbox({ images, index, onClose, onIndex }) {
 }
 
 function MediaAudio({ src, conversationId, messageId }) {
-    const proxyUrl = src ?? route('client.inbox.message-media', { conversation: conversationId, message: messageId });
+    const proxyUrl = safeMediaUrl(src) ?? route('client.inbox.message-media', { conversation: conversationId, message: messageId });
     return <audio src={proxyUrl} controls className="w-full min-w-[200px] mb-1" />;
 }
 
 function MediaDocument({ src, filename, conversationId, messageId, isOut }) {
     const { t } = useTranslation();
-    const proxyUrl = src ?? route('client.inbox.message-media', { conversation: conversationId, message: messageId });
+    const proxyUrl = safeMediaUrl(src) ?? route('client.inbox.message-media', { conversation: conversationId, message: messageId });
     return (
         <a href={proxyUrl} target="_blank" rel="noopener noreferrer"
             className={`flex items-center gap-2.5 rounded-xl px-3 py-2.5 mb-1 transition ${isOut ? 'bg-white/20 hover:bg-white/30' : 'bg-neutral-100 dark:bg-neutral-700 hover:bg-neutral-200 dark:hover:bg-neutral-600'}`}>
@@ -462,7 +468,7 @@ function ContactCard({ contacts, isOut }) {
 }
 
 function StickerBubble({ src, conversationId, messageId }) {
-    const proxyUrl = src ?? route('client.inbox.message-media', { conversation: conversationId, message: messageId });
+    const proxyUrl = safeMediaUrl(src) ?? route('client.inbox.message-media', { conversation: conversationId, message: messageId });
     return <img src={proxyUrl} alt="sticker" className="h-24 w-24 object-contain" />;
 }
 
@@ -2076,9 +2082,6 @@ export default function InboxShow({
                         <div className="relative flex-1 min-h-0 flex flex-col">
                             <div ref={scrollRef} onScroll={onMessagesScroll}
                                 className="flex-1 overflow-y-auto p-4 space-y-1">
-                                {loadingOlder && (
-                                    <p className="text-center text-xs text-neutral-400 py-2">{t('inbox.loading_older')}</p>
-                                )}
                                 {groupMessagesForRender(messages).map(item => (
                                     item.kind === 'album'
                                         ? <ImageGallery key={item.key} messages={item.messages} conversationId={conversation.uuid} />
@@ -2088,6 +2091,11 @@ export default function InboxShow({
                                     <div className="py-8"><EmptyState icon={<MessageSquare className="h-8 w-8" />} title={t('inbox.no_messages_yet')} description={t('inbox.no_messages_desc')} /></div>
                                 )}
                             </div>
+                            {loadingOlder && (
+                                <p className="absolute top-2 left-1/2 -translate-x-1/2 rounded-full bg-white/90 dark:bg-neutral-800/90 px-3 py-1 text-xs text-neutral-500 dark:text-neutral-300 shadow">
+                                    {t('inbox.loading_older')}
+                                </p>
+                            )}
                             {newCount > 0 && (
                                 <button type="button" onClick={scrollToBottom}
                                     className="absolute bottom-4 left-1/2 -translate-x-1/2 rounded-full bg-brand-600 hover:bg-brand-700 text-white text-xs font-medium px-3 py-1.5 shadow-lg">
