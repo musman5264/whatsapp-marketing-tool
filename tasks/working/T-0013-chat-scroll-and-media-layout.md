@@ -10,7 +10,7 @@ depends_on: []
 source: TEMP/intake-2026-10-13-0049.md
 created: 2026-10-13 00:55
 started: 2026-10-13 00:59
-updated: 2026-10-13 00:59
+updated: 2026-10-13 11:21
 completed:
 ---
 
@@ -79,3 +79,4 @@ Nothing. Waiting for the go-ahead.
 - Commits: `902f142` (source), `830babb` (build). Pushed to `origin/main` at 01:24.
 - Live: **unverified**; not deployed yet. Browser checks still to do (scrolled-up reader is not moved; no jump when an image loads; 360 px and 1920 px, light and dark).
 - 2026-10-13 00:59 approved by user ('all designs are approved'); lazy loading of messages added to T-0012 scope. Moved to working.
+- 2026-10-13 11:21 browser check: photos render in fixed 256 × 192 boxes; the 'Loading older' line moved the chat by about 36 px until it became an overlay (commit 6b3bffc); now the same message stays at 20 px from the top before and after the load. Dark mode checked. 360 px: the inbox has three fixed columns, the chat pane sits off-screen; that layout is not changed by this work (see the report).

@@ -10,7 +10,7 @@ depends_on: []
 source: TEMP/intake-2026-10-13-0049.md
 created: 2026-10-13 00:55
 started: 2026-10-13 00:59
-updated: 2026-10-13 00:59
+updated: 2026-10-13 11:21
 completed:
 ---
 
@@ -97,3 +97,4 @@ Design approval from the user (brainstorming gate). No code changed yet.
 - Known limits (documented in `app/logic/inbox-paging.md`): search covers loaded conversations only; the list resets to page 1 when the page props refresh.
 - PHPStan on the changed backend files: still reports errors on my new code (Eloquent attribute access in `WahaMediaStore.php` and `MessageMediaReady.php`, and baseline count mismatches in `InboxController.php` and `WahaEventProcessor.php`). Not fixed and no baseline entries added; needs a follow-up.
 - 2026-10-13 00:59 approved by user ('all designs are approved'); lazy loading of messages added to T-0012 scope. Moved to working.
+- 2026-10-13 11:21 browser check (local server on a separate DB, real pages, 1920 px light and dark): chat opens at the newest messages; scrolling up loads the older page with no duplicates; list loads 30 then 35 on both the inbox and the chat page; a live message while scrolled up keeps the view and shows "1 new message(s)"; clicking it goes to the bottom. Bug found and fixed: the chat page's list linked to the chat URL (commit a0d392e).

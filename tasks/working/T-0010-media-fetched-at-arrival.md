@@ -10,7 +10,7 @@ depends_on: [T-0014]
 source: TEMP/intake-2026-10-13-0049.md
 created: 2026-10-13 00:55
 started: 2026-10-13 00:59
-updated: 2026-10-13 00:59
+updated: 2026-10-13 11:21
 completed:
 ---
 
@@ -89,3 +89,5 @@ Design approval from the user (brainstorming gate). No code changed yet.
 - Live: **unverified**. The live site still serves `assets/app-COr5lMRs.js`; the new build is `assets/app-DkfOuBLd.js`, so it is not deployed yet. Acceptance on wa.esystematics.com (a photo from a phone shows in an open chat with no refresh) still to do.
 - Known risk: the arrival download runs inside PHP's after-response step; with a 30 s engine timeout it can hit `max_execution_time`. The message is still saved and the lazy path covers it.
 - 2026-10-13 00:59 approved by user ('all designs are approved'); lazy loading of messages added to T-0012 scope. Moved to working.
+- 2026-10-13 11:21 media lookup hardened: a recorded path outside this message's own file is ignored (a 500 before; test test_a_recorded_path_outside_this_messages_media_file_is_ignored). Commit a0d392e. The arrival fetch was not run against a real WAHA engine here (none available); tested with HTTP fakes.
+- 2026-10-13 11:21 live check: the production site had not switched to the new bundle at this time (see the poll log in the session); browser checks above were done on the local build, not on wa.esystematics.com (no login credentials here).
