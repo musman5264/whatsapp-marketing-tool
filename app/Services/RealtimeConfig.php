@@ -56,6 +56,24 @@ final class RealtimeConfig
      */
     public static function resolve(): self
     {
+        // Admin switched Reverb on (and its credentials are complete): Reverb serves both
+        // the browser and the server. Turning it off falls through to Pusher / .env.
+        if (self::reverbActive()) {
+            $reverb = self::adminReverbCredentials();
+
+            return new self(
+                driver: 'reverb',
+                key: $reverb['key'],
+                cluster: '',
+                enabled: true,
+                canBroadcast: true,
+                broadcaster: 'reverb',
+                wsHost: $reverb['host'],
+                wsPort: $reverb['port'],
+                forceTLS: $reverb['scheme'] === 'https',
+            );
+        }
+
         $adminPusher = self::adminPusherCredentials();
         $broadcaster = $adminPusher !== null ? 'pusher' : (string) config('broadcasting.default', 'null');
 
@@ -127,6 +145,42 @@ final class RealtimeConfig
             'app_id' => $appId,
             'cluster' => self::setting('pusher_app_cluster') ?: 'mt1',
         ];
+    }
+
+    /**
+     * Admin-panel Reverb credentials, only when all of app id, key, secret and host are set.
+     * Returns null otherwise. Shared with ReverbSettingsServiceProvider.
+     *
+     * @return array{app_id: string, key: string, secret: string, host: string, port: int, scheme: string}|null
+     */
+    public static function adminReverbCredentials(): ?array
+    {
+        $appId = self::setting('reverb_app_id');
+        $key = self::setting('reverb_app_key');
+        $secret = self::setting('reverb_app_secret');
+        $host = self::setting('reverb_host');
+
+        if ($appId === '' || $key === '' || $secret === '' || $host === '') {
+            return null;
+        }
+
+        $scheme = self::setting('reverb_scheme') === 'http' ? 'http' : 'https';
+        $port = (int) (self::setting('reverb_port') ?: 443);
+
+        return [
+            'app_id' => $appId,
+            'key' => $key,
+            'secret' => $secret,
+            'host' => $host,
+            'port' => $port > 0 ? $port : 443,
+            'scheme' => $scheme,
+        ];
+    }
+
+    /** True when the admin switched Reverb on and its credentials are complete. */
+    public static function reverbActive(): bool
+    {
+        return self::setting('realtime_driver') === 'reverb' && self::adminReverbCredentials() !== null;
     }
 
     /**

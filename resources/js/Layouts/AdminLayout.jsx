@@ -51,6 +51,7 @@ const ADMIN_NAV_ITEMS = [
     { labelKey: 'admin.nav.queue', route: 'admin.queue.index', href: () => route('admin.queue.index'), icon: Server, permission: 'view_settings' },
     { labelKey: 'admin.cron_setup', route: 'admin.cron-setup.index', href: () => route('admin.cron-setup.index'), icon: Clock, permission: 'view_settings' },
     { labelKey: 'admin.pusher_settings', route: 'admin.pusher-settings.index', href: () => route('admin.pusher-settings.index'), icon: Radio, permission: 'manage_settings' },
+    { labelKey: 'admin.reverb_settings', route: 'admin.reverb-settings.index', href: () => route('admin.reverb-settings.index'), icon: Radio, permission: 'manage_settings' },
     { labelKey: 'admin.nav.settings', route: 'admin.settings.index', href: () => route('admin.settings.index'), icon: Settings, permission: 'view_settings' },
     { labelKey: 'admin.license', route: 'admin.license.index', href: () => route('admin.license.index'), icon: KeyRound, permission: 'view_settings' },
     { labelKey: 'admin.audit_log', route: 'admin.audit-log.index', href: () => route('admin.audit-log.index'), icon: FileText, permission: 'view_settings' },

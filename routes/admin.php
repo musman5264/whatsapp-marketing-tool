@@ -29,6 +29,7 @@ use App\Http\Controllers\Admin\TaxRateController;
 use App\Http\Controllers\Admin\TransactionController;
 use App\Http\Controllers\Admin\TranslationController;
 use App\Http\Controllers\Admin\PusherSettingsController;
+use App\Http\Controllers\Admin\ReverbSettingsController;
 use App\Modules\Integrations\Http\Controllers\IntegrationConfigController;
 use Illuminate\Support\Facades\Route;
 
@@ -173,6 +174,12 @@ Route::post('/queue/flush', [QueueController::class, 'flushFailed'])->name('queu
 Route::get('/pusher-settings', [PusherSettingsController::class, 'index'])->name('pusher-settings.index')->middleware('permission:manage_settings');
 Route::put('/pusher-settings', [PusherSettingsController::class, 'update'])->name('pusher-settings.update')->middleware('permission:manage_settings');
 Route::post('/pusher-settings/test', [PusherSettingsController::class, 'test'])->name('pusher-settings.test')->middleware('permission:manage_settings');
+// Reverb (self-hosted realtime server): auto configure, test, on/off
+Route::get('/reverb-settings', [ReverbSettingsController::class, 'index'])->name('reverb-settings.index')->middleware('permission:manage_settings');
+Route::put('/reverb-settings', [ReverbSettingsController::class, 'update'])->name('reverb-settings.update')->middleware('permission:manage_settings');
+Route::post('/reverb-settings/generate', [ReverbSettingsController::class, 'generate'])->name('reverb-settings.generate')->middleware('permission:manage_settings');
+Route::post('/reverb-settings/test', [ReverbSettingsController::class, 'test'])->name('reverb-settings.test')->middleware('permission:manage_settings');
+Route::post('/reverb-settings/toggle', [ReverbSettingsController::class, 'toggle'])->name('reverb-settings.toggle')->middleware('permission:manage_settings');
 
 // Integrations (system-level credential management)
 Route::get('/integrations', [IntegrationConfigController::class, 'index'])->name('integrations.index')->middleware('permission:manage_integrations');
