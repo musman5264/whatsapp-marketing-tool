@@ -6,6 +6,7 @@ use App\Modules\Shared\Models\Message;
 use Illuminate\Broadcasting\InteractsWithSockets;
 use Illuminate\Broadcasting\PrivateChannel;
 use Illuminate\Contracts\Broadcasting\ShouldBroadcastNow;
+use Illuminate\Contracts\Broadcasting\ShouldRescue;
 use Illuminate\Foundation\Events\Dispatchable;
 use Illuminate\Queue\SerializesModels;
 
@@ -15,7 +16,7 @@ use Illuminate\Queue\SerializesModels;
  * queued broadcast. The extra ~100-300ms HTTP call to the socket server happens
  * inside the request that created the message.
  */
-class MessageReceived implements ShouldBroadcastNow
+class MessageReceived implements ShouldBroadcastNow, ShouldRescue
 {
     use Dispatchable, InteractsWithSockets, SerializesModels;
 

@@ -514,7 +514,9 @@ class WhatsappDriver implements ChannelDriverInterface
         try {
             return $this->storeNormalizedMessage($value, $msg, $historical, $outbound, $outboundStatus);
         } catch (\Throwable $e) {
-            if ($msgId) {
+            // Release the key only when nothing was stored. A stored message must not be
+            // created again by a retry (a failure after the row exists, e.g. a listener).
+            if ($msgId && ! Message::where('provider_message_id', $msgId)->exists()) {
                 app(WebhookIdempotencyService::class)->release('whatsapp_msg', (string) $msgId);
             }
 
