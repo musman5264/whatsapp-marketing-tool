@@ -59,8 +59,9 @@ class SystemSetting extends Model
     public static function set(string $key, $value, bool $isSecret = false, ?string $group = null): void
     {
         $s = static::firstOrNew(['key' => $key]);
-        $s->value = $value;
+        // is_secret must be set before value: the value mutator encrypts only when it is true.
         $s->is_secret = $isSecret;
+        $s->value = $value;
         $s->group = $group;
         $s->save();
     }
