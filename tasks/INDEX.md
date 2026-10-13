@@ -1,5 +1,5 @@
 # Task Board
-_Last updated: 2026-10-13 14:03_
+_Last updated: 2026-10-13 14:29_
 
 ## Working
 | ID | Task | Plan / Phase | Priority | Updated |
@@ -19,7 +19,8 @@ _Last updated: 2026-10-13 14:03_
 ## Completed (most recent first)
 | ID | Task | Plan / Phase | Completed |
 |----|------|--------------|-----------|
-| T-0024 | Build the graphify knowledge graph of the repo (code, no API key); graphify-out/ is untracked | PLAN-000 / phase-01 | 2026-10-13 14:03 |
+| T-0025 | Graphify output committed and pushed to origin main (4791e38) | PLAN-000 / phase-01 | 2026-10-13 14:29 |
+| T-0024 | Build the graphify knowledge graph of the repo (code, no API key) | PLAN-000 / phase-01 | 2026-10-13 14:03 |
 | T-0021 | Reverb not reachable from browsers on cPanel (cancelled: Reverb moves to a VPS, T-0023) | PLAN-000 / phase-01 | 2026-10-13 13:55 |
 | T-0020 | Security: exact-match command allowlist, no built-in deploy key, Reverb starts with the command-line PHP | PLAN-000 / phase-01 | 2026-10-13 13:40 |
 | T-0019 | Reverb: manual start from the Deployment commands and a Start button on the Reverb page | PLAN-000 / phase-01 | 2026-10-13 13:11 |
@@ -42,5 +43,5 @@ _Last updated: 2026-10-13 14:03_
 | PLAN-000-general | One-off tasks | phase-01-ongoing | 0 / 0 |
 | PLAN-001-inbox-speed-and-media | Inbox speed, live updates and media | phase-01-speed-and-media | 1 / 5 |
 
-Next task ID: T-0025   (T-0006 and T-0007 are also in tasks/working from another session; IDs are never reused)
+Next task ID: T-0026   (T-0006 and T-0007 are also in tasks/working from another session; IDs are never reused)
 Next plan ID: PLAN-002
