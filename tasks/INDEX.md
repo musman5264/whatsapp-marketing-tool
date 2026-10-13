@@ -1,5 +1,5 @@
 # Task Board
-_Last updated: 2026-10-13 12:13_
+_Last updated: 2026-10-13 12:39_
 
 ## Working
 | ID | Task | Plan / Phase | Priority | Updated |
@@ -17,6 +17,7 @@ _Last updated: 2026-10-13 12:13_
 ## Completed (most recent first)
 | ID | Task | Plan / Phase | Completed |
 |----|------|--------------|-----------|
+| T-0017 | Reverb watchdog in the scheduler starts Reverb while it is switched on; live status on the Reverb page | PLAN-000 / phase-01 | 2026-10-13 12:39 |
 | T-0016 | Live sync: a refused realtime send no longer cancels automations or stores a message twice | PLAN-000 / phase-01 | 2026-10-13 12:13 |
 | T-0015 | Super-admin Reverb settings: auto configure, test, on/off toggle (local-verified; live deploy pending) | PLAN-000 / phase-01 | 2026-10-13 12:13 |
 | T-0011 | Media lookup checks one path, not the whole folder | PLAN-001 / phase-01 | 2026-10-13 01:24 |
@@ -34,5 +35,5 @@ _Last updated: 2026-10-13 12:13_
 | PLAN-000-general | One-off tasks | phase-01-ongoing | 0 / 0 |
 | PLAN-001-inbox-speed-and-media | Inbox speed, live updates and media | phase-01-speed-and-media | 1 / 5 |
 
-Next task ID: T-0017   (T-0006 and T-0007 are also in tasks/working from another session; IDs are never reused)
+Next task ID: T-0018   (T-0006 and T-0007 are also in tasks/working from another session; IDs are never reused)
 Next plan ID: PLAN-002
