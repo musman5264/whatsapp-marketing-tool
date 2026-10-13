@@ -72,19 +72,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         git \
         unzip \
         curl \
-    && docker-php-ext-configure gd \
-        --with-freetype \
-        --with-jpeg \
-        --with-webp \
     && docker-php-ext-install -j"$(nproc)" \
         pdo_mysql \
         mbstring \
         exif \
         pcntl \
         bcmath \
-        gd \
-        zip \
-        intl \
         opcache \
     && pecl install redis \
     && docker-php-ext-enable redis \
@@ -100,6 +93,20 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         libcurl4-openssl-dev \
         libssl-dev \
     && rm -rf /var/lib/apt/lists/*
+
+
+# =============================================================================
+# PHP Extensions that need system libraries (gd, intl, zip)
+#
+# Installed after the apt purge above, which removed the libraries these
+# extensions load at runtime. The installer keeps those libraries.
+# =============================================================================
+
+# Copy the extension installer script
+COPY --from=mlocati/php-extension-installer /usr/bin/install-php-extensions /usr/local/bin/
+
+# Install missing extensions
+RUN install-php-extensions gd intl zip
 
 
 # =============================================================================

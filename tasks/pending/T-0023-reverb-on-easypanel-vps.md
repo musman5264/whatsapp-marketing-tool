@@ -43,6 +43,8 @@ updated: 2026-10-13 14:03
 - `app/logic/realtime-config.md`, `app/logic/deployment-commands.md`
 
 ## Progress log
+- 2026-10-13 14:20 Easypanel: the Reverb domain now points at port 8080. `https://ws.esystematics.com/up` returns `{"health":"OK"}`. The VPS reads the Reverb app ID from the shared database (`tinker` prints `590920`) after the cPanel Remote MySQL host was allowed. Test Connection on cPanel is the next check.
+- 2026-10-13 14:20 Dockerfile: `gd`, `intl` and `zip` now install with `install-php-extensions` after the apt purge, which had removed their runtime libraries. Needs a rebuild of the Easypanel service with the build cache off.
 - 2026-10-13 14:03 decided with the user: shared database; the VPS runs only Reverb; `ws.esystematics.com` through Cloudflare (not the same host as the website).
 - 2026-10-13 14:03 code done (commit 4a851b3): `REVERB_RUNS_HERE` (config `reverb.runs_here`), the watchdog, the start and the status respect it; the toggle tests the other server without starting one here; `REVERB_ONLY` container mode in `docker/entrypoint.sh`; the page says where Reverb runs. Tests: 3 new in `ReverbWatchdogTest`, Realtime folder 59 run, 2 baseline failures.
 - 2026-10-13 13:55 created from the user's decision. Pusher stays the live realtime for now. Not started.
