@@ -94,7 +94,7 @@ class WahaAdapter implements EngineAdapter
             'events' => self::WEBHOOK_EVENTS,
         ];
         if ($hmacSecret !== null && $hmacSecret !== '') {
-            // WAHA signs each webhook body: X-Webhook-Hmac = hmac_sha256(body, key)
+            // WAHA signs each webhook body: X-Webhook-Hmac = hmac_sha512(body, key), algorithm named in X-Webhook-Hmac-Algorithm
             $webhook['hmac'] = ['key' => $hmacSecret];
         }
 

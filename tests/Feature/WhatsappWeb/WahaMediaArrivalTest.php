@@ -83,7 +83,7 @@ class WahaMediaArrivalTest extends TestCase
         $body = json_encode($payload);
 
         return $this->postJson("/webhooks/whatsapp-web/{$this->token}", $payload, [
-            'X-Webhook-Hmac' => hash_hmac('sha256', $body, 'secret'),
+            'X-Webhook-Hmac' => hash_hmac('sha512', $body, 'secret'),
         ]);
     }
 

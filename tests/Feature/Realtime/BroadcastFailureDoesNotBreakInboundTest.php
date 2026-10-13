@@ -102,7 +102,7 @@ class BroadcastFailureDoesNotBreakInboundTest extends TestCase
             ],
         ];
         $this->postJson("/webhooks/whatsapp-web/{$this->token}", $payload, [
-            'X-Webhook-Hmac' => hash_hmac('sha256', json_encode($payload), 'secret'),
+            'X-Webhook-Hmac' => hash_hmac('sha512', json_encode($payload), 'secret'),
         ])->assertOk();
     }
 

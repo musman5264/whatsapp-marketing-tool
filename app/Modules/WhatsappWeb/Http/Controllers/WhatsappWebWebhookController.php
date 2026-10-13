@@ -115,13 +115,21 @@ class WhatsappWebWebhookController extends Controller
         return null; // fail-open: let the job decide
     }
 
+    /**
+     * WAHA signs the raw body with HMAC-SHA512 (hex) and names the algorithm in
+     * X-Webhook-Hmac-Algorithm. sha512 is the default when that header is absent.
+     */
     private function verifyHmac(Request $request, string $secret, string $received): void
     {
-        $expected = hash_hmac('sha256', $request->getContent(), $secret);
+        $algorithm = strtolower((string) $request->header('X-Webhook-Hmac-Algorithm', 'sha512'));
+        $expected = $algorithm === 'sha512'
+            ? hash_hmac('sha512', $request->getContent(), $secret)
+            : '';
 
-        if (! hash_equals($expected, $received)) {
+        if ($expected === '' || ! hash_equals($expected, strtolower($received))) {
             Log::warning('whatsapp_web.webhook.signature_mismatch', [
                 'ip' => $request->ip(),
+                'algorithm' => substr($algorithm, 0, 16),
                 'received' => substr($received, 0, 16).'…',
             ]);
             abort(401, 'Invalid signature');

@@ -184,7 +184,7 @@ webhooks, and Core-edition single-session detection with a helpful error.
 | `GET /api/{s}/auth/qr` | ✓ `getQr()` → data URI | **wired** |
 | `GET /api/sessions/{s}/me` | ✓ `getMe()` | **wired** |
 | `POST /api/sessions/{s}/logout` · `DELETE /api/sessions/{s}` | ✓ `logout()` — best-effort both | **wired** |
-| webhook HMAC (`X-Webhook-Hmac`) | ✓ verified in `WhatsappWebWebhookController` | **wired** |
+| webhook HMAC (`X-Webhook-Hmac`, `X-Webhook-Hmac-Algorithm`, default sha512) | ✓ HMAC-SHA512 over the raw body, per the WAHA events docs; checked in `WhatsappWebWebhookController` (fixed 2026-10-13: it checked SHA-256 and rejected every WAHA webhook) | **wired** |
 | `GET /api/sessions` (list) | ✓ used only inside the Core "already linked" error path | **partial** |
 | proactive session health / auto-restart | relies on `session.status` webhook + manual reconnect; no scheduled healthcheck ping | **missing** |
 
