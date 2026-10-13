@@ -1,5 +1,5 @@
 # Task Board
-_Last updated: 2026-10-13 12:52_
+_Last updated: 2026-10-13 13:11_
 
 ## Working
 | ID | Task | Plan / Phase | Priority | Updated |
@@ -17,6 +17,7 @@ _Last updated: 2026-10-13 12:52_
 ## Completed (most recent first)
 | ID | Task | Plan / Phase | Completed |
 |----|------|--------------|-----------|
+| T-0019 | Reverb: manual start from the Deployment commands and a Start button on the Reverb page | PLAN-000 / phase-01 | 2026-10-13 13:11 |
 | T-0018 | Reverb: turning it on starts it; automatic start switch; turning it off stops it; browser reachability | PLAN-000 / phase-01 | 2026-10-13 12:52 |
 | T-0017 | Reverb watchdog in the scheduler starts Reverb while it is switched on; live status on the Reverb page | PLAN-000 / phase-01 | 2026-10-13 12:39 |
 | T-0016 | Live sync: a refused realtime send no longer cancels automations or stores a message twice | PLAN-000 / phase-01 | 2026-10-13 12:13 |
@@ -36,5 +37,5 @@ _Last updated: 2026-10-13 12:52_
 | PLAN-000-general | One-off tasks | phase-01-ongoing | 0 / 0 |
 | PLAN-001-inbox-speed-and-media | Inbox speed, live updates and media | phase-01-speed-and-media | 1 / 5 |
 
-Next task ID: T-0019   (T-0006 and T-0007 are also in tasks/working from another session; IDs are never reused)
+Next task ID: T-0020   (T-0006 and T-0007 are also in tasks/working from another session; IDs are never reused)
 Next plan ID: PLAN-002
