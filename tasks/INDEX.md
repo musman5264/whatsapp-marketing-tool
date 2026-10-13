@@ -1,5 +1,5 @@
 # Task Board
-_Last updated: 2026-10-13 14:29_
+_Last updated: 2026-10-13 16:29_
 
 ## Working
 | ID | Task | Plan / Phase | Priority | Updated |
@@ -15,6 +15,7 @@ _Last updated: 2026-10-13 14:29_
 | T-0014 | Confirm live delivery and the 00:39 gap on the live server | PLAN-001 / phase-01 | none (user checks) | high | blocked: needs the user to run the three live checks (the code cannot reach the live server) |
 | T-0022 | composer.lock out of date with composer.json | PLAN-000 / phase-01 | none | medium | not started |
 | T-0023 | Run Reverb on the Easypanel VPS; cPanel uses it as an external realtime server | PLAN-000 / phase-01 | T-0021 | high | blocked: your VPS and Cloudflare setup (code done, commit 4a851b3) |
+| T-0026 | WAHA webhooks rejected: checked SHA-256, WAHA signs SHA-512; live messages never arrived | PLAN-000 / phase-01 | T-0023 | high | blocked: deploy 3da12df and live check |
 
 ## Completed (most recent first)
 | ID | Task | Plan / Phase | Completed |
@@ -43,5 +44,5 @@ _Last updated: 2026-10-13 14:29_
 | PLAN-000-general | One-off tasks | phase-01-ongoing | 0 / 0 |
 | PLAN-001-inbox-speed-and-media | Inbox speed, live updates and media | phase-01-speed-and-media | 1 / 5 |
 
-Next task ID: T-0026   (T-0006 and T-0007 are also in tasks/working from another session; IDs are never reused)
+Next task ID: T-0027   (T-0006 and T-0007 are also in tasks/working from another session; IDs are never reused)
 Next plan ID: PLAN-002
