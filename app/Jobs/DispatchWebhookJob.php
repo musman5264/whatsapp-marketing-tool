@@ -4,6 +4,7 @@ namespace App\Jobs;
 
 use App\Models\WebhookDelivery;
 use App\Models\WebhookEndpoint;
+use App\Services\WebhookMediaLinks;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -27,9 +28,16 @@ class DispatchWebhookJob implements ShouldQueue
         private array $payload
     ) {}
 
-    public function handle(): void
+    /**
+     * The optional parameter keeps handle() callable without arguments (WebhookDeliveryBodyTest calls it that
+     * way); the queue and the tests inject it through the container.
+     */
+    public function handle(?WebhookMediaLinks $links = null): void
     {
-        $payloadJson = json_encode(array_merge($this->payload, [
+        $links ??= app(WebhookMediaLinks::class);
+
+        // Resolved on every attempt, so a retry sends a fresh media link. The stored payload below stays unresolved.
+        $payloadJson = json_encode(array_merge($links->resolve($this->payload), [
             'event' => $this->event,
             'timestamp' => now()->toIso8601String(),
         ]));

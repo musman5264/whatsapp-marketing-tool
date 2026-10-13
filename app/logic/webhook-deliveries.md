@@ -11,6 +11,7 @@ When an event is sent to a client's webhook endpoint, one delivery row is writte
 | File | Role |
 |---|---|
 | `app/Jobs/DispatchWebhookJob.php` | Builds the body, signs it, stores the delivery row, sends it, schedules retries |
+| `app/Services/WebhookMediaLinks.php` | Adds the signed media link to a `message.received` body, once per attempt (T-0030) |
 | `app/Models/WebhookDelivery.php` | Fillable fields and casts for the delivery row |
 | `app/Models/WebhookEndpoint.php` | `signature()` builds the `X-Webhook-Signature` value |
 | `app/Http/Controllers/Client/WebhookEndpointController.php` | `deliveries()` passes the paginated rows to the page |
@@ -21,8 +22,8 @@ When an event is sent to a client's webhook endpoint, one delivery row is writte
 
 | Column | Content |
 |---|---|
-| `payload` | The caller's data only (no `event`, no `timestamp`) |
-| `request_body` | The exact bytes sent, which are also the bytes that were signed |
+| `payload` | The caller's data only (no `event`, no `timestamp`). For `message.received` this is the unresolved payload: a media link is never stored here |
+| `request_body` | The exact bytes sent, which are also the bytes that were signed. For a WhatsApp Web file this includes the signed link |
 | `request_headers` | `Content-Type`, `X-Webhook-Event`, `X-Webhook-Signature`, `User-Agent`. Never the endpoint secret |
 | `response_status`, `response_body` | The receiver's reply; the body is cut at 2000 bytes |
 | `attempts` | The job's attempt number for this row |
@@ -35,7 +36,7 @@ Header `X-Webhook-Signature`, value `t=<unix time>,v1=<hex>`, where `<hex>` is H
 
 ## Retries
 
-Five tries in total, with waits of 1 minute, 5 minutes, 1 hour, then 1 day. A failed attempt is retried by the queue. The code writes a new delivery row at the start of each attempt, so one event can have several rows (one per attempt).
+Five tries in total, with waits of 1 minute, 5 minutes, 1 hour, then 1 day. A failed attempt is retried by the queue. The code writes a new delivery row at the start of each attempt, so one event can have several rows (one per attempt). Each attempt builds its body again, so a `message.received` retry gets a new media link (see below).
 
 ## Fixed on 2026-10-13: the body was sent twice-encoded
 
@@ -68,9 +69,26 @@ Sent for every inbound message, to each endpoint subscribed to `message.received
 
 - `message.id` is the WhatsMine database id. It is stable for a message, so receivers can use it to ignore repeats.
 - `from` is the sender's number as stored on the contact. It is `null` when the conversation has no contact.
-- `media` is `null` for text. For an attachment it is `{"id": 7, "mime_type": "image/jpeg"}`. The file itself and a download link are not in the payload yet.
-- Source: `app/Listeners/DispatchOutboundWebhookListener.php` (`messageReceivedPayload()`). Test: `tests/Feature/Webhooks/MessageReceivedPayloadTest.php`.
+- `media` is `null` for text. For an attachment it is an object with four keys:
+  - `id`: the id in the `media` table. `null` for a WhatsApp Web photo or file, which is stored as a file and has no media row.
+  - `mime_type`: the MIME type of the file, or `null` when it is not known.
+  - `filename`: the file's name when the message stores one. WhatsApp Web documents keep it under the type key (`document.filename`), and it is used from there. `null` when no name is stored.
+  - `url`: a signed link to the file, or `null`. Explained below.
+- Media row example: `{"id": 7, "mime_type": "image/jpeg", "filename": null, "url": null}`.
+- WhatsApp Web photo or file example: `{"id": null, "mime_type": "image/jpeg", "filename": null, "url": "https://<APP_URL>/private-files/message-media/1567.jpg?expires=...&signature=..."}`.
+- Source: `app/Listeners/DispatchOutboundWebhookListener.php` (`messageReceivedPayload()`, `mediaPayload()`). Test: `tests/Feature/Webhooks/MessageReceivedPayloadTest.php`.
 - `from` and `media` appear on live endpoints only after this code is deployed.
+
+### Signed media link (WhatsApp Web files, T-0030)
+
+- The placeholder (`id`, `mime_type`, `filename`, `url` all `null`) is sent only for a photo, video, audio or document with no media row on a `whatsapp_web` channel account. The file is saved after `MessageReceived` fires, so `app/Services/WebhookMediaLinks.php` fills it in when the job builds the body.
+- Other providers (Meta Cloud API, Messenger, Instagram) with no media row keep `media: null`, so their webhook bodies do not change.
+- Each attempt makes its own link, valid for 1 hour from that attempt. A retry sends a new link. The link serves the file's bytes while it is valid, and returns 403 after it expires (outside production).
+- The link is not stored in the delivery row's `payload`. It is in `request_body`, which is what the Deliveries page shows.
+- If the file is not stored at attempt time, or the lookup fails, `url` is `null` and the webhook is still sent. A failed lookup logs `webhook.media_link_failed` with the message id and the error text only, never the link.
+- Race (not verified live): the file is saved after the event fires. If a webhook attempt runs before the file is saved (possible with several queue workers), that attempt sends `url: null`. Only a failed attempt is retried, so a successful attempt with `url: null` is not sent again.
+- Receiver check: the receiver must verify `X-Webhook-Signature` (see "Signature") and must download the file within one hour of the attempt that carried the link. The isinternet receiver returns 401 on every delivery (see below), so it cannot use the link until that is fixed.
+- Test: `tests/Feature/Webhooks/WebhookMediaLinkTest.php`. The result is in "How to test" above.
 
 ## Known receiver problem (not fixed here)
 
@@ -83,6 +101,14 @@ DB_PASSWORD= php -d memory_limit=1G vendor/phpunit/phpunit/phpunit --filter='Web
 ```
 
 Result on 2026-10-13: `OK (8 tests, 32 assertions)`. The first test caught the double-encoding bug before the fix.
+
+For the signed media link (T-0030):
+
+```
+DB_PASSWORD= php -d memory_limit=1G vendor/phpunit/phpunit/phpunit --filter='MakePrivateMediaCommandTest|WebhookMediaLinkTest|MessageReceivedPayloadTest|WebhookDeliveryBodyTest|WebhookEndpointTest'
+```
+
+Result, 2026-10-13 18:19: `OK (34 tests, 150 assertions)` (run by the main thread, after the fixes listed in the commit). Not verified live: the race, the link on the live server, and the receiver.
 
 Static checks: `npx eslint resources/js/Pages/client/Webhooks/Deliveries.jsx` (no output), PHPStan on the job and model (no errors).
 
