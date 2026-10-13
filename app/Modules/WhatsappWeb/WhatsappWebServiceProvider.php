@@ -3,6 +3,7 @@
 namespace App\Modules\WhatsappWeb;
 
 use App\Events\MessageReceived;
+use App\Modules\WhatsappWeb\Console\MakePrivateMediaCommand;
 use App\Modules\WhatsappWeb\Console\WhatsappWebCommand;
 use App\Modules\WhatsappWeb\Console\WhatsappWebDiagnoseCommand;
 use App\Modules\WhatsappWeb\Console\WhatsappWebResubscribeCommand;
@@ -45,6 +46,7 @@ class WhatsappWebServiceProvider extends ServiceProvider
                 WhatsappWebSyncCommand::class,
                 WhatsappWebResubscribeCommand::class,
                 WhatsappWebDiagnoseCommand::class,
+                MakePrivateMediaCommand::class,
             ]);
         }
     }

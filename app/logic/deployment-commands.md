@@ -13,6 +13,9 @@ A command runs **without the second key** only if it passes `CommandAllowlist::a
 
 Anything refused needs the deploy key again as the second key (`confirm_key` in the app, `key2` in the script). The script refuses the command when the second key is wrong. Only the app's forwarding passes it on.
 
+## Commands outside the allowlist
+- `php artisan media:make-private` is not in `CommandAllowlist::ARTISAN`, so the Run box refuses it without the second key. Use the second key (`confirm_key`) on the Run box, or run it in the cPanel terminal. Dry run first (no `--apply`). See [private-media.md](private-media.md).
+
 ## Deploy key
 - `public/deploy.php` has **no built-in key**. Without `DEPLOY_KEY` in `public/deploy.config.php` every request is refused with 503 (`not configured`).
 - The key must not appear in repo files. It appeared in `WAHA-EXPANSION-PLAN.md` and was replaced with `<DEPLOY_KEY>`. That key is still in git history, so rotate it if it is used anywhere.
