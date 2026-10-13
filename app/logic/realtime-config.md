@@ -62,7 +62,33 @@ Setup in use: the main app stays on cPanel (`wa.esystematics.com`). Reverb runs 
 Steps outside the code (not done by the app):
 1. cPanel Remote MySQL: allow the VPS address. On the VPS set `DB_HOST` to the cPanel MySQL host.
 2. Cloudflare: DNS record `ws` pointing at the VPS address, proxied (orange cloud). SSL mode Full (strict). If the certificate fails while proxied, issue it with the record set to DNS only, then turn the proxy on.
-3. Easypanel: a service from the image with `REVERB_ONLY=true`, `REVERB_RUNS_HERE=true`, `REVERB_SERVER_PORT=8080`, the same `APP_KEY`, the remote `DB_*` values, restart policy always, and domain `ws.esystematics.com` routed to port 8080 with TLS.
+3. Easypanel: a service from the image, built from `main` at commit `4a851b3` or later (that is where `REVERB_ONLY` exists). Enter the variables below in its Environment tab, set the domain `ws.esystematics.com` to port 8080 with TLS, and set the restart policy to always.
+
+Easypanel environment for the Reverb service (names and sources only; the secret values are copied from cPanel's `.env` or the cPanel database panel, never written here):
+
+| Variable | Value | Why |
+|---|---|---|
+| `REVERB_ONLY` | `true` | Run only the Reverb server: no migrations, cron, queue workers or Apache |
+| `REVERB_RUNS_HERE` | `true` | This machine runs Reverb, so the watchdog and Start may start it |
+| `REVERB_SERVER_PORT` | `8080` | Port inside the container; the Easypanel domain points here |
+| `APP_KEY` | same as cPanel's `APP_KEY` | Saved secrets in the shared database are encrypted with it |
+| `APP_ENV` | `production` | |
+| `APP_DEBUG` | `false` | |
+| `APP_URL` | `https://wa.esystematics.com` | Same application as cPanel |
+| `DB_CONNECTION` | `mysql` | |
+| `DB_HOST` | the cPanel MySQL host, as allowed by Remote MySQL | The VPS reaches the shared database over the network |
+| `DB_PORT` | `3306` | |
+| `DB_DATABASE` | same as cPanel | Shared database |
+| `DB_USERNAME` | same as cPanel | |
+| `DB_PASSWORD` | same as cPanel | |
+| `CACHE_STORE` | `database` | The restart signal is in the shared cache table |
+| `REVERB_HOST` | `ws.esystematics.com` | Public address; the saved settings in the database take precedence |
+| `REVERB_PORT` | `443` | Public port, as seen by browsers through Cloudflare |
+| `REVERB_SCHEME` | `https` | |
+
+Not needed on the Reverb service: `REVERB_APP_ID`, `REVERB_APP_KEY`, `REVERB_APP_SECRET` (the shared database supplies them; if you set them, they must match the Reverb Settings page), `BROADCAST_CONNECTION`, `PUSHER_*`, `QUEUE_CONNECTION`, `SESSION_DRIVER`, mail, billing and AI keys.
+
+On cPanel, leave `REVERB_RUNS_HERE` unset (it defaults to false).
 4. cPanel admin, Reverb Settings: host `ws.esystematics.com`, port 443, scheme https. Test Connection. Then switch Reverb on.
 
 Limits, unverified: the restart signal makes the container's Reverb exit, so Easypanel's restart policy must bring it back. Nothing here has been run on the VPS yet. Tests: `tests/Feature/Realtime/ReverbWatchdogTest.php` (watchdog, start and toggle when Reverb runs elsewhere).
