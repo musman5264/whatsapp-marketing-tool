@@ -1,5 +1,5 @@
 # Task Board
-_Last updated: 2026-10-13 17:35_
+_Last updated: 2026-10-13 17:56_
 
 ## Working
 | ID | Task | Plan / Phase | Priority | Updated |
@@ -7,6 +7,9 @@ _Last updated: 2026-10-13 17:35_
 | T-0010 | Fetch WhatsApp media when it arrives, not on first view (live check pending) | PLAN-001 / phase-01 | high | 2026-10-13 01:24 |
 | T-0012 | Page the conversation list and each chat, lazy-load older messages (live check pending) | PLAN-001 / phase-01 | high | 2026-10-13 01:24 |
 | T-0013 | Stop chat jumping to bottom; reserve media space (live check pending) | PLAN-001 / phase-01 | medium | 2026-10-13 01:24 |
+| T-0029 | Move old public chat media to the private disk with media:make-private (dry run first) | PLAN-002 / phase-01 | high | 2026-10-13 17:55 |
+| T-0030 | Webhook: send the WhatsApp photo or file as a signed link that expires | PLAN-002 / phase-01 | high | 2026-10-13 17:55 |
+| T-0031 | Outgoing WhatsApp Web image shows 404 after 5e7137e: random file name the login route cannot find | PLAN-002 / phase-01 | high | 2026-10-13 18:01 |
 
 ## Pending
 | ID | Task | Plan / Phase | Depends on | Priority | Status |
@@ -16,7 +19,7 @@ _Last updated: 2026-10-13 17:35_
 | T-0022 | composer.lock out of date with composer.json | PLAN-000 / phase-01 | none | medium | not started |
 | T-0023 | Run Reverb on the Easypanel VPS; cPanel uses it as an external realtime server | PLAN-000 / phase-01 | T-0021 | high | blocked: your VPS and Cloudflare setup (code done, commit 4a851b3) |
 | T-0026 | WAHA webhooks rejected: checked SHA-256, WAHA signs SHA-512; live messages never arrived | PLAN-000 / phase-01 | T-0023 | high | blocked: deploy 3da12df and live check |
-| T-0028 | Private media storage (public photo links) and media in the outgoing webhook | PLAN-000 / phase-01 | T-0027 | high | blocked: privacy and webhook decisions |
+| T-0028 | Private media storage (public photo links) and media in the outgoing webhook | PLAN-002 / phase-01 | T-0027, T-0029, T-0030 | high | blocked: your deploy of 5e7137e with T-0030 and T-0031, the command run, and the live check |
 
 ## Completed (most recent first)
 | ID | Task | Plan / Phase | Completed |
@@ -45,6 +48,7 @@ _Last updated: 2026-10-13 17:35_
 |------|------|---------------|--------------------|
 | PLAN-000-general | One-off tasks | phase-01-ongoing | 0 / 0 |
 | PLAN-001-inbox-speed-and-media | Inbox speed, live updates and media | phase-01-speed-and-media | 1 / 5 |
+| PLAN-002-private-media | Chat media off the public disk; signed webhook media | phase-01-private-media | 0 / 3 |
 
-Next task ID: T-0029   (T-0006 and T-0007 are also in tasks/working from another session; IDs are never reused)
-Next plan ID: PLAN-002
+Next task ID: T-0032   (T-0006 and T-0007 are also in tasks/working from another session; IDs are never reused)
+Next plan ID: PLAN-003
