@@ -1,5 +1,5 @@
 # Task Board
-_Last updated: 2026-10-13 16:40_
+_Last updated: 2026-10-13 17:35_
 
 ## Working
 | ID | Task | Plan / Phase | Priority | Updated |
@@ -16,11 +16,12 @@ _Last updated: 2026-10-13 16:40_
 | T-0022 | composer.lock out of date with composer.json | PLAN-000 / phase-01 | none | medium | not started |
 | T-0023 | Run Reverb on the Easypanel VPS; cPanel uses it as an external realtime server | PLAN-000 / phase-01 | T-0021 | high | blocked: your VPS and Cloudflare setup (code done, commit 4a851b3) |
 | T-0026 | WAHA webhooks rejected: checked SHA-256, WAHA signs SHA-512; live messages never arrived | PLAN-000 / phase-01 | T-0023 | high | blocked: deploy 3da12df and live check |
-| T-0027 | Images not shown: public/storage not linked on cPanel (/storage/ returns 404) | PLAN-000 / phase-01 | none | high | blocked: run php artisan storage:link on cPanel |
+| T-0028 | Private media storage (public photo links) and media in the outgoing webhook | PLAN-000 / phase-01 | T-0027 | high | blocked: privacy and webhook decisions |
 
 ## Completed (most recent first)
 | ID | Task | Plan / Phase | Completed |
 |----|------|--------------|-----------|
+| T-0027 | Images not shown: storage link and photo type mapping; incoming and outgoing images verified live | PLAN-000 / phase-01 | 2026-10-13 17:35 |
 | T-0025 | Graphify output committed and pushed to origin main (4791e38) | PLAN-000 / phase-01 | 2026-10-13 14:29 |
 | T-0024 | Build the graphify knowledge graph of the repo (code, no API key) | PLAN-000 / phase-01 | 2026-10-13 14:03 |
 | T-0021 | Reverb not reachable from browsers on cPanel (cancelled: Reverb moves to a VPS, T-0023) | PLAN-000 / phase-01 | 2026-10-13 13:55 |
@@ -45,5 +46,5 @@ _Last updated: 2026-10-13 16:40_
 | PLAN-000-general | One-off tasks | phase-01-ongoing | 0 / 0 |
 | PLAN-001-inbox-speed-and-media | Inbox speed, live updates and media | phase-01-speed-and-media | 1 / 5 |
 
-Next task ID: T-0028   (T-0006 and T-0007 are also in tasks/working from another session; IDs are never reused)
+Next task ID: T-0029   (T-0006 and T-0007 are also in tasks/working from another session; IDs are never reused)
 Next plan ID: PLAN-002

@@ -1,7 +1,7 @@
 ---
 id: T-0027
 title: Images not shown in the inbox: public/storage is not linked on cPanel, so /storage/ returns 404
-status: blocked
+status: completed
 priority: high
 type: bug
 plan: tasks/plans/PLAN-000-general/PLAN.md
@@ -10,7 +10,8 @@ depends_on: []
 source: TEMP/intake-2026-10-13-1318.md
 created: 2026-10-13 16:40
 started: 2026-10-13 16:40
-updated: 2026-10-13 16:40
+updated: 2026-10-13 17:35
+completed: 2026-10-13 17:35
 ---
 
 # T-0027: Images not shown in the inbox: public/storage is not linked on cPanel
@@ -39,9 +40,13 @@ updated: 2026-10-13 16:40
 - [ ] Verify on the live site after the link.
 
 ## Progress log
+- 2026-10-13 17:35 outgoing image sent from the composer, shows in the inbox with delivery ticks (17:32). Task done.
 - 2026-10-13 17:25 live check: a photo from the phone is stored as `image` (message 1567) and `https://wa.esystematics.com/storage/message-media/1567.jpg` returns 200 image/jpeg. Incoming photos work. Still open: an image sent from the app (composer image button), not yet tested.
 - 2026-10-13 17:20 `public/storage` is LINKED on cPanel. Found the second cause: WAHA sends a photo as type `chat` with `hasMedia=true` and the caption as the body. The normalizer stored it as empty text (live check: "This is caption" stored as a text message, no image). Fixed in `InboundNormalizer::mapType()` (commit below); tests pass (104). Waiting for the deploy and a new photo from the phone.
 - 2026-10-13 16:40 created from the screenshot and the checks above. Waiting for `storage:link` on cPanel.
 
 ## Result
-(not finished)
+- Changed: `public/storage` linked on cPanel (`php artisan storage:link`). `InboundNormalizer::mapType()` takes a photo, video or file kind from `media.mimetype` when WAHA sends it as `chat` with `hasMedia` (commit `79ca4d9`, deployed).
+- Live checks: an incoming photo from the phone is stored as `image` (message 1567) and shows in the inbox. An outgoing image from the composer shows in the inbox at 17:32 with delivery ticks.
+- Not covered here: media in the outgoing webhook (WhatsMine receives `media: null`), and the privacy of the public media files. Tracked in T-0028.
+
