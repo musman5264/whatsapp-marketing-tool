@@ -168,16 +168,16 @@ class WahaMediaServeTest extends TestCase
 
     public function test_cached_copy_is_found_by_its_recorded_path_without_listing_the_folder(): void
     {
+        $message = $this->mediaMessage(['id' => 'wa-777', 'image' => ['link' => self::BASE.'/api/files/z.jpeg']]);
+        $own = "message-media/{$message->id}.jpg";
         Storage::disk('public')->put('message-media/other-1.jpg', 'NOT THIS ONE');
         Storage::disk('public')->put('message-media/other-2.jpg', 'NOT THIS ONE EITHER');
-        Storage::disk('public')->put('message-media/777.jpg', 'JPEG');
-        $message = $this->mediaMessage([
-            'id' => 'wa-777',
-            'image' => ['link' => self::BASE.'/api/files/z.jpeg'],
-            'preview_url' => '/storage/message-media/777.jpg',
+        Storage::disk('public')->put($own, 'JPEG');
+        $message->update(['payload' => $message->payload + [
+            'preview_url' => '/storage/'.$own,
             'mime_type' => 'image/jpeg',
-            'media_path' => 'message-media/777.jpg',
-        ]);
+            'media_path' => $own,
+        ]]);
         Http::fake(function () {
             $this->fail('A stored copy must not contact the engine.');
         });
@@ -185,6 +185,48 @@ class WahaMediaServeTest extends TestCase
         $response = $this->actingAs($this->user)->get($this->mediaUrl($message));
 
         $response->assertRedirect();
-        $this->assertStringContainsString('message-media/777.jpg', (string) $response->headers->get('Location'));
+        $this->assertStringContainsString($own, (string) $response->headers->get('Location'));
+    }
+
+    public function test_a_recorded_path_outside_this_messages_media_file_is_ignored(): void
+    {
+        // Outbound payloads are written from the request body, so media_path can be
+        // anything. A path that escapes the disk must not be looked up at all.
+        Http::fake([self::BASE.'/*' => Http::response('JPEGBYTES', 200, ['Content-Type' => 'image/jpeg'])]);
+        $message = $this->mediaMessage([
+            'id' => 'wa-888',
+            'image' => ['link' => self::BASE.'/api/files/q.jpeg'],
+            'preview_url' => '/storage/message-media/888.jpg',
+            'mime_type' => 'image/jpeg',
+            'media_path' => '../../composer.json',
+        ]);
+
+        $response = $this->actingAs($this->user)->get($this->mediaUrl($message));
+
+        $response->assertRedirect();
+        $this->assertStringContainsString("message-media/{$message->id}.jpg", (string) $response->headers->get('Location'));
+        Http::assertSentCount(1);
+    }
+
+    public function test_cloud_style_recorded_name_with_codecs_is_still_found(): void
+    {
+        // Cloud copies keep the raw mime suffix in the name ("ogg; codecs=opus").
+        // That must still be found, not re-downloaded on every view.
+        $message = $this->mediaMessage(['id' => 'wa-901', 'audio' => ['id' => 'media-901']], 'audio');
+        $own = "message-media/{$message->id}.ogg; codecs=opus";
+        Storage::disk('public')->put($own, 'OGG');
+        $message->update(['payload' => $message->payload + [
+            'preview_url' => '/storage/'.$own,
+            'mime_type' => 'audio/ogg; codecs=opus',
+            'media_path' => $own,
+        ]]);
+        Http::fake(function () {
+            $this->fail('A stored copy must not be downloaded again.');
+        });
+
+        $response = $this->actingAs($this->user)->get($this->mediaUrl($message));
+
+        $response->assertRedirect();
+        $this->assertStringContainsString("{$message->id}.ogg", (string) $response->headers->get('Location'));
     }
 }

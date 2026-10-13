@@ -22,7 +22,7 @@ class MessageMediaReady implements ShouldBroadcastNow
     /** @return array<int, PrivateChannel> */
     public function broadcastOn(): array
     {
-        return [new PrivateChannel("conversation.{$this->message->conversation_id}")];
+        return [new PrivateChannel('conversation.'.$this->message->getAttribute('conversation_id'))];
     }
 
     public function broadcastAs(): string
@@ -33,11 +33,14 @@ class MessageMediaReady implements ShouldBroadcastNow
     /** @return array<string, mixed> */
     public function broadcastWith(): array
     {
+        $payload = $this->message->getAttribute('payload');
+        $payload = is_array($payload) ? $payload : [];
+
         return [
-            'id' => $this->message->id,
-            'conversation_id' => $this->message->conversation_id,
-            'preview_url' => $this->message->payload['preview_url'] ?? null,
-            'mime_type' => $this->message->payload['mime_type'] ?? null,
+            'id' => $this->message->getKey(),
+            'conversation_id' => $this->message->getAttribute('conversation_id'),
+            'preview_url' => $payload['preview_url'] ?? null,
+            'mime_type' => $payload['mime_type'] ?? null,
         ];
     }
 }

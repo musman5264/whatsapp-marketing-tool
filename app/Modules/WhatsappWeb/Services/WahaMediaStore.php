@@ -31,18 +31,19 @@ class WahaMediaStore
      */
     public function storeInbound(Message $message): void
     {
-        $type = (string) $message->type;
-        if (! in_array($type, self::MEDIA_TYPES, true) || ! empty($message->payload['preview_url'])) {
+        $type = (string) $message->getAttribute('type');
+        $payload = $message->getAttribute('payload');
+        if (! is_array($payload) || ! in_array($type, self::MEDIA_TYPES, true) || ! empty($payload['preview_url'])) {
             return;
         }
 
-        $link = $message->payload[$type]['link'] ?? null;
+        $link = $payload[$type]['link'] ?? null;
         if (! is_string($link) || $link === '') {
             return;
         }
 
         try {
-            $this->store($message, $message->payload, $link);
+            $this->store($message, $payload, $link);
             MessageMediaReady::dispatch($message->fresh());
         } catch (Throwable $e) {
             Log::warning('whatsapp_web.media.arrival_failed', ['message_id' => $message->id, 'error' => $e->getMessage()]);
@@ -138,13 +139,21 @@ class WahaMediaStore
      */
     public function existingPath(Message $message, array $payload): ?string
     {
+        // Only this message's own file name is accepted. media_path can come from a
+        // request body (outbound payloads), so anything that leaves the folder, or
+        // names another message, is ignored and the derived name is used instead.
+        $own = $this->storage->prefixedPath('message-media/'.$message->id.'.');
         $candidate = $payload['media_path'] ?? null;
-        if (! is_string($candidate) || $candidate === '') {
+        $tail = is_string($candidate) && str_starts_with($candidate, $own) ? substr($candidate, strlen($own)) : null;
+        $trusted = $tail !== null && $tail !== ''
+            && ! str_contains($tail, '/') && ! str_contains($tail, '\\') && ! str_contains($tail, '..');
+
+        if (! $trusted) {
             $mime = $payload['mime_type'] ?? null;
             if (! is_string($mime) || $mime === '') {
                 return null;
             }
-            $candidate = $this->storage->prefixedPath('message-media/'.$message->id.'.'.$this->extensionForMime($mime));
+            $candidate = $own.$this->extensionForMime($mime);
         }
 
         return $this->storage->disk()->exists($candidate) ? $candidate : null;

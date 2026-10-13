@@ -4097,7 +4097,7 @@ parameters:
 		-
 			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$channel\.$#'
 			identifier: property.notFound
-			count: 5
+			count: 4
 			path: app/Modules/Inbox/Http/Controllers/InboxController.php
 
 		-
@@ -4109,7 +4109,7 @@ parameters:
 		-
 			message: '#^Relation ''lastMessage'' is not found in App\\Modules\\Shared\\Models\\Conversation model\.$#'
 			identifier: larastan.relationExistence
-			count: 2
+			count: 1
 			path: app/Modules/Inbox/Http/Controllers/InboxController.php
 
 		-

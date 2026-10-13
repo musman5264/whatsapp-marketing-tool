@@ -71,6 +71,19 @@ class ConversationListPagingTest extends TestCase
     }
 
     #[Test]
+    public function the_chat_pages_list_pages_through_the_inbox_list_url(): void
+    {
+        // The list on the chat page must ask the inbox list for its next page. A link
+        // to the chat URL would return the chat page instead of JSON.
+        $conversation = Conversation::where('workspace_id', $this->workspaceId)->firstOrFail();
+
+        $this->actingAs($this->user)
+            ->get(route('client.inbox.show', $conversation->uuid))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page->where('conversations.next_page_url', route('client.inbox.index', ['page' => 2])));
+    }
+
+    #[Test]
     public function a_normal_visit_still_renders_the_inbox_page(): void
     {
         $this->actingAs($this->user)

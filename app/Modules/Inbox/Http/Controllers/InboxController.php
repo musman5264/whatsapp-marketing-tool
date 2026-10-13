@@ -167,6 +167,8 @@ class InboxController extends Controller
             ->orderByDesc('last_message_at')
             ->orderByDesc('id')
             ->paginate(30)
+            // Next/previous links point at the list's JSON route, even on the chat page.
+            ->withPath(route('client.inbox.index'))
             ->withQueryString();
     }
 
@@ -768,7 +770,7 @@ class InboxController extends Controller
     /**
      * The newest page of a thread, oldest first, and whether older messages exist.
      *
-     * @return array{0: Collection, 1: bool}
+     * @return array{0: Collection<int, \Illuminate\Database\Eloquent\Model>, 1: bool}
      */
     private function latestMessagePage(Conversation $conversation): array
     {
