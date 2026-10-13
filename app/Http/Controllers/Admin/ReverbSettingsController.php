@@ -21,7 +21,7 @@ use Inertia\Response;
  */
 class ReverbSettingsController extends Controller
 {
-    private const KEYS = ['reverb_app_id', 'reverb_app_key', 'reverb_app_secret', 'reverb_host', 'reverb_port', 'reverb_scheme', 'reverb_listen_host', 'reverb_listen_port'];
+    private const KEYS = ['reverb_app_id', 'reverb_app_key', 'reverb_app_secret', 'reverb_host', 'reverb_port', 'reverb_scheme', 'reverb_listen_host', 'reverb_listen_port', 'reverb_autostart'];
 
     private const SECRET = 'reverb_app_secret';
 
@@ -43,6 +43,7 @@ class ReverbSettingsController extends Controller
         $settings['reverb_scheme'] = $settings['reverb_scheme'] !== '' ? $settings['reverb_scheme'] : 'https';
         $settings['reverb_listen_host'] = $settings['reverb_listen_host'] !== '' ? $settings['reverb_listen_host'] : '0.0.0.0';
         $settings['reverb_listen_port'] = $settings['reverb_listen_port'] !== '' ? $settings['reverb_listen_port'] : '8080';
+        $settings['reverb_autostart'] = $settings['reverb_autostart'] !== '' ? $settings['reverb_autostart'] : 'true';
 
         return Inertia::render('Admin/ReverbSettings/Index', [
             'settings' => $settings,
@@ -73,6 +74,7 @@ class ReverbSettingsController extends Controller
             'reverb_scheme' => ['nullable', 'string', 'in:http,https'],
             'reverb_listen_host' => ['nullable', 'string', 'in:0.0.0.0,127.0.0.1'],
             'reverb_listen_port' => ['nullable', 'integer', 'between:1,65535'],
+            'reverb_autostart' => ['nullable', 'string', 'in:true,false'],
         ]);
 
         foreach ($validated as $key => $value) {
@@ -86,23 +88,30 @@ class ReverbSettingsController extends Controller
             SystemSetting::set($key, (string) $value, $key === self::SECRET, 'reverb');
         }
 
-        // Credentials changed while Reverb is on: the running Reverb server must reload them.
-        if (RealtimeConfig::reverbActive()) {
+        // Saved while the server runs: it must reload the credentials.
+        if (app(ReverbRuntime::class)->healthy()) {
             $this->signalRestart();
         }
 
         return back()->with('success', 'Reverb settings saved.');
     }
 
-    /** Switch Reverb on or off as the realtime server. On needs a passing connection test. */
-    public function toggle(Request $request, ReverbConnectionTester $tester): RedirectResponse
+    /**
+     * Switch Reverb on or off as the realtime server.
+     * On: start Reverb now if it is not running, then test it, then switch realtime over.
+     * Off: switch realtime back and stop the Reverb process this panel started.
+     */
+    public function toggle(Request $request, ReverbConnectionTester $tester, ReverbRuntime $runtime): RedirectResponse
     {
         $enabled = $request->boolean('enabled');
 
         if (! $enabled) {
             SystemSetting::set('realtime_driver', 'auto', false, 'reverb');
+            $error = $runtime->stop();
 
-            return back()->with('success', 'Reverb is off. Realtime uses Pusher (or the .env settings).');
+            return $error === null
+                ? back()->with('success', 'Reverb is off and stopped.')
+                : back()->with('error', 'Reverb is off, but it was not stopped. '.$error);
         }
 
         $creds = RealtimeConfig::adminReverbCredentials();
@@ -110,15 +119,20 @@ class ReverbSettingsController extends Controller
             return back()->with('error', 'Fill in the app ID, key, secret and host, then save before turning Reverb on.');
         }
 
+        // The connection test needs Reverb answering, so start it first.
+        $error = $runtime->launch();
+        if ($error !== null) {
+            return back()->with('error', 'Reverb could not be started, so it was not turned on. '.$error);
+        }
+
         $reason = $tester->check($creds);
         if ($reason !== null) {
-            return back()->with('error', 'Reverb did not answer, so it was not turned on. '.$reason);
+            return back()->with('error', 'Reverb did not accept the test, so it was not turned on. '.$reason);
         }
 
         SystemSetting::set('realtime_driver', 'reverb', false, 'reverb');
-        $this->signalRestart();
 
-        return back()->with('success', 'Reverb is now the realtime server.');
+        return back()->with('success', 'Reverb is running and is now the realtime server.');
     }
 
     public function test(ReverbConnectionTester $tester): JsonResponse

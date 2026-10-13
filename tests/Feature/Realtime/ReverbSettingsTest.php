@@ -5,6 +5,7 @@ namespace Tests\Feature\Realtime;
 use App\Models\SystemSetting;
 use App\Providers\ReverbSettingsServiceProvider;
 use App\Services\RealtimeConfig;
+use App\Services\ReverbRuntime;
 use App\Services\ReverbConnectionTester;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
@@ -23,6 +24,28 @@ class ReverbSettingsTest extends TestCase
         parent::setUp();
         Cache::flush();
         config(['broadcasting.default' => 'log']);
+        // Starting Reverb is not part of these tests: the runtime always reports it running.
+        $this->app->instance(ReverbRuntime::class, new class extends ReverbRuntime {
+            public function healthy(): bool
+            {
+                return true;
+            }
+
+            public function launch(): ?string
+            {
+                return null;
+            }
+
+            public function stop(): ?string
+            {
+                return null;
+            }
+
+            public function publicReachable(): ?bool
+            {
+                return null;
+            }
+        });
     }
 
     /** Replaces the Reverb connection test with a fixed answer (null = reachable). */
@@ -164,7 +187,7 @@ class ReverbSettingsTest extends TestCase
     }
 
     #[Test]
-    public function turning_reverb_on_switches_realtime_and_asks_the_server_to_restart(): void
+    public function turning_reverb_on_switches_realtime_over_to_reverb(): void
     {
         $this->saveCompleteReverb();
         $this->fakeTester(null);
@@ -174,7 +197,6 @@ class ReverbSettingsTest extends TestCase
             ->assertSessionHas('success');
 
         $this->assertTrue(RealtimeConfig::reverbActive());
-        $this->assertNotNull(Cache::get('laravel:reverb:restart'));
         $rt = RealtimeConfig::resolve();
         $this->assertSame('reverb', $rt->driver);
         $this->assertSame('ws.example.test', $rt->wsHost);

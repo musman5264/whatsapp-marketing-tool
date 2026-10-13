@@ -129,11 +129,91 @@ class ReverbRuntime
             return $this->record('running', 'Reverb answers on port '.$this->listenPort().'.');
         }
 
+        if (! $this->autostart()) {
+            return $this->record('waiting', 'Reverb is switched on but not running, and automatic start is off. Press Start now.');
+        }
+
         $error = $this->launch();
 
         return $error === null
             ? $this->record('started', 'Reverb was not running, so the watchdog started it.')
             : $this->record('error', $error);
+    }
+
+    /** The "Start Reverb automatically" switch. On unless the admin turned it off. */
+    public function autostart(): bool
+    {
+        return (string) (SystemSetting::get('reverb_autostart') ?? 'true') !== 'false';
+    }
+
+    /**
+     * Stops the Reverb process this panel started (its pid is in the pid file).
+     * Returns null when it is stopped, or when nothing was running; otherwise the reason.
+     */
+    public function stop(): ?string
+    {
+        $pid = (int) ($this->pidMeta()['pid'] ?? 0);
+
+        if ($pid <= 0) {
+            return $this->healthy()
+                ? 'Reverb was started outside this panel, so it has to be stopped on the server.'
+                : null;
+        }
+
+        if ($this->processAlive($pid)) {
+            $this->terminate($pid);
+            for ($i = 0; $i < 10 && $this->healthy(); $i++) {
+                usleep(500000);
+            }
+            if ($this->healthy()) {
+                return 'Reverb did not stop after the termination signal. Check the process on the server.';
+            }
+        }
+
+        @unlink(storage_path(self::PID_FILE));
+
+        return null;
+    }
+
+    /**
+     * True when the public address answers Reverb's health check, which is what a browser needs.
+     * Null when no host is set. Cached for a minute, so the status poll stays light.
+     */
+    public function publicReachable(): ?bool
+    {
+        $host = (string) (SystemSetting::get('reverb_host') ?? '');
+        if ($host === '') {
+            return null;
+        }
+
+        $port = (int) (SystemSetting::get('reverb_port') ?? 0) ?: 443;
+        $scheme = (string) (SystemSetting::get('reverb_scheme') ?? 'https') === 'http' ? 'http' : 'https';
+
+        return Cache::remember('reverb:public-check:'.$scheme.'://'.$host.':'.$port, 60, function () use ($scheme, $host, $port) {
+            try {
+                $response = Http::timeout(4)->get($scheme.'://'.$host.':'.$port.'/up');
+
+                return $response->successful() && $response->json('health') === 'OK';
+            } catch (Throwable) {
+                return false;
+            }
+        });
+    }
+
+    private function processAlive(int $pid): bool
+    {
+        return function_exists('posix_kill') && posix_kill($pid, 0);
+    }
+
+    private function terminate(int $pid): void
+    {
+        if (function_exists('posix_kill')) {
+            posix_kill($pid, 15); // SIGTERM
+
+            return;
+        }
+
+        shell_exec('kill '.$pid);
     }
 
     /** Snapshot for the admin status card (no secrets). */
@@ -146,6 +226,8 @@ class ReverbRuntime
             'active' => RealtimeConfig::reverbActive(),
             'exec_available' => $this->execAvailable(),
             'healthy' => $this->healthy(),
+            'autostart' => $this->autostart(),
+            'public_reachable' => $this->publicReachable(),
             'pid' => $meta['pid'] ?? null,
             'started_at' => $startedAt,
             'uptime_seconds' => $startedAt ? max(0, (int) now()->diffInSeconds($startedAt)) : null,

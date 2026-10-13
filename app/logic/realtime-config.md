@@ -23,7 +23,11 @@
 - Settings: `reverb_listen_host` (`0.0.0.0` or `127.0.0.1`, default `0.0.0.0`), `reverb_listen_port` (default `8080`).
 - Page: status card (running or stopped, pid, started, uptime, listen address, last watchdog check, log tail), refreshed every 10 seconds from `GET /admin/reverb-settings/status`. Start now (`POST .../start`) and Restart (`POST .../restart`).
 - Limits, to verify on the host: a process started from cron must survive the cron run and any host process limits; browsers must reach the listen port (or a proxy) over WSS. The start path is tested with a fake launcher; on Windows only its failure path was run.
-- Tests: `tests/Feature/Realtime/ReverbWatchdogTest.php`.
+- **Switch on** (T-0018): starts Reverb first (`ReverbRuntime::launch`), then runs the connection test, then sets `realtime_driver=reverb`. If it cannot start or the test fails, realtime stays as it was and the reason is shown.
+- **Automatic start** (`reverb_autostart`, default on): the watchdog starts a stopped Reverb only when this is on. Off: the watchdog reports `waiting` and Reverb runs only when someone presses Start now. The switch saves straight away.
+- **Switch off** (T-0018): switches realtime back and stops the Reverb process this panel started (pid file, SIGTERM). A Reverb started by hand on the server has to be stopped there.
+- **Browsers can reach it**: `ReverbRuntime::publicReachable()` asks the public host and port for `/up` (cached 60 s). No means the proxy for `/up` and the WebSocket paths is missing, or the port is blocked.
+- Tests: `tests/Feature/Realtime/ReverbWatchdogTest.php`, `ReverbSettingsTest.php`.
 
 **Live events never throw into the inbound pipeline (T-0016):** the events above that broadcast immediately implement `Illuminate\Contracts\Broadcasting\ShouldRescue`, so a refused send (Pusher quota or size limit, Reverb down) is reported to the log and the listeners (automations) still run. Without it, Laravel sends the event to the broadcaster before its listeners and a refusal cancelled them. `WhatsappDriver::processInboundMessage` releases the duplicate-guard key only when no message row was stored, so a retry cannot store the same WhatsApp message twice. Test: `tests/Feature/Realtime/BroadcastFailureDoesNotBreakInboundTest.php`.
 

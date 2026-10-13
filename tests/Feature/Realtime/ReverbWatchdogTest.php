@@ -3,6 +3,8 @@
 namespace Tests\Feature\Realtime;
 
 use App\Models\SystemSetting;
+use App\Services\RealtimeConfig;
+use App\Services\ReverbConnectionTester;
 use App\Services\ReverbRuntime;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -21,13 +23,19 @@ class ReverbWatchdogTest extends TestCase
         config(['broadcasting.default' => 'log']);
     }
 
-    /** Switches Reverb on with complete credentials (the state the watchdog acts on). */
-    private function switchReverbOn(): void
+    /** Complete Reverb credentials, switch left as it is. */
+    private function saveCredentials(): void
     {
         SystemSetting::set('reverb_app_id', '123456', false, 'reverb');
         SystemSetting::set('reverb_app_key', 'rkeyabc123', false, 'reverb');
         SystemSetting::set('reverb_app_secret', 'reverb-secret-value-123456789012', true, 'reverb');
         SystemSetting::set('reverb_host', 'ws.example.test', false, 'reverb');
+    }
+
+    /** Switches Reverb on with complete credentials (the state the watchdog acts on). */
+    private function switchReverbOn(): void
+    {
+        $this->saveCredentials();
         SystemSetting::set('realtime_driver', 'reverb', false, 'reverb');
     }
 
@@ -36,6 +44,8 @@ class ReverbWatchdogTest extends TestCase
     {
         $fake = new class ($healthy, $launchResult) extends ReverbRuntime {
             public int $launches = 0;
+
+            public int $stops = 0;
 
             public function __construct(private bool $answer, private ?string $launchResult) {}
 
@@ -49,6 +59,18 @@ class ReverbWatchdogTest extends TestCase
                 $this->launches++;
 
                 return $this->launchResult;
+            }
+
+            public function stop(): ?string
+            {
+                $this->stops++;
+
+                return null;
+            }
+
+            public function publicReachable(): ?bool
+            {
+                return null;
             }
         };
         $this->app->instance(ReverbRuntime::class, $fake);
@@ -130,6 +152,7 @@ class ReverbWatchdogTest extends TestCase
             ->assertJsonStructure(['exec_available', 'pid', 'started_at', 'listen', 'last_watchdog', 'log_tail']);
 
         $this->assertStringNotContainsString('reverb-secret-value-123456789012', $response->getContent());
+        $response->assertJsonStructure(['autostart', 'public_reachable']);
     }
 
     #[Test]
@@ -144,5 +167,65 @@ class ReverbWatchdogTest extends TestCase
 
         $this->assertSame(1, $fake->launches);
         $this->assertSame('started', Cache::get(ReverbRuntime::HEARTBEAT_KEY)['result']);
+    }
+
+    #[Test]
+    public function the_watchdog_waits_when_automatic_start_is_off(): void
+    {
+        $this->switchReverbOn();
+        SystemSetting::set('reverb_autostart', 'false', false, 'reverb');
+        $fake = $this->fakeRuntime(false, null);
+
+        $result = app(ReverbRuntime::class)->watchdog();
+
+        $this->assertSame('waiting', $result['result']);
+        $this->assertSame(0, $fake->launches);
+    }
+
+    #[Test]
+    public function turning_reverb_on_starts_it_first_and_then_tests_it(): void
+    {
+        $this->saveCredentials();
+        $fake = $this->fakeRuntime(false, null);
+        $this->app->instance(ReverbConnectionTester::class, new class extends ReverbConnectionTester {
+            public function check(array $creds): ?string
+            {
+                return null;
+            }
+        });
+
+        $this->actingAs($this->createSuperAdmin(), 'admin')
+            ->post(route('admin.reverb-settings.toggle'), ['enabled' => true])
+            ->assertSessionHas('success');
+
+        $this->assertSame(1, $fake->launches);
+        $this->assertTrue(RealtimeConfig::reverbActive());
+    }
+
+    #[Test]
+    public function turning_reverb_on_is_refused_when_it_cannot_start(): void
+    {
+        $this->saveCredentials();
+        $this->fakeRuntime(false, 'This host does not allow shell commands (exec is disabled).');
+
+        $this->actingAs($this->createSuperAdmin(), 'admin')
+            ->post(route('admin.reverb-settings.toggle'), ['enabled' => true])
+            ->assertSessionHas('error');
+
+        $this->assertFalse(RealtimeConfig::reverbActive());
+    }
+
+    #[Test]
+    public function turning_reverb_off_stops_the_process(): void
+    {
+        $this->switchReverbOn();
+        $fake = $this->fakeRuntime(true, null);
+
+        $this->actingAs($this->createSuperAdmin(), 'admin')
+            ->post(route('admin.reverb-settings.toggle'), ['enabled' => false])
+            ->assertSessionHas('success');
+
+        $this->assertSame(1, $fake->stops);
+        $this->assertFalse(RealtimeConfig::reverbActive());
     }
 }
