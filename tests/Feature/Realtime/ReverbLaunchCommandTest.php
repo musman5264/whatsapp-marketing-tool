@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Realtime;
 
+use App\Services\CliPhpBinary;
 use App\Services\ReverbRuntime;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
@@ -59,5 +60,16 @@ class ReverbLaunchCommandTest extends TestCase
         $this->artisan('reverb:launch')
             ->expectsOutputToContain('Save the Reverb app ID')
             ->assertExitCode(1);
+    }
+
+    #[Test]
+    public function the_start_uses_a_command_line_php_binary(): void
+    {
+        // Web requests can have a PHP_BINARY that is not the command-line PHP (FPM, CGI), so the
+        // start command must use the finder's binary, which only falls back to PHP_BINARY.
+        $binary = CliPhpBinary::path();
+
+        $this->assertFileExists($binary);
+        $this->assertTrue(is_executable($binary));
     }
 }

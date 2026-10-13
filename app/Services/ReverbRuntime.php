@@ -93,7 +93,7 @@ class ReverbRuntime
             $command = sprintf(
                 'cd %s && S=$(command -v setsid || true); $S nohup %s %s reverb:start --host=%s --port=%d >> %s 2>&1 < /dev/null & echo $!',
                 escapeshellarg(base_path()),
-                escapeshellarg(PHP_BINARY),
+                escapeshellarg(CliPhpBinary::path()),
                 escapeshellarg(base_path('artisan')),
                 escapeshellarg($this->listenHost()),
                 $this->listenPort(),

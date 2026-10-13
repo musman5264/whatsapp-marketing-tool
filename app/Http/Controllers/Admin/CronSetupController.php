@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Services\CliPhpBinary;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
@@ -21,7 +22,7 @@ class CronSetupController extends Controller
     {
         return Inertia::render('Admin/CronSetup/Index', [
             'basePath'        => base_path(),
-            'phpBinary'       => PHP_BINARY,
+            'phpBinary'       => CliPhpBinary::path(),
             'queueConnection' => (string) config('queue.default'),
             'tasks'           => $this->scheduledTasks(),
             'schedulerLastRun' => $this->heartbeat()?->toIso8601String(),
