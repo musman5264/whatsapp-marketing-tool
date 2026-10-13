@@ -81,6 +81,13 @@ Schedule::command('queue:work --queue=whatsapp,broadcast,social,ai,leads,automat
     ->name('drain-queues')
     ->withoutOverlapping(10);
 
+// Keep Reverb (the WebSocket server for live inbox updates) running while it is switched on in
+// the admin panel. The cron entry that runs schedule:run every minute starts it if it stops.
+Schedule::command('reverb:ensure-running')
+    ->everyMinute()
+    ->name('reverb-watchdog')
+    ->withoutOverlapping(5);
+
 // Backfill WhatsApp Web chats/messages missed while offline, and clear unread
 // read on the owner's phone. Only active numbers; queued so the drain cron runs it.
 Schedule::command('whatsapp-web:sync --queue --quiet-output')

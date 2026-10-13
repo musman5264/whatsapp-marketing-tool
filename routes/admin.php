@@ -180,6 +180,9 @@ Route::put('/reverb-settings', [ReverbSettingsController::class, 'update'])->nam
 Route::post('/reverb-settings/generate', [ReverbSettingsController::class, 'generate'])->name('reverb-settings.generate')->middleware('permission:manage_settings');
 Route::post('/reverb-settings/test', [ReverbSettingsController::class, 'test'])->name('reverb-settings.test')->middleware('permission:manage_settings');
 Route::post('/reverb-settings/toggle', [ReverbSettingsController::class, 'toggle'])->name('reverb-settings.toggle')->middleware('permission:manage_settings');
+Route::get('/reverb-settings/status', [ReverbSettingsController::class, 'status'])->name('reverb-settings.status')->middleware('permission:manage_settings');
+Route::post('/reverb-settings/start', [ReverbSettingsController::class, 'start'])->name('reverb-settings.start')->middleware('permission:manage_settings');
+Route::post('/reverb-settings/restart', [ReverbSettingsController::class, 'restart'])->name('reverb-settings.restart')->middleware('permission:manage_settings');
 
 // Integrations (system-level credential management)
 Route::get('/integrations', [IntegrationConfigController::class, 'index'])->name('integrations.index')->middleware('permission:manage_integrations');

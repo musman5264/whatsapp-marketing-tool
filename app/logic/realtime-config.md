@@ -15,6 +15,16 @@
 - **cPanel:** Reverb is a long-running process. Shared cPanel hosting only runs cron, so Reverb usually cannot run there. Run it on a VPS (`php artisan reverb:start --host=0.0.0.0 --port=8080`, under systemd or supervisor) and forward WebSocket traffic for `/app` and `/apps` to it from the host you enter. Otherwise keep hosted Pusher.
 - Tests: `tests/Feature/Realtime/ReverbSettingsTest.php` (permission, masking, encryption at rest, toggle rules, provider, restart signal, failure message).
 
+**Reverb watchdog and status (T-0017):** `app/Services/ReverbRuntime.php`.
+- `reverb:ensure-running` (`app/Console/Commands/ReverbEnsureRunning.php`) is scheduled every minute in `routes/console.php` (`reverb-watchdog`, `withoutOverlapping`). It runs on the cron entry that already runs `schedule:run`. Reverb off: nothing. Reverb answering `GET /up` on the listen port: nothing. Otherwise it starts Reverb. The result is kept in the cache (`reverb:watchdog`) and shown on the page.
+- Start: `setsid nohup php artisan reverb:start --host=<listen host> --port=<listen port>` (`shell_exec`), output to `storage/logs/reverb.log`, pid and start time in `storage/app/reverb.pid`. A cache lock stops two starts at once. The start waits up to 8 seconds for `/up`.
+- Host without shell commands (`exec` disabled): the page says so and nothing is attempted.
+- Restart after a credential change: the restart signal makes the running server exit; the next watchdog run starts it with the new settings.
+- Settings: `reverb_listen_host` (`0.0.0.0` or `127.0.0.1`, default `0.0.0.0`), `reverb_listen_port` (default `8080`).
+- Page: status card (running or stopped, pid, started, uptime, listen address, last watchdog check, log tail), refreshed every 10 seconds from `GET /admin/reverb-settings/status`. Start now (`POST .../start`) and Restart (`POST .../restart`).
+- Limits, to verify on the host: a process started from cron must survive the cron run and any host process limits; browsers must reach the listen port (or a proxy) over WSS. The start path is tested with a fake launcher; on Windows only its failure path was run.
+- Tests: `tests/Feature/Realtime/ReverbWatchdogTest.php`.
+
 **Live events never throw into the inbound pipeline (T-0016):** the events above that broadcast immediately implement `Illuminate\Contracts\Broadcasting\ShouldRescue`, so a refused send (Pusher quota or size limit, Reverb down) is reported to the log and the listeners (automations) still run. Without it, Laravel sends the event to the broadcaster before its listeners and a refusal cancelled them. `WhatsappDriver::processInboundMessage` releases the duplicate-guard key only when no message row was stored, so a retry cannot store the same WhatsApp message twice. Test: `tests/Feature/Realtime/BroadcastFailureDoesNotBreakInboundTest.php`.
 
 **Secrets (T-0015):** `SystemSetting::set()` sets `is_secret` before the value, so a secret saved for the first time is encrypted. A migration (`2026_10_13_120000_encrypt_plaintext_system_secrets`) encrypts secrets saved as plain text before this fix.
