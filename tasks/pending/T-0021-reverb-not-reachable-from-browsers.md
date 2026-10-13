@@ -41,6 +41,7 @@ Browsers connect to `wss://wa.esystematics.com/app/…` on port 443. Nothing on 
 
 ## Progress log
 - 2026-10-13 13:40 created. Blocked on the host decision (option 1, 2 or 3).
+- 2026-10-13 13:50 user has only cPanel: no port control. Option 2 is out. Option 1 depends on the host enabling WebSocket proxying. Recommendation: keep Pusher (option 3). Waiting for the user's choice.
 
 ## Result
 (not finished)
