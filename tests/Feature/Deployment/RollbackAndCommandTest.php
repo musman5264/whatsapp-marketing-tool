@@ -101,13 +101,4 @@ class RollbackAndCommandTest extends TestCase
         Http::assertSent(fn ($request) => str_contains($request->url(), 'action=cmd')
             && ! str_contains($request->url(), 'key2='));
     }
-
-    #[Test]
-    public function the_remote_script_allowlists_the_same_reverb_launch_command(): void
-    {
-        // The remote script has its own allowlist; both must name the command or the server asks for the key again.
-        $script = file_get_contents(public_path('deploy.php'));
-
-        $this->assertStringContainsString("'php artisan reverb:launch'", $script);
-    }
 }

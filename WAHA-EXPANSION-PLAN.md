@@ -12,7 +12,7 @@
 
 ## Global Constraints
 
-- **Deploy model:** commit → `git push origin main` → `curl "https://wa2.dermavalue.pk/deploy.php?key=esystematicTechnologies&action=deploy"`. Backend-only changes need no frontend rebuild. **Any change to a file under `resources/js/` requires `npm run build` and committing `public/build/` in the same commit.**
+- **Deploy model:** commit → `git push origin main` → `curl "https://wa2.dermavalue.pk/deploy.php?key=<DEPLOY_KEY>&action=deploy"`. Backend-only changes need no frontend rebuild. **Any change to a file under `resources/js/` requires `npm run build` and committing `public/build/` in the same commit.**
 - **Migrations:** the deploy script runs `php artisan migrate --force` automatically. Write reversible `down()`.
 - **Config cache:** production does NOT cache config (`php artisan about` → "Config ... NOT CACHED"); `env()` inside config files is fine, `env()` outside config is not.
 - **Personal-number detection:** a WAHA conversation is one whose `conversation.channelAccount->provider === 'whatsapp_web'`. The engine session name is `ChannelAccount.phone_number_id` and equals `WhatsappWebSession.session_name` (`ws-{workspaceId}`).
@@ -2082,7 +2082,7 @@ git push origin main
 - [ ] **Step 4: Deploy**
 
 ```bash
-curl -sS "https://wa2.dermavalue.pk/deploy.php?key=esystematicTechnologies&action=deploy"
+curl -sS "https://wa2.dermavalue.pk/deploy.php?key=<DEPLOY_KEY>&action=deploy"
 ```
 
 Expected: `"status": "SUCCESS"`, `migrate` shows the new migration ran.
@@ -2090,7 +2090,7 @@ Expected: `"status": "SUCCESS"`, `migrate` shows the new migration ran.
 - [ ] **Step 5: Verify on live**
 
 ```bash
-curl -sS "https://wa2.dermavalue.pk/deploy.php?key=esystematicTechnologies&action=git-info"
+curl -sS "https://wa2.dermavalue.pk/deploy.php?key=<DEPLOY_KEY>&action=git-info"
 ```
 
 Expected: `commits_behind: 0`.

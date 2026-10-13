@@ -697,18 +697,23 @@ if ($action === 'cmd') {
         out(['action' => 'cmd', 'ok' => false, 'error' => 'empty or too long (max 500)']);
     }
 
-    $allowedPrefixes = [
-        'php artisan optimize:clear', 'php artisan migrate --force', 'php artisan migrate:status',
-        'php artisan config:clear', 'php artisan cache:clear', 'php artisan queue:restart',
-        'php artisan storage:link', 'php artisan whatsapp-web:status', 'php artisan about', 'php artisan reverb:launch',
-        'git status', 'git log', 'git branch',
-        'composer install --no-dev',
+    // Allowed without the second key: exact commands, or `php artisan <name>` with plain arguments.
+    // Shell characters are refused outright. The app runs the same rule (CommandAllowlist); the two
+    // lists must match (tests/Feature/Deployment/CommandAllowlistTest.php).
+    $allowedExact = [
+        'git status', 'git log', 'git log --oneline -20', 'git branch',
+        'composer install --no-dev', 'composer install --no-dev --optimize-autoloader',
+    ];
+    $allowedArtisan = [
+        'optimize:clear', 'migrate', 'migrate:status', 'config:clear', 'cache:clear', 'queue:restart',
+        'storage:link', 'whatsapp-web:status', 'about', 'reverb:launch',
     ];
     $isAllowlisted = false;
-    foreach ($allowedPrefixes as $p) {
-        if (str_starts_with($command, $p)) {
+    if (preg_match('/^[A-Za-z0-9 _.:=\/-]+\z/', $command) === 1) {
+        if (in_array($command, $allowedExact, true)) {
             $isAllowlisted = true;
-            break;
+        } elseif (preg_match('/^php artisan ([a-z0-9:_-]+)(?: .*)?\z/', $command, $match) === 1) {
+            $isAllowlisted = in_array($match[1], $allowedArtisan, true);
         }
     }
 

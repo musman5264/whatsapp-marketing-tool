@@ -5,6 +5,7 @@ namespace App\Modules\Deployment\Http\Controllers;
 use App\Http\Controllers\Controller;
 use App\Modules\Deployment\Models\DeploymentLog;
 use App\Modules\Deployment\Models\DeploymentSetting;
+use App\Modules\Deployment\Services\CommandAllowlist;
 use App\Modules\Deployment\Services\DeployClient;
 use App\Modules\Deployment\Services\GitInspector;
 use Illuminate\Http\JsonResponse;
@@ -211,18 +212,7 @@ class DeploymentController extends Controller
 
         // Allowlisted commands don't need the confirm key; anything else does — and
         // we forward it so the deploy script re-verifies (defence in depth).
-        $allow = [
-            'php artisan optimize:clear', 'php artisan migrate --force', 'php artisan migrate:status',
-            'php artisan config:clear', 'php artisan cache:clear', 'php artisan queue:restart',
-            'php artisan storage:link', 'php artisan reverb:launch', 'git status', 'git log', 'git branch', 'composer install --no-dev',
-        ];
-        $isAllowed = false;
-        foreach ($allow as $p) {
-            if (str_starts_with($data['command'], $p)) {
-                $isAllowed = true;
-                break;
-            }
-        }
+        $isAllowed = CommandAllowlist::allows($data['command']);
         if (! $isAllowed && empty($data['confirm_key'])) {
             return response()->json([
                 'ok' => false,
