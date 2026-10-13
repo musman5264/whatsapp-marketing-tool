@@ -201,12 +201,13 @@ class InboxController extends Controller
                     : (str_starts_with($mimeType, 'video/') ? 'video' : 'document');
             }
 
-            $storedPath = $this->storageManager->prefixedPath('message-media/'.$file->hashName());
-            $this->storageManager->disk()->putFileAs(dirname($storedPath), $file, basename($storedPath));
-            $previewUrl = $this->storageManager->disk()->url($storedPath);
+            // Private disk: the file is not reachable by its name. The inbox reads it through the login check.
+            $storedPath = 'message-media/'.$file->hashName();
+            Storage::disk('local')->putFileAs('message-media', $file, $file->hashName());
 
             $msgPayload = array_merge($msgPayload ?? [], [
-                'preview_url' => $previewUrl,
+                'media_path' => $storedPath,
+                'mime_type' => $mimeType,
                 'caption' => $validated['body'] ?? null,
                 'filename' => $file->getClientOriginalName(),
             ]);
@@ -220,7 +221,8 @@ class InboxController extends Controller
                 }
                 $msgPayload['media_id'] = $client->uploadMedia($file->getRealPath(), $mimeType);
             } else {
-                $msgPayload['link'] = $previewUrl;
+                // WAHA fetches this once to send the file. The link expires after 15 minutes.
+                $msgPayload['link'] = $this->wahaMedia->fetchUrl($storedPath);
             }
 
             // For image/document the 'body' shown in the chat is the caption or filename
@@ -526,11 +528,11 @@ class InboxController extends Controller
 
         $payload = $message->payload ?? [];
 
-        // Already stored: find that one known path (no folder listing) and redirect.
+        // Already stored on the private disk: stream it to the logged-in user.
         if (! empty($payload['preview_url'])) {
             $path = $this->wahaMedia->existingPath($message, $payload);
             if ($path) {
-                return redirect($this->storageManager->disk()->url($path));
+                return $this->wahaMedia->respond($path, $payload['mime_type'] ?? null);
             }
 
             // File missing — clear stale preview_url and fall through to re-download
@@ -553,7 +555,7 @@ class InboxController extends Controller
                 abort($e->status, $e->getMessage());
             }
 
-            return redirect($stored['preview_url']);
+            return $this->wahaMedia->respond($stored['media_path'], $stored['mime_type']);
         }
 
         if (! $mediaId) {
@@ -574,14 +576,12 @@ class InboxController extends Controller
             $ext = str_replace(['jpeg'], ['jpg'], $ext);
             $filename = "message-media/{$message->id}.{$ext}";
 
-            $filename = $this->storageManager->prefixedPath($filename);
-            $this->storageManager->disk()->put($filename, $bytes);
-            $previewUrl = $this->storageManager->disk()->url($filename);
+            Storage::disk('local')->put($filename, $bytes);
 
             // Cache for next request
-            $message->update(['payload' => array_merge($payload, ['preview_url' => $previewUrl, 'mime_type' => $mimeType, 'media_path' => $filename])]);
+            $message->update(['payload' => array_merge($payload, ['preview_url' => $this->wahaMedia->authenticatedUrl($message), 'mime_type' => $mimeType, 'media_path' => $filename])]);
 
-            return redirect($previewUrl);
+            return $this->wahaMedia->respond($filename, $mimeType);
         } catch (\Throwable $e) {
             abort(502, 'Could not fetch media: '.$e->getMessage());
         }

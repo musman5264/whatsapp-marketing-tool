@@ -29,7 +29,7 @@ class WahaMediaArrivalTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        Storage::fake('public');
+        Storage::fake('local');
         Http::preventStrayRequests();
         $ctx = $this->createWorkspaceContext();
 
@@ -99,7 +99,7 @@ class WahaMediaArrivalTest extends TestCase
         $this->assertNotEmpty($message->payload['preview_url']);
         $this->assertSame('image/jpeg', $message->payload['mime_type']);
         $this->assertSame("message-media/{$message->id}.jpg", $message->payload['media_path']);
-        Storage::disk('public')->assertExists("message-media/{$message->id}.jpg");
+        Storage::disk('local')->assertExists("message-media/{$message->id}.jpg");
         Event::assertDispatched(MessageReceived::class);
         Event::assertDispatched(MessageMediaReady::class, fn ($e) => $e->message->id === $message->id);
     }

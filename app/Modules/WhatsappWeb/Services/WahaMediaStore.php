@@ -4,7 +4,7 @@ namespace App\Modules\WhatsappWeb\Services;
 
 use App\Events\MessageMediaReady;
 use App\Modules\Shared\Models\Message;
-use App\Services\StorageManager;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Throwable;
@@ -18,10 +18,10 @@ class WahaMediaStore
     /** Message types whose payload carries a downloadable WAHA link. */
     private const MEDIA_TYPES = ['image', 'video', 'audio', 'document'];
 
-    public function __construct(
-        private readonly EngineManager $engines,
-        private readonly StorageManager $storage,
-    ) {}
+    /** Private disk (storage/app/private). Never linked publicly: served only through the login check or a signed link. */
+    private const DISK = 'local';
+
+    public function __construct(private readonly EngineManager $engines) {}
 
     /**
      * Called right after an inbound WhatsApp Web message is saved and announced.
@@ -112,16 +112,16 @@ class WahaMediaStore
             ? (string) ($payload['mime_type'] ?? 'application/octet-stream')
             : $rawType;
 
-        $mediaPath = $this->storage->prefixedPath('message-media/'.$message->id.'.'.$this->extensionForMime($mimeType));
+        $mediaPath = 'message-media/'.$message->id.'.'.$this->extensionForMime($mimeType);
         try {
-            $this->storage->disk()->put($mediaPath, $bytes);
+            Storage::disk(self::DISK)->put($mediaPath, $bytes);
         } catch (\Throwable $e) {
             Log::warning('WAHA media store failed', ['message_id' => $message->id, 'error' => $e->getMessage()]);
             throw new WahaMediaException(502, 'Could not store media.');
         }
 
         $stored = [
-            'preview_url' => $this->storage->disk()->url($mediaPath),
+            'preview_url' => $this->authenticatedUrl($message),
             'mime_type' => $mimeType,
             'media_path' => $mediaPath,
         ];
@@ -142,7 +142,7 @@ class WahaMediaStore
         // Only this message's own file name is accepted. media_path can come from a
         // request body (outbound payloads), so anything that leaves the folder, or
         // names another message, is ignored and the derived name is used instead.
-        $own = $this->storage->prefixedPath('message-media/'.$message->id.'.');
+        $own = 'message-media/'.$message->id.'.';
         $candidate = $payload['media_path'] ?? null;
         $tail = is_string($candidate) && str_starts_with($candidate, $own) ? substr($candidate, strlen($own)) : null;
         $trusted = $tail !== null && $tail !== ''
@@ -156,7 +156,30 @@ class WahaMediaStore
             $candidate = $own.$this->extensionForMime($mime);
         }
 
-        return $this->storage->disk()->exists($candidate) ? $candidate : null;
+        return Storage::disk(self::DISK)->exists($candidate) ? $candidate : null;
+    }
+
+    /** Login-protected address for a message's media. The inbox uses this instead of any public file link. */
+    public function authenticatedUrl(Message $message): string
+    {
+        return route('client.inbox.message-media', ['conversation' => $message->conversation_id, 'message' => $message->id]);
+    }
+
+    /** Streams a stored file for a logged-in user. The caller must already have checked that the path belongs to the message. */
+    public function respond(string $mediaPath, ?string $mimeType): \Symfony\Component\HttpFoundation\Response
+    {
+        $headers = ['Cache-Control' => 'private, max-age=3600'];
+        if ($mimeType) {
+            $headers['Content-Type'] = $mimeType;
+        }
+
+        return Storage::disk(self::DISK)->response($mediaPath, null, $headers);
+    }
+
+    /** Short-lived signed address that WAHA fetches once to send a file. Expires after 15 minutes. */
+    public function fetchUrl(string $mediaPath): string
+    {
+        return Storage::disk(self::DISK)->temporaryUrl($mediaPath, now()->addMinutes(15));
     }
 
     /** File extension for a MIME type, e.g. image/jpeg → jpg, audio/mpeg → mp3. */

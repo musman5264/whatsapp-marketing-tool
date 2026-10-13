@@ -31,7 +31,7 @@ class WahaMediaServeTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        Storage::fake('public');
+        Storage::fake('local');
         Http::preventStrayRequests();
 
         $ctx = $this->createWorkspaceContext();
@@ -80,16 +80,16 @@ class WahaMediaServeTest extends TestCase
         return route('client.inbox.message-media', [$this->conversation, $message]);
     }
 
-    public function test_waha_link_is_fetched_with_api_key_cached_and_redirected(): void
+    public function test_waha_link_is_fetched_with_api_key_cached_and_served(): void
     {
         Http::fake([self::BASE.'/*' => Http::response('JPEGBYTES', 200, ['Content-Type' => 'image/jpeg'])]);
         $message = $this->mediaMessage(['id' => 'wa-1', 'image' => ['link' => self::BASE.'/api/files/abc.jpeg']]);
 
         $response = $this->actingAs($this->user)->get($this->mediaUrl($message));
 
-        $response->assertRedirect();
-        $this->assertStringContainsString("message-media/{$message->id}.jpg", (string) $response->headers->get('Location'));
-        Storage::disk('public')->assertExists("message-media/{$message->id}.jpg");
+        $response->assertOk();
+        $this->assertStringContainsString("{$message->id}.jpg", $this->servedPath($response));
+        Storage::disk('local')->assertExists("message-media/{$message->id}.jpg");
         Http::assertSent(fn ($request) => $request->url() === self::BASE.'/api/files/abc.jpeg'
             && $request->hasHeader('X-Api-Key', self::KEY));
 
@@ -103,13 +103,13 @@ class WahaMediaServeTest extends TestCase
         Http::fake([self::BASE.'/*' => Http::response('JPEGBYTES', 200, ['Content-Type' => 'image/jpeg'])]);
         $message = $this->mediaMessage(['id' => 'wa-2', 'image' => ['link' => self::BASE.'/api/files/x.jpeg']]);
 
-        $this->actingAs($this->user)->get($this->mediaUrl($message))->assertRedirect();
+        $this->actingAs($this->user)->get($this->mediaUrl($message))->assertOk();
         // Any further engine call now fails the test.
         Http::fake(function () {
             $this->fail('The engine was contacted again for a cached media file.');
         });
         $message->refresh();
-        $this->actingAs($this->user)->get($this->mediaUrl($message))->assertRedirect();
+        $this->actingAs($this->user)->get($this->mediaUrl($message))->assertOk();
     }
 
     public function test_link_host_is_replaced_by_the_configured_engine_origin(): void
@@ -119,7 +119,7 @@ class WahaMediaServeTest extends TestCase
         Http::fake([self::BASE.'/*' => Http::response('PNG', 200, ['Content-Type' => 'image/png'])]);
         $message = $this->mediaMessage(['id' => 'wa-3', 'image' => ['link' => 'http://localhost:3000/api/files/p.png?v=2']], 'image');
 
-        $this->actingAs($this->user)->get($this->mediaUrl($message))->assertRedirect();
+        $this->actingAs($this->user)->get($this->mediaUrl($message))->assertOk();
 
         Http::assertSent(fn ($request) => $request->url() === self::BASE.'/api/files/p.png?v=2');
         Http::assertSentCount(1);
@@ -170,9 +170,9 @@ class WahaMediaServeTest extends TestCase
     {
         $message = $this->mediaMessage(['id' => 'wa-777', 'image' => ['link' => self::BASE.'/api/files/z.jpeg']]);
         $own = "message-media/{$message->id}.jpg";
-        Storage::disk('public')->put('message-media/other-1.jpg', 'NOT THIS ONE');
-        Storage::disk('public')->put('message-media/other-2.jpg', 'NOT THIS ONE EITHER');
-        Storage::disk('public')->put($own, 'JPEG');
+        Storage::disk('local')->put('message-media/other-1.jpg', 'NOT THIS ONE');
+        Storage::disk('local')->put('message-media/other-2.jpg', 'NOT THIS ONE EITHER');
+        Storage::disk('local')->put($own, 'JPEG');
         $message->update(['payload' => $message->payload + [
             'preview_url' => '/storage/'.$own,
             'mime_type' => 'image/jpeg',
@@ -184,8 +184,8 @@ class WahaMediaServeTest extends TestCase
 
         $response = $this->actingAs($this->user)->get($this->mediaUrl($message));
 
-        $response->assertRedirect();
-        $this->assertStringContainsString($own, (string) $response->headers->get('Location'));
+        $response->assertOk();
+        $this->assertStringContainsString(basename($own), $this->servedPath($response));
     }
 
     public function test_a_recorded_path_outside_this_messages_media_file_is_ignored(): void
@@ -203,8 +203,8 @@ class WahaMediaServeTest extends TestCase
 
         $response = $this->actingAs($this->user)->get($this->mediaUrl($message));
 
-        $response->assertRedirect();
-        $this->assertStringContainsString("message-media/{$message->id}.jpg", (string) $response->headers->get('Location'));
+        $response->assertOk();
+        $this->assertStringContainsString("{$message->id}.jpg", $this->servedPath($response));
         Http::assertSentCount(1);
     }
 
@@ -214,7 +214,7 @@ class WahaMediaServeTest extends TestCase
         // That must still be found, not re-downloaded on every view.
         $message = $this->mediaMessage(['id' => 'wa-901', 'audio' => ['id' => 'media-901']], 'audio');
         $own = "message-media/{$message->id}.ogg; codecs=opus";
-        Storage::disk('public')->put($own, 'OGG');
+        Storage::disk('local')->put($own, 'OGG');
         $message->update(['payload' => $message->payload + [
             'preview_url' => '/storage/'.$own,
             'mime_type' => 'audio/ogg; codecs=opus',
@@ -226,7 +226,13 @@ class WahaMediaServeTest extends TestCase
 
         $response = $this->actingAs($this->user)->get($this->mediaUrl($message));
 
-        $response->assertRedirect();
-        $this->assertStringContainsString("{$message->id}.ogg", (string) $response->headers->get('Location'));
+        $response->assertOk();
+        $this->assertStringContainsString("{$message->id}.ogg", $this->servedPath($response));
+    }
+
+    /** The file name the response serves (its Content-Disposition), since the file is streamed rather than redirected to. */
+    private function servedPath(\Illuminate\Testing\TestResponse $response): string
+    {
+        return (string) $response->headers->get('Content-Disposition');
     }
 }
