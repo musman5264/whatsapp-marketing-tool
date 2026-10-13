@@ -39,6 +39,7 @@ updated: 2026-10-13 16:40
 - [ ] Verify on the live site after the link.
 
 ## Progress log
+- 2026-10-13 17:20 `public/storage` is LINKED on cPanel. Found the second cause: WAHA sends a photo as type `chat` with `hasMedia=true` and the caption as the body. The normalizer stored it as empty text (live check: "This is caption" stored as a text message, no image). Fixed in `InboundNormalizer::mapType()` (commit below); tests pass (104). Waiting for the deploy and a new photo from the phone.
 - 2026-10-13 16:40 created from the screenshot and the checks above. Waiting for `storage:link` on cPanel.
 
 ## Result

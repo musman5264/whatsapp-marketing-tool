@@ -12,6 +12,7 @@
 
 ## Media (images, video, audio/voice notes, documents)
 - Arrival: right after `WhatsappDriver::ingestNormalizedInbound` saves a live inbound message, `WahaEventProcessor::handleInbound` calls `WahaMediaStore::storeInbound()`. It downloads the WAHA link through the configured engine only (API key attached, host rebased to the engine origin), stores it as `message-media/{id}.{ext}` and records `preview_url`, `mime_type` and `media_path` on the payload. Then `MessageMediaReady` tells an open chat (private channel `conversation.{id}`) to show it.
+- Type rule (2026-10-13): WAHA sends a photo, video or file as type `chat` (or `text`) with `hasMedia=true` and the caption as the body. `InboundNormalizer::mapType()` takes the kind from `media.mimetype` (image/video/audio, else document) so the file is downloaded. Before this, such messages were stored as empty text and shown as "(media)".
 - Soft-fail: any failure is logged (`whatsapp_web.media.arrival_failed`); the message stays, and the copy is fetched lazily when someone opens it.
 - Lazy fallback: `InboxController::serveMedia` (route `client.inbox.message-media`) uses the stored copy when there is one, otherwise downloads it through `WahaMediaStore::store()` and redirects. Errors map to 404 (gone on the engine), 502 (engine unreachable or failed), 503 (engine not configured).
 - Stored-copy lookup: `WahaMediaStore::existingPath()` checks the recorded `media_path` (or, for older copies, the name derived from `mime_type`). It never lists the media folder.

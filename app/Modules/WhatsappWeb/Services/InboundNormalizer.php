@@ -233,6 +233,21 @@ class InboundNormalizer
     /** @param array<string,mixed> $payload */
     private function mapType(string $wahaType, array $payload): string
     {
+        // WAHA sends a photo, video or file as type "chat" (or "text") with hasMedia=true and the
+        // caption as the body. Decide the kind from the MIME type, or it is stored as an empty text.
+        if (in_array(strtolower($wahaType), ['chat', 'text'], true) && ($payload['hasMedia'] ?? false) === true) {
+            $mime = strtolower((string) (is_array($payload['media'] ?? null)
+                ? ($payload['media']['mimetype'] ?? '')
+                : ($payload['mimetype'] ?? '')));
+
+            return match (true) {
+                str_starts_with($mime, 'image/') => 'image',
+                str_starts_with($mime, 'video/') => 'video',
+                str_starts_with($mime, 'audio/') => 'audio',
+                default => 'document',
+            };
+        }
+
         return match (strtolower($wahaType)) {
             'chat', 'text' => 'text',
             'image' => 'image',

@@ -222,4 +222,38 @@ class InboundWebhookTest extends TestCase
 
         $this->assertDatabaseHas('messages', ['provider_message_id' => 'default_alg_1@c.us_X']);
     }
+
+    #[Test]
+    public function a_photo_sent_as_a_chat_with_media_is_stored_as_an_image(): void
+    {
+        // WAHA sends a photo as type "chat" with hasMedia=true and the caption as the body.
+        // It must be stored as an image, not as an empty text message.
+        Event::fake([MessageReceived::class]);
+        \Illuminate\Support\Facades\Http::fake(['waha.test/*' => \Illuminate\Support\Facades\Http::response('bytes', 200, ['Content-Type' => 'image/jpeg'])]);
+
+        $payload = [
+            'event' => 'message',
+            'session' => $this->session->session_name,
+            'payload' => [
+                'id' => 'false_15551234567@c.us_PHOTO1',
+                'timestamp' => now()->timestamp,
+                'from' => '15551234567@c.us',
+                'fromMe' => false,
+                'type' => 'chat',
+                'body' => 'This is caption',
+                'hasMedia' => true,
+                'media' => ['url' => 'http://waha.test/api/files/photo1.jpg', 'mimetype' => 'image/jpeg', 'filename' => null],
+            ],
+        ];
+
+        $this->withHeaders($this->sign($payload))
+            ->postJson("/webhooks/whatsapp-web/{$this->token}", $payload)
+            ->assertOk();
+
+        $this->assertDatabaseHas('messages', [
+            'provider_message_id' => 'false_15551234567@c.us_PHOTO1',
+            'type' => 'image',
+            'body' => 'This is caption',
+        ]);
+    }
 }
