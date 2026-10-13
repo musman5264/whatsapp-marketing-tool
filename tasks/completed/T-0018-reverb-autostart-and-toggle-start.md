@@ -78,7 +78,8 @@ Nothing for the code.
 
 ## Result
 - Changed: `app/Services/ReverbRuntime.php` (autostart switch in the watchdog, `stop()`, `publicReachable()`, status fields); `app/Http/Controllers/Admin/ReverbSettingsController.php` (toggle on starts first, toggle off stops, `reverb_autostart` setting, restart on save while running); `resources/js/Pages/Admin/ReverbSettings/Index.jsx` (automatic start switch, stopped-manual status, reachability line); `resources/js/locales/en.json`; `app/logic/realtime-config.md`; tests `ReverbWatchdogTest.php` (+4), `ReverbSettingsTest.php` (runtime stand-in; restart assertion moved).
-- Checked: `ReverbWatchdogTest` + `ReverbSettingsTest` + `RealtimeConfigTest` → `OK (32 tests, 135 assertions)`. Realtime and settings group: 64 tests, 2 failures, both `TypingEndpointTest` (baseline). `npm run build` passes; eslint clean on the page.
-- Browser (local): automatic start switch saves (aria-pressed false after the click); turning Reverb on with nothing running is refused with "Reverb could not be started, so it was not turned on".
+- Checked (re-run 2026-10-13): `DB_PASSWORD= php -d memory_limit=1G vendor/phpunit/phpunit/phpunit tests/Feature/Realtime` → `Tests: 50, Assertions: 166, Failures: 2`; both failures are `TypingEndpointTest` (on the CLAUDE.md baseline list). `npx eslint resources/js/Pages/Admin/ReverbSettings/Index.jsx` → exit 0.
+- Browser (local, earlier session): the page renders with the automatic start switch and the reachability line; switching it off saved (PUT); turning Reverb on with nothing running was refused with "was not turned on".
+- Build: `public/build` regenerated in `bc786ed`. Live still serves `assets/app-Do3y3z7K.js` (fetched `/login`); the local build is `app-usY9XPKs.js`, so the live site changes only after a deploy.
 - Commits: `99d9d90` (behaviour), `37e57ed` (page), `bc786ed` (build). Pushed with the tracker commit.
 - Live: needs a deploy (Admin → Deployment). Not verified on the live host: that the start works there (exec, process survival) and that browsers can reach the port.
