@@ -119,10 +119,12 @@ class ReverbSettingsController extends Controller
             return back()->with('error', 'Fill in the app ID, key, secret and host, then save before turning Reverb on.');
         }
 
-        // The connection test needs Reverb answering, so start it first.
-        $error = $runtime->launch();
-        if ($error !== null) {
-            return back()->with('error', 'Reverb could not be started, so it was not turned on. '.$error);
+        // The connection test needs Reverb answering. Start it first when this machine runs it.
+        if ($runtime->runsHere()) {
+            $error = $runtime->launch();
+            if ($error !== null) {
+                return back()->with('error', 'Reverb could not be started, so it was not turned on. '.$error);
+            }
         }
 
         $reason = $tester->check($creds);

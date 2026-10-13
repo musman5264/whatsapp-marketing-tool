@@ -27,6 +27,13 @@ php artisan storage:link --force || true
 php artisan config:cache
 php artisan route:cache
 php artisan view:cache
+
+# Reverb-only container: the WebSocket server against the shared database, nothing else. No
+# migrations, cron or queue workers, so the main app stays the only one that changes the database.
+if [ "${REVERB_ONLY:-false}" = "true" ]; then
+    exec php artisan reverb:start --host=0.0.0.0 --port="${REVERB_SERVER_PORT:-8080}"
+fi
+
 php artisan migrate --force
 
 exec "$@"

@@ -86,7 +86,8 @@ export default function ReverbSettingsIndex({ settings = {}, configured = false,
         };
     }, []);
 
-    const healthy = Boolean(runtimeState?.healthy);
+    // On another server this machine cannot see the process, so "running" means the public address answers.
+    const healthy = runtimeState?.runs_here === false ? runtimeState?.public_reachable === true : Boolean(runtimeState?.healthy);
     const statusLabel = !runtimeState
         ? '…'
         : healthy
@@ -245,20 +246,24 @@ export default function ReverbSettingsIndex({ settings = {}, configured = false,
                             </dl>
                         )}
 
+                        {runtimeState?.runs_here === false && (
+                            <p className="text-xs text-neutral-500 dark:text-neutral-400">{t('reverb.runs_elsewhere', { host: runtimeState.host || '—' })}</p>
+                        )}
+
                         {runtimeState && runtimeState.public_reachable === false && (
                             <p className="text-xs text-red-600 dark:text-red-400">{t('reverb.reachable_no_hint')}</p>
                         )}
 
                         <div className="flex flex-wrap items-center gap-3">
-                            {runtimeState && !healthy && configured && runtimeState.exec_available && (
+                            {runtimeState && !healthy && configured && runtimeState.exec_available && runtimeState.runs_here !== false && (
                                 <Button type="button" onClick={() => runtimeAction('admin.reverb-settings.start')} disabled={runtimeBusy}>
                                     {t('reverb.start_now')}
                                 </Button>
                             )}
-                            {!healthy && !configured && (
+                            {!healthy && !configured && runtimeState?.runs_here !== false && (
                                 <p className="text-xs text-neutral-500 dark:text-neutral-400">{t('reverb.start_needs_settings')}</p>
                             )}
-                            {healthy && (
+                            {healthy && runtimeState?.runs_here !== false && (
                                 <Button type="button" variant="outline" onClick={() => runtimeAction('admin.reverb-settings.restart')} disabled={runtimeBusy}>
                                     <RefreshCw className={`h-4 w-4 ${runtimeBusy ? 'animate-spin' : ''}`} />
                                     {t('reverb.restart')}

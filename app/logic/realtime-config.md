@@ -49,3 +49,20 @@
 **Tests:** `tests/Feature/Realtime/RealtimeConfigTest.php`, `RealtimeCspTest.php`, `ReverbSettingsTest.php`, `BroadcastFailureDoesNotBreakInboundTest.php`.
 
 **Verified locally (not on the live site):** with Reverb on the local server, an open chat page connected to Reverb and a real inbound webhook appeared in it without a reload (same document, marker kept). Live site: unverified.
+
+## Reverb on another server (T-0023)
+
+Setup in use: the main app stays on cPanel (`wa.esystematics.com`). Reverb runs on a VPS through Easypanel, from the same Docker image. The database is shared.
+
+- `REVERB_RUNS_HERE` (config `reverb.runs_here`, default `false`): true only on a machine that runs Reverb itself. On cPanel it stays false. Then the watchdog does nothing, Start and Restart are hidden, and Test Connection checks the other server. The page says where Reverb runs.
+- `REVERB_ONLY=true` (`docker/entrypoint.sh`): the container runs `reverb:start` in the foreground on `REVERB_SERVER_PORT` (default 8080) and nothing else. No migration, Apache, cron or queue worker, so the VPS never changes the shared database or runs scheduled jobs.
+- Shared values: both sides read the same settings table, the same cache (`CACHE_STORE=database`, which carries the restart signal), and the same `APP_KEY`. Secrets are encrypted with `APP_KEY`, so it must be identical on both sides.
+- Browser address: `wss://ws.esystematics.com:443/app/<key>`. A subdomain, proxied through Cloudflare, not `wa.esystematics.com`: the website answers `/up` itself, so the same host would need path routing in Cloudflare.
+
+Steps outside the code (not done by the app):
+1. cPanel Remote MySQL: allow the VPS address. On the VPS set `DB_HOST` to the cPanel MySQL host.
+2. Cloudflare: DNS record `ws` pointing at the VPS address, proxied (orange cloud). SSL mode Full (strict). If the certificate fails while proxied, issue it with the record set to DNS only, then turn the proxy on.
+3. Easypanel: a service from the image with `REVERB_ONLY=true`, `REVERB_RUNS_HERE=true`, `REVERB_SERVER_PORT=8080`, the same `APP_KEY`, the remote `DB_*` values, restart policy always, and domain `ws.esystematics.com` routed to port 8080 with TLS.
+4. cPanel admin, Reverb Settings: host `ws.esystematics.com`, port 443, scheme https. Test Connection. Then switch Reverb on.
+
+Limits, unverified: the restart signal makes the container's Reverb exit, so Easypanel's restart policy must bring it back. Nothing here has been run on the VPS yet. Tests: `tests/Feature/Realtime/ReverbWatchdogTest.php` (watchdog, start and toggle when Reverb runs elsewhere).

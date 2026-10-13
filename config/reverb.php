@@ -17,6 +17,18 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Reverb runs on this machine
+    |--------------------------------------------------------------------------
+    |
+    | true: this machine runs the Reverb server, so the watchdog and the Start button may start it.
+    | false: Reverb runs on another server (for example a VPS); this app only connects to it.
+    |
+    */
+
+    'runs_here' => env('REVERB_RUNS_HERE', false),
+
+    /*
+    |--------------------------------------------------------------------------
     | Reverb Servers
     |--------------------------------------------------------------------------
     |

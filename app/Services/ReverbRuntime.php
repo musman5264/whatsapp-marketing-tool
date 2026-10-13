@@ -53,6 +53,12 @@ class ReverbRuntime
         }
     }
 
+    /** True when this machine runs the Reverb server (REVERB_RUNS_HERE). */
+    public function runsHere(): bool
+    {
+        return (bool) config('reverb.runs_here', false);
+    }
+
     /** Shell commands are needed to start Reverb in the background. Some shared hosts disable them. */
     public function execAvailable(): bool
     {
@@ -71,6 +77,10 @@ class ReverbRuntime
      */
     public function launch(): ?string
     {
+        if (! $this->runsHere()) {
+            return 'Reverb runs on another server. Start it there.';
+        }
+
         // Without the saved app, the process would start with the .env values instead.
         if (RealtimeConfig::adminReverbCredentials() === null) {
             return 'Save the Reverb app ID, key, secret and host on the Reverb settings page first.';
@@ -126,6 +136,10 @@ class ReverbRuntime
     /** What the scheduler does every minute. Returns the result it recorded. */
     public function watchdog(): array
     {
+        if (! $this->runsHere()) {
+            return $this->record('skipped', 'Reverb runs on another server, so nothing is started here.');
+        }
+
         if (! RealtimeConfig::reverbActive()) {
             return $this->record('skipped', 'Reverb is off, so nothing needs to run.');
         }
@@ -233,6 +247,8 @@ class ReverbRuntime
             'healthy' => $this->healthy(),
             'autostart' => $this->autostart(),
             'public_reachable' => $this->publicReachable(),
+            'runs_here' => $this->runsHere(),
+            'host' => (string) (SystemSetting::get('reverb_host') ?? ''),
             'pid' => $meta['pid'] ?? null,
             'started_at' => $startedAt,
             'uptime_seconds' => $startedAt ? max(0, (int) now()->diffInSeconds($startedAt)) : null,

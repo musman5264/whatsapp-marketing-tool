@@ -1692,6 +1692,7 @@
         "no_check_yet": "Not checked yet. The scheduler checks every minute while Reverb is on.",
         "start_now": "Start now",
         "start_needs_settings": "Save the app ID, key, secret and host below to start Reverb from here.",
+        "runs_elsewhere": "Reverb runs on another server ({{host}}). Start and restart happen there. This page checks it from outside.",
         "restart": "Restart",
         "log_title": "Recent log",
         "log_empty": "No log yet.",
