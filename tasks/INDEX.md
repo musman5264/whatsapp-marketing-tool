@@ -1,5 +1,5 @@
 # Task Board
-_Last updated: 2026-10-13 13:55_
+_Last updated: 2026-10-13 14:03_
 
 ## Working
 | ID | Task | Plan / Phase | Priority | Updated |
@@ -14,11 +14,12 @@ _Last updated: 2026-10-13 13:55_
 | T-0005 | Deploy to wa.esystematics.com | PLAN-000 / phase-01 | T-0001..3 | high | blocked: deploy access |
 | T-0014 | Confirm live delivery and the 00:39 gap on the live server | PLAN-001 / phase-01 | none (user checks) | high | blocked: needs the user to run the three live checks (the code cannot reach the live server) |
 | T-0022 | composer.lock out of date with composer.json | PLAN-000 / phase-01 | none | medium | not started |
-| T-0023 | Run Reverb on the Easypanel VPS; cPanel uses it as an external realtime server | PLAN-000 / phase-01 | T-0021 | high | not started (design first) |
+| T-0023 | Run Reverb on the Easypanel VPS; cPanel uses it as an external realtime server | PLAN-000 / phase-01 | T-0021 | high | blocked: your VPS and Cloudflare setup (code done, commit 4a851b3) |
 
 ## Completed (most recent first)
 | ID | Task | Plan / Phase | Completed |
 |----|------|--------------|-----------|
+| T-0024 | Build the graphify knowledge graph of the repo (code, no API key); graphify-out/ is untracked | PLAN-000 / phase-01 | 2026-10-13 14:03 |
 | T-0021 | Reverb not reachable from browsers on cPanel (cancelled: Reverb moves to a VPS, T-0023) | PLAN-000 / phase-01 | 2026-10-13 13:55 |
 | T-0020 | Security: exact-match command allowlist, no built-in deploy key, Reverb starts with the command-line PHP | PLAN-000 / phase-01 | 2026-10-13 13:40 |
 | T-0019 | Reverb: manual start from the Deployment commands and a Start button on the Reverb page | PLAN-000 / phase-01 | 2026-10-13 13:11 |
@@ -41,5 +42,5 @@ _Last updated: 2026-10-13 13:55_
 | PLAN-000-general | One-off tasks | phase-01-ongoing | 0 / 0 |
 | PLAN-001-inbox-speed-and-media | Inbox speed, live updates and media | phase-01-speed-and-media | 1 / 5 |
 
-Next task ID: T-0024   (T-0006 and T-0007 are also in tasks/working from another session; IDs are never reused)
+Next task ID: T-0025   (T-0006 and T-0007 are also in tasks/working from another session; IDs are never reused)
 Next plan ID: PLAN-002

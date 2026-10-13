@@ -1,7 +1,7 @@
 ---
 id: T-0023
 title: Run Reverb on the Easypanel VPS; cPanel uses it as an external realtime server
-status: pending
+status: blocked
 priority: high
 type: feature
 plan: tasks/plans/PLAN-000-general/PLAN.md
@@ -9,7 +9,7 @@ phase: tasks/plans/PLAN-000-general/phase-01-ongoing.md
 depends_on: [T-0021]
 source: TEMP/intake-2026-10-13-1318.md
 created: 2026-10-13 13:55
-updated: 2026-10-13 13:55
+updated: 2026-10-13 14:03
 ---
 
 # T-0023: Run Reverb on the Easypanel VPS; cPanel uses it as an external realtime server
@@ -43,7 +43,12 @@ updated: 2026-10-13 13:55
 - `app/logic/realtime-config.md`, `app/logic/deployment-commands.md`
 
 ## Progress log
+- 2026-10-13 14:03 decided with the user: shared database; the VPS runs only Reverb; `ws.esystematics.com` through Cloudflare (not the same host as the website).
+- 2026-10-13 14:03 code done (commit 4a851b3): `REVERB_RUNS_HERE` (config `reverb.runs_here`), the watchdog, the start and the status respect it; the toggle tests the other server without starting one here; `REVERB_ONLY` container mode in `docker/entrypoint.sh`; the page says where Reverb runs. Tests: 3 new in `ReverbWatchdogTest`, Realtime folder 59 run, 2 baseline failures.
 - 2026-10-13 13:55 created from the user's decision. Pusher stays the live realtime for now. Not started.
 
 ## Result
-(not finished)
+- Code: done (commit 4a851b3). Nothing live changed.
+- Blocked on the user's setup, in this order (full steps in `app/logic/realtime-config.md`, section "Reverb on another server"): cPanel Remote MySQL for the VPS address; Cloudflare DNS `ws` proxied; Easypanel service with `REVERB_ONLY=true`, `REVERB_RUNS_HERE=true`, the same `APP_KEY`, the remote `DB_*`, and the domain `ws.esystematics.com` on port 8080 with TLS; then cPanel Reverb Settings host `ws.esystematics.com`, port 443, https, Test Connection, then switch on.
+- Not verified: anything on the VPS and through Cloudflare. The check: Test Connection green from cPanel, then a message shows up in an open inbox without refresh (360 px and 1920 px).
+
