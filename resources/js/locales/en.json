@@ -1650,7 +1650,7 @@
         "status_off": "Off",
         "status_not_configured": "Not configured",
         "toggle_label": "Use Reverb as the realtime server",
-        "toggle_desc": "Turning it on needs the settings below to be saved and a working connection. Turning it off returns realtime to Pusher or the .env settings.",
+        "toggle_desc": "Turning it on starts Reverb now, tests it, then switches realtime over. Turning it off switches back to Pusher or the .env settings and stops Reverb.",
         "toggle_needs_settings": "Generate the credentials, fill in the host and save first.",
         "credentials_title": "Credentials and endpoint",
         "credentials_desc": "Generate new random credentials, or enter your own. Nothing is saved until you press Save.",
@@ -1699,7 +1699,14 @@
         "listen_port": "Listen port",
         "listen_port_hint": "Port Reverb binds to on this server (default 8080).",
         "status_not_running": "Not running",
-        "started_outside": "Not started from this panel"
+        "started_outside": "Not started from this panel",
+        "autostart_label": "Start Reverb automatically",
+        "autostart_desc": "While Reverb is on, the cron checks every minute and starts it if it stopped. Off: start it yourself with Start now.",
+        "status_manual": "Stopped — automatic start is off. Press Start now.",
+        "reachable": "Browsers can reach it",
+        "reachable_yes": "Yes",
+        "reachable_no": "No",
+        "reachable_no_hint": "The public address does not answer Reverb’s health check. Forward /up and the WebSocket paths for the host to the listen port (secure proxy), or keep hosted Pusher."
     },
     "cron": {
         "title": "Cron Setup",

@@ -70,6 +70,8 @@ export default function ReverbSettingsIndex({ settings = {}, configured = false,
     const [toggling, setToggling] = useState(false);
     const [runtimeState, setRuntimeState] = useState(runtime);
     const [runtimeBusy, setRuntimeBusy] = useState(false);
+    const [autostartBusy, setAutostartBusy] = useState(false);
+    const autostartOn = settings.reverb_autostart !== 'false';
 
     // Live status: refreshed every 10 seconds while the page is open.
     useEffect(() => {
@@ -92,8 +94,17 @@ export default function ReverbSettingsIndex({ settings = {}, configured = false,
             : !runtimeState.exec_available
                 ? t('reverb.status_no_exec')
                 : runtimeState.active
-                    ? t('reverb.status_waiting')
+                    ? (runtimeState.autostart === false ? t('reverb.status_manual') : t('reverb.status_waiting'))
                     : t('reverb.status_off');
+
+    // Saves the automatic start switch straight away (the other fields are left alone).
+    const toggleAutostart = () => {
+        setAutostartBusy(true);
+        router.put(route('admin.reverb-settings.update'), { reverb_autostart: autostartOn ? 'false' : 'true' }, {
+            preserveScroll: true,
+            onFinish: () => setAutostartBusy(false),
+        });
+    };
 
     const runtimeAction = (routeName) => {
         setRuntimeBusy(true);
@@ -213,6 +224,16 @@ export default function ReverbSettingsIndex({ settings = {}, configured = false,
                                     <dt className="text-xs text-neutral-400">{t('reverb.listen')}</dt>
                                     <dd className="font-mono text-neutral-900 dark:text-neutral-100">{runtimeState.listen}</dd>
                                 </div>
+                                <div>
+                                    <dt className="text-xs text-neutral-400">{t('reverb.reachable')}</dt>
+                                    <dd className={`text-sm ${runtimeState.public_reachable === false ? 'text-red-600 dark:text-red-400' : 'text-neutral-900 dark:text-neutral-100'}`}>
+                                        {runtimeState.public_reachable === true
+                                            ? t('reverb.reachable_yes')
+                                            : runtimeState.public_reachable === false
+                                                ? t('reverb.reachable_no')
+                                                : '—'}
+                                    </dd>
+                                </div>
                                 <div className="col-span-2 sm:col-span-4">
                                     <dt className="text-xs text-neutral-400">{t('reverb.last_check')}</dt>
                                     <dd className="text-neutral-900 dark:text-neutral-100">
@@ -222,6 +243,10 @@ export default function ReverbSettingsIndex({ settings = {}, configured = false,
                                     </dd>
                                 </div>
                             </dl>
+                        )}
+
+                        {runtimeState && runtimeState.public_reachable === false && (
+                            <p className="text-xs text-red-600 dark:text-red-400">{t('reverb.reachable_no_hint')}</p>
                         )}
 
                         <div className="flex flex-wrap items-center gap-3">
@@ -282,6 +307,24 @@ export default function ReverbSettingsIndex({ settings = {}, configured = false,
                                 <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ${active ? 'translate-x-5' : 'translate-x-0'}`} />
                             </button>
                         </div>
+                        <div className="flex items-center justify-between gap-4 border-t border-neutral-200 dark:border-neutral-700 pt-4">
+                            <div>
+                                <p className="text-sm font-medium text-neutral-900 dark:text-neutral-100">{t('reverb.autostart_label')}</p>
+                                <p className="text-xs text-neutral-400">{t('reverb.autostart_desc')}</p>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={toggleAutostart}
+                                disabled={autostartBusy}
+                                aria-pressed={autostartOn}
+                                className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50 ${
+                                    autostartOn ? 'bg-green-500' : 'bg-neutral-300 dark:bg-neutral-600'
+                                }`}
+                            >
+                                <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ${autostartOn ? 'translate-x-5' : 'translate-x-0'}`} />
+                            </button>
+                        </div>
+
                         {!configured && !active && (
                             <p className="text-xs text-neutral-500 dark:text-neutral-400">{t('reverb.toggle_needs_settings')}</p>
                         )}
