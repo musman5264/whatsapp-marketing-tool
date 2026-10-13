@@ -250,10 +250,13 @@ export default function ReverbSettingsIndex({ settings = {}, configured = false,
                         )}
 
                         <div className="flex flex-wrap items-center gap-3">
-                            {runtimeState && !healthy && runtimeState.active && runtimeState.exec_available && (
+                            {runtimeState && !healthy && configured && runtimeState.exec_available && (
                                 <Button type="button" onClick={() => runtimeAction('admin.reverb-settings.start')} disabled={runtimeBusy}>
                                     {t('reverb.start_now')}
                                 </Button>
+                            )}
+                            {!healthy && !configured && (
+                                <p className="text-xs text-neutral-500 dark:text-neutral-400">{t('reverb.start_needs_settings')}</p>
                             )}
                             {healthy && (
                                 <Button type="button" variant="outline" onClick={() => runtimeAction('admin.reverb-settings.restart')} disabled={runtimeBusy}>

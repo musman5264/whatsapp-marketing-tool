@@ -228,4 +228,28 @@ class ReverbWatchdogTest extends TestCase
         $this->assertSame(1, $fake->stops);
         $this->assertFalse(RealtimeConfig::reverbActive());
     }
+
+    #[Test]
+    public function start_now_works_while_reverb_is_switched_off(): void
+    {
+        $this->saveCredentials();
+        $fake = $this->fakeRuntime(false, null);
+
+        $this->actingAs($this->createSuperAdmin(), 'admin')
+            ->post(route('admin.reverb-settings.start'))
+            ->assertSessionHas('success');
+
+        $this->assertSame(1, $fake->launches);
+        $this->assertFalse(RealtimeConfig::reverbActive());
+    }
+
+    #[Test]
+    public function a_start_without_complete_credentials_never_reaches_the_process(): void
+    {
+        // Real runtime, no fake: the credential check comes before any shell command.
+        $error = app(ReverbRuntime::class)->launch();
+
+        $this->assertNotNull($error);
+        $this->assertStringContainsString('Save', $error);
+    }
 }

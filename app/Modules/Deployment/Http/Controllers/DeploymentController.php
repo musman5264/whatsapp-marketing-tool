@@ -214,7 +214,7 @@ class DeploymentController extends Controller
         $allow = [
             'php artisan optimize:clear', 'php artisan migrate --force', 'php artisan migrate:status',
             'php artisan config:clear', 'php artisan cache:clear', 'php artisan queue:restart',
-            'php artisan storage:link', 'git status', 'git log', 'git branch', 'composer install --no-dev',
+            'php artisan storage:link', 'php artisan reverb:launch', 'git status', 'git log', 'git branch', 'composer install --no-dev',
         ];
         $isAllowed = false;
         foreach ($allow as $p) {

@@ -85,4 +85,29 @@ class RollbackAndCommandTest extends TestCase
 
         $this->assertSame('command', DeploymentLog::latest('id')->first()->action);
     }
+
+    #[Test]
+    public function reverb_launch_runs_without_confirm_key(): void
+    {
+        Http::fake([
+            'deploy.test/*' => Http::response(['action' => 'cmd', 'ok' => true, 'output' => 'Reverb is running'], 200),
+        ]);
+
+        $this->actingAs($this->createSuperAdmin(), 'admin')
+            ->postJson(route('admin.deployment.run-command'), ['command' => 'php artisan reverb:launch'])
+            ->assertOk()
+            ->assertJsonPath('ok', true);
+
+        Http::assertSent(fn ($request) => str_contains($request->url(), 'action=cmd')
+            && ! str_contains($request->url(), 'key2='));
+    }
+
+    #[Test]
+    public function the_remote_script_allowlists_the_same_reverb_launch_command(): void
+    {
+        // The remote script has its own allowlist; both must name the command or the server asks for the key again.
+        $script = file_get_contents(public_path('deploy.php'));
+
+        $this->assertStringContainsString("'php artisan reverb:launch'", $script);
+    }
 }

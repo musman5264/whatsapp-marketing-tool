@@ -236,6 +236,19 @@ class ReverbSettingsTest extends TestCase
     }
 
     #[Test]
+    public function the_provider_loads_the_server_app_while_reverb_is_switched_off(): void
+    {
+        $this->saveCompleteReverb();
+
+        ReverbSettingsServiceProvider::apply();
+
+        // A manual start while off runs the saved app, but the broadcaster stays where it was.
+        $this->assertSame('log', config('broadcasting.default'));
+        $this->assertSame('rkeyabc123', config('reverb.apps.apps.0.key'));
+        $this->assertSame('123456', config('reverb.apps.apps.0.app_id'));
+    }
+
+    #[Test]
     public function the_test_button_reports_missing_and_failing_and_working_setups(): void
     {
         $admin = $this->admin();

@@ -345,6 +345,7 @@ export default function DeploymentIndex({ settings, localGit, lastDeploy, histor
                         <option>php artisan migrate --force</option>
                         <option>php artisan migrate:status</option>
                         <option>php artisan queue:restart</option>
+                        <option>php artisan reverb:launch</option>
                         <option>php artisan storage:link</option>
                         <option>git status</option>
                         <option>git log --oneline -20</option>

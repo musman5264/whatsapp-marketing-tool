@@ -71,6 +71,11 @@ class ReverbRuntime
      */
     public function launch(): ?string
     {
+        // Without the saved app, the process would start with the .env values instead.
+        if (RealtimeConfig::adminReverbCredentials() === null) {
+            return 'Save the Reverb app ID, key, secret and host on the Reverb settings page first.';
+        }
+
         if (! $this->execAvailable()) {
             return 'This host does not allow shell commands (exec is disabled), so Reverb cannot be started from here.';
         }
@@ -252,7 +257,7 @@ class ReverbRuntime
     {
         $this->record(
             $error === null ? 'started' : 'error',
-            $error ?? 'Started from the admin page.',
+            $error ?? 'Started manually.',
         );
     }
 
