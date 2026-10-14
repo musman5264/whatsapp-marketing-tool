@@ -2,8 +2,8 @@
 
 namespace App\Modules\WhatsappWeb\Services;
 
+use App\Modules\WhatsappWeb\Models\WhatsappWebLidMapping;
 use App\Modules\WhatsappWeb\Models\WhatsappWebSession;
-use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -202,10 +202,11 @@ class InboundNormalizer
         // LID (or anything else) — ask the engine to resolve it. Cache the result
         // so we don't hit the engine on every message from the same sender.
         if (str_ends_with($fromJid, '@lid')) {
-            $cacheKey = 'wwlid:'.$session->session_name.':'.$left;
-            $cached = Cache::get($cacheKey);
-            if (is_array($cached)) {
-                return $cached;
+            // A number learned before is kept in the database. A cache clear (every deploy) or a failed
+            // WAHA lookup must not send the message to a different contact.
+            $known = WhatsappWebLidMapping::where('session_name', $session->session_name)->where('lid', $left)->first();
+            if ($known !== null) {
+                return [preg_replace('/\D+/', '', (string) $known->getAttribute('phone_e164')), $known->getAttribute('name')];
             }
 
             try {
@@ -221,10 +222,17 @@ class InboundNormalizer
             $name = $resolved['name'] ?? null;
 
             if ($digits !== '') {
-                $result = [$digits, $name];
-                Cache::put($cacheKey, $result, now()->addDay());
+                // insertOrIgnore: two webhooks for the same LID at the same time must not fail on the unique key.
+                WhatsappWebLidMapping::query()->insertOrIgnore([
+                    'session_name' => $session->session_name,
+                    'lid' => $left,
+                    'phone_e164' => '+'.$digits,
+                    'name' => $name,
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
 
-                return $result;
+                return [$digits, $name];
             }
 
             // WAHA could not map this LID to a phone number, or could not be asked. The message

@@ -40,6 +40,28 @@ WAHA log: `message.any` posted to `/webhooks/whatsapp-web/...` and answered 200,
 2. After the deploy: send one message from a phone whose chat is a LID. The message should appear. Note the time and whether it shows without a refresh.
 3. WAHA session `ws-1`: the `config.noweb.store` values (names and true/false only).
 
+## Live result (2026-10-14, reported by the user)
+- The fallback is live. The "Ok" from the LID chat landed in a new contact `+120297755815945`, not in Muhammad Usman (+923345266444). The fallback creates a wrong contact. The mapping is not recoverable from this code yet.
+- The repo test fixture `lid_sender_is_resolved_to_a_phone_number` maps `120297755815945@lid` to `923345266444@c.us`. So the number is known. WAHA is not returning it now (unverified).
+
+## WAHA docs (read 2026-10-14, https://waha.devlike.pro/docs/engines/noweb)
+- `config.noweb.store.enabled` default `false`. The store is the likely source of LID-to-number mapping.
+- Changing store settings after the QR scan may lose chat history (docs warning).
+- The docs do not say whether webhook payloads include a phone JID next to a LID. Not verified.
+
+## Done after the live result (2026-10-14, 15:40)
+- `public/deploy.php`: the built-in key fallback is reverted to `?? ''`. The file now matches the committed version.
+- Mapping kept in the database: table `whatsapp_web_lid_mappings` (migration in the WhatsappWeb module), model `WhatsappWebLidMapping`. The normalizer reads it first and writes each mapping WAHA gives. The one-day cache is gone.
+- `php artisan whatsapp-web:lid-map <lid> <phone> --session=<name>`: dry run by default. `--apply` records the mapping and moves messages from the stray `+<lid digits>` contact into the real contact's conversation. The stray contact is kept.
+- Tests: `InboundWebhookTest::learned_lid_mapping_is_kept_when_a_later_lookup_fails`, and `LidMappingRepairTest` (4 tests). WhatsApp Web group: 182 tests, 1 failure, the known baseline `MetaInboundWebhookTest`. PHPStan clean on the changed files.
+- Not done: deploy (needs `php artisan migrate --force`, then `config:clear`), running `lid-map --apply` on live, and the WAHA NOWEB store check.
+
+## Next (needs the user)
+1. WAHA Swagger, read-only: `GET /api/sessions/ws-1` (check `config.noweb.store`), and `GET /api/contacts?session=ws-1&contactId=120297755815945@lid` (what id comes back).
+2. Decide: keep the fallback (no lost messages, possible wrong contact) or revert to dropping.
+3. Approve, or not: a command to record LID-to-number mappings, and to move the wrong-contact messages into the real conversation (dry run first). This changes live data.
+4. Possible code: a durable mapping table. Today the mapping is cached for a day, and the deploy's cache clear removes it.
+
 ## Rules
 - CLAUDE.md: live behaviour is unverified until checked against the running system.
 - Logic doc: `app/logic/waha-sync-and-labels.md` (section "Inbound from a LID sender").

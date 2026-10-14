@@ -25,6 +25,8 @@ Run from the **Run** box (Admin → Deployment → Advanced) or from the cPanel 
 | `php artisan whatsapp-web:status` | no key | WhatsApp Web session status | Quick health check |
 | `php artisan whatsapp-web:resubscribe` | second key | Re-registers the WAHA webhook. Briefly restarts the session; the number stays linked | After a change to the webhook events (CLAUDE.md) |
 | `php artisan whatsapp-web:sync` | second key | Imports recent chats and messages now (inline) | When messages are missing; add `--queue` to run it in the background |
+| `php artisan whatsapp-web:lid-map <lid> <phone> --session=<name>` | second key | Dry run: shows which messages would move from a LID contact to the real contact | Before recording a LID mapping (see waha-sync-and-labels.md) |
+| `php artisan whatsapp-web:lid-map <lid> <phone> --session=<name> --apply` | second key | Records the mapping and moves the messages (writes live data) | Only after the dry run |
 | `php artisan queue:retry all` | second key | Re-runs **every** failed job. Outbound webhooks are sent again to the client endpoint | Only after the cause is fixed. Re-running a webhook that a receiver rejects just fails again |
 | `php artisan queue:retry <id>` | second key | Re-runs one failed job by its id (from `queue:failed`) | Same caution as above |
 | `php artisan media:fix-links` | second key | Counts saved photo links that use the integer conversation id (dry run) | Before a repair |

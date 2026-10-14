@@ -4,6 +4,7 @@ namespace App\Modules\WhatsappWeb;
 
 use App\Events\MessageReceived;
 use App\Modules\WhatsappWeb\Console\FixMediaLinksCommand;
+use App\Modules\WhatsappWeb\Console\LidMappingCommand;
 use App\Modules\WhatsappWeb\Console\MakePrivateMediaCommand;
 use App\Modules\WhatsappWeb\Console\WhatsappWebCommand;
 use App\Modules\WhatsappWeb\Console\WhatsappWebDiagnoseCommand;
@@ -49,6 +50,7 @@ class WhatsappWebServiceProvider extends ServiceProvider
                 WhatsappWebDiagnoseCommand::class,
                 MakePrivateMediaCommand::class,
                 FixMediaLinksCommand::class,
+                LidMappingCommand::class,
             ]);
         }
     }

@@ -211,6 +211,29 @@ class InboundWebhookTest extends TestCase
         ];
     }
 
+    /** A number WAHA gave once is kept in the database, so a later failed lookup still reaches the real contact. */
+    #[Test]
+    public function learned_lid_mapping_is_kept_when_a_later_lookup_fails(): void
+    {
+        \Illuminate\Support\Facades\Http::fake([
+            'waha.test/api/contacts*' => \Illuminate\Support\Facades\Http::sequence()
+                ->push(['id' => '923345266444@c.us', 'name' => 'Muhammad Usman'], 200)
+                ->push('error', 502),
+        ]);
+
+        $this->postJson("/webhooks/whatsapp-web/{$this->token}", $this->lidPayload('first'))->assertOk();
+        $this->postJson("/webhooks/whatsapp-web/{$this->token}", $this->lidPayload('second'))->assertOk();
+
+        $message = \App\Modules\Shared\Models\Message::where('provider_message_id', 'false_120297755815945@lid_second')->first();
+        $this->assertNotNull($message);
+        $this->assertSame('+923345266444', $message->conversation->contact->phone_e164);
+        $this->assertDatabaseHas('whatsapp_web_lid_mappings', [
+            'session_name' => $this->session->session_name,
+            'lid' => '120297755815945',
+            'phone_e164' => '+923345266444',
+        ]);
+    }
+
     #[Test]
     public function unsigned_request_with_valid_token_is_accepted(): void
     {
