@@ -159,10 +159,12 @@ class WahaMediaStore
         return Storage::disk(self::DISK)->exists($candidate) ? $candidate : null;
     }
 
-    /** Login-protected address for a message's media. The inbox uses this instead of any public file link. */
+    /** Login-protected address for a message's media. Built from the conversation's uuid (its route key), not its integer id. */
     public function authenticatedUrl(Message $message): string
     {
-        return route('client.inbox.message-media', ['conversation' => $message->conversation_id, 'message' => $message->id]);
+        $message->loadMissing('conversation');
+
+        return route('client.inbox.message-media', ['conversation' => $message->conversation, 'message' => $message->id]);
     }
 
     /** Streams a stored file for a logged-in user. The caller must already have checked that the path belongs to the message. */

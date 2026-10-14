@@ -10,10 +10,10 @@ WhatsApp Web (WAHA) photos and files, and files sent from the compose bar, are s
 | Public disk `public` | `storage/app/public`, served at `/storage/...` |
 | Store an inbound WAHA file | `app/Modules/WhatsappWeb/Services/WahaMediaStore.php` `store()`, name `message-media/{id}.{ext}` |
 | Compose-bar file | `app/Modules/Inbox/Http/Controllers/InboxController.php` (`reply`), name `message-media/{hash}.{ext}` on the private disk |
-| Login route | `GET /app/inbox/conversations/{conversation}/messages/{message}/media`, name `client.inbox.message-media` (`app/Modules/Inbox/routes/web.php`) |
+| Login route | `GET /app/inbox/conversations/{conversation}/messages/{message}/media`, name `client.inbox.message-media` (`app/Modules/Inbox/routes/web.php`). `{conversation}` is the conversation's **uuid** (its route key), not its integer id. |
 | Login route handler | `InboxController::serveMedia()` |
 | Find a stored copy | `WahaMediaStore::existingPath()` |
-| Login-route address | `WahaMediaStore::authenticatedUrl()` |
+| Login-route address | `WahaMediaStore::authenticatedUrl()`. Built from the conversation model, so the link carries the conversation's **uuid**. |
 | Move command | `app/Modules/WhatsappWeb/Console/MakePrivateMediaCommand.php` (registered in `WhatsappWebServiceProvider`) |
 
 ## How files are served

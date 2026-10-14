@@ -100,7 +100,7 @@ class MakePrivateMediaCommandTest extends TestCase
 
     private function loginUrl(Message $message): string
     {
-        return route('client.inbox.message-media', ['conversation' => $message->conversation_id, 'message' => $message->id]);
+        return route('client.inbox.message-media', ['conversation' => $this->conversation, 'message' => $message->id]);
     }
 
     /** A photo sent from the app and saved under a random hash name: the public file is message-media/{hash}.jpg and the message links to it. */
