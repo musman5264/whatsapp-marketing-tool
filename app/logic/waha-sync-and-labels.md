@@ -10,6 +10,13 @@
 - `fromMe=true` (sent from the phone / linked device) → `normalizeFromMe` → `ingestNormalizedOutbound`: stored as `direction=out`, clears `unread_count`, fires `MessageSent`, no automations. `source=api` (our own sends) is skipped.
 - Acks: `handleAck` matches the stored provider id in full or bare form; status never downgrades.
 
+## Inbound from a LID sender (no phone number in the payload)
+- WhatsApp often sends the chat as `<digits>@lid`, with no phone number. `InboundNormalizer::resolveSender()` asks WAHA `GET /api/contacts?contactId=<lid>` for the phone number. A reply with an `@c.us` id gives the number, which is cached for a day.
+- If WAHA cannot map the LID (its reply has no `@c.us` id), or the lookup fails, the message is **kept**. The LID's own digits stand in for the phone number, the contact is created with that number, and the message is stored. Not cached, so the next message from that sender is resolved again. Logged as `whatsapp_web.inbound.lid_unmapped` (info).
+- Before this change the message was dropped (`normalize()` returned null) and only the warning `whatsapp_web.inbound.unresolved_sender` was logged. Found on 2026-10-14: inbound messages were missing while outbound worked.
+- Limit: a contact stored under its LID digits is not merged with the same person's `@c.us` contact later. Replies to it use `<digits>@c.us` and can fail (the bubble shows ✗) until WAHA can map the LID.
+- Tests: `tests/Feature/WhatsappWeb/InboundWebhookTest.php`: `lid_sender_that_waha_cannot_map_is_still_stored`, `lid_sender_is_stored_when_the_lookup_fails` (red before the fix, green after).
+
 ## Media (images, video, audio/voice notes, documents)
 - Arrival: right after `WhatsappDriver::ingestNormalizedInbound` saves a live inbound message, `WahaEventProcessor::handleInbound` calls `WahaMediaStore::storeInbound()`. It downloads the WAHA link through the configured engine only (API key attached, host rebased to the engine origin), stores it as `message-media/{id}.{ext}` and records `preview_url`, `mime_type` and `media_path` on the payload. Then `MessageMediaReady` tells an open chat (private channel `conversation.{id}`) to show it.
 - Type rule (2026-10-13): WAHA sends a photo, video or file as type `chat` (or `text`) with `hasMedia=true` and the caption as the body. `InboundNormalizer::mapType()` takes the kind from `media.mimetype` (image/video/audio, else document) so the file is downloaded. Before this, such messages were stored as empty text and shown as "(media)".

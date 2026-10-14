@@ -159,6 +159,58 @@ class InboundWebhookTest extends TestCase
         ]);
     }
 
+    /** WAHA cannot map the LID to a phone number: the reply is still a LID. The message must not be lost. */
+    #[Test]
+    public function lid_sender_that_waha_cannot_map_is_still_stored(): void
+    {
+        \Illuminate\Support\Facades\Http::fake([
+            'waha.test/api/contacts*' => \Illuminate\Support\Facades\Http::response([
+                'id' => '120297755815945@lid',
+                'name' => 'Unknown contact',
+            ], 200),
+        ]);
+
+        $this->postJson("/webhooks/whatsapp-web/{$this->token}", $this->lidPayload('unmapped'))->assertOk();
+
+        $this->assertDatabaseHas('messages', [
+            'provider_message_id' => 'false_120297755815945@lid_unmapped',
+            'body' => 'hi from an unmapped lid',
+        ]);
+    }
+
+    /** WAHA is unreachable for the lookup: the message must still be stored, under the LID number. */
+    #[Test]
+    public function lid_sender_is_stored_when_the_lookup_fails(): void
+    {
+        \Illuminate\Support\Facades\Http::fake([
+            'waha.test/api/contacts*' => \Illuminate\Support\Facades\Http::response('error', 502),
+        ]);
+
+        $this->postJson("/webhooks/whatsapp-web/{$this->token}", $this->lidPayload('down'))->assertOk();
+
+        $this->assertDatabaseHas('messages', [
+            'provider_message_id' => 'false_120297755815945@lid_down',
+            'body' => 'hi from an unmapped lid',
+        ]);
+    }
+
+    /** @return array<string, mixed> */
+    private function lidPayload(string $suffix): array
+    {
+        return [
+            'event' => 'message',
+            'session' => $this->session->session_name,
+            'payload' => [
+                'id' => 'false_120297755815945@lid_'.$suffix,
+                'timestamp' => now()->timestamp,
+                'from' => '120297755815945@lid',
+                'fromMe' => false,
+                'body' => 'hi from an unmapped lid',
+                'type' => 'chat',
+            ],
+        ];
+    }
+
     #[Test]
     public function unsigned_request_with_valid_token_is_accepted(): void
     {

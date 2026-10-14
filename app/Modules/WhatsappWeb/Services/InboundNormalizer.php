@@ -218,13 +218,21 @@ class InboundNormalizer
             $digits = $resolved && $resolved['phone_e164']
                 ? preg_replace('/\D+/', '', $resolved['phone_e164'])
                 : '';
-            $result = [$digits, $resolved['name'] ?? null];
+            $name = $resolved['name'] ?? null;
 
             if ($digits !== '') {
+                $result = [$digits, $name];
                 Cache::put($cacheKey, $result, now()->addDay());
+
+                return $result;
             }
 
-            return $result;
+            // WAHA could not map this LID to a phone number, or could not be asked. The message
+            // is kept (CLAUDE.md: an inbound message is never lost): the LID's own digits stand in
+            // for the number. Not cached, so the next message from this sender is resolved again.
+            Log::info('whatsapp_web.inbound.lid_unmapped', ['from' => $fromJid, 'session' => $session->session_name]);
+
+            return [$left, $name];
         }
 
         return ['', null];
