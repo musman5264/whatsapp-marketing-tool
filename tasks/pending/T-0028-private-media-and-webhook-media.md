@@ -10,7 +10,7 @@ depends_on: [T-0027, T-0029, T-0030]
 source: TEMP/intake-2026-10-13-1318.md
 created: 2026-10-13 17:35
 started: 2026-10-13 17:35
-updated: 2026-10-13 17:55
+updated: 2026-10-14
 completed:
 ---
 
@@ -34,7 +34,7 @@ completed:
 - `app/logic/private-media.md` (T-0029) and `app/logic/webhook-deliveries.md` (T-0030).
 
 ## Blocked by (the user's live steps; Claude cannot reach the live server, and live changes happen only when the user asks)
-1. Deploy `5e7137e`, the T-0030 commit and the T-0031 commit together, from Admin → Deployment. Do not deploy `5e7137e` alone: it makes new outgoing WhatsApp Web images return 404 until T-0031 is in (T-0031). Then `php artisan config:clear`. No migration. `whatsapp-web:resubscribe` is not needed: no webhook event changed.
+1. Deploy `5e7137e`, the T-0030, T-0031 and T-0032 commits together, from Admin → Deployment. Do not deploy `5e7137e` alone: it makes new outgoing WhatsApp Web images return 404 until T-0031 is in, and every new WhatsApp Web photo preview (inbound too) returns 404 until T-0032 is in (T-0031, T-0032). Then `php artisan config:clear`. No migration. `whatsapp-web:resubscribe` is not needed: no webhook event changed.
 2. Run the command on the server: first `php artisan media:make-private` (a dry run; check the counts), then `php artisan media:make-private --apply`. Use the Deployment Run box with the second key, or the cPanel terminal.
 3. Live checks:
    - `https://wa.esystematics.com/storage/message-media/1567.jpg` no longer opens without login after the move. Before the move it returned 200 (checked 17:25).
@@ -45,6 +45,7 @@ completed:
 ## Progress log
 - 2026-10-13 17:35 created. Waiting for the decisions above.
 - 2026-10-13 17:55 decision 1 is in `5e7137e`; decision 2 is T-0030; decision 3 is T-0029. Plan PLAN-002. Code and tests in progress (two agents per task). The live steps above are the user's.
+- 2026-10-14 the code work for T-0029, T-0030, T-0031 and T-0032 is committed by file name: `7d8c1c0`, `920b127`, `07cd09f`, `6282223`. Tests are green on the private test database (see each task). Nothing is deployed, and the command has not been run on live data. Open before the deploy: T-0031 item 1 (the signed WAHA link is still stored on the payload; decision needed), and the code-reviewer audits of T-0029, T-0030 and T-0031 (not run yet).
 
 ## Result
 (not finished) The code work is in T-0029 and T-0030. This task closes when the live steps above are done and checked.

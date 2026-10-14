@@ -1,5 +1,5 @@
 # Task Board
-_Last updated: 2026-10-13 17:56_
+_Last updated: 2026-10-14_
 
 ## Working
 | ID | Task | Plan / Phase | Priority | Updated |
@@ -7,9 +7,6 @@ _Last updated: 2026-10-13 17:56_
 | T-0010 | Fetch WhatsApp media when it arrives, not on first view (live check pending) | PLAN-001 / phase-01 | high | 2026-10-13 01:24 |
 | T-0012 | Page the conversation list and each chat, lazy-load older messages (live check pending) | PLAN-001 / phase-01 | high | 2026-10-13 01:24 |
 | T-0013 | Stop chat jumping to bottom; reserve media space (live check pending) | PLAN-001 / phase-01 | medium | 2026-10-13 01:24 |
-| T-0029 | Move old public chat media to the private disk with media:make-private (dry run first) | PLAN-002 / phase-01 | high | 2026-10-13 17:55 |
-| T-0030 | Webhook: send the WhatsApp photo or file as a signed link that expires | PLAN-002 / phase-01 | high | 2026-10-13 17:55 |
-| T-0031 | Outgoing WhatsApp Web image shows 404 after 5e7137e: random file name the login route cannot find | PLAN-002 / phase-01 | high | 2026-10-13 18:01 |
 
 ## Pending
 | ID | Task | Plan / Phase | Depends on | Priority | Status |
@@ -19,11 +16,15 @@ _Last updated: 2026-10-13 17:56_
 | T-0022 | composer.lock out of date with composer.json | PLAN-000 / phase-01 | none | medium | not started |
 | T-0023 | Run Reverb on the Easypanel VPS; cPanel uses it as an external realtime server | PLAN-000 / phase-01 | T-0021 | high | blocked: your VPS and Cloudflare setup (code done, commit 4a851b3) |
 | T-0026 | WAHA webhooks rejected: checked SHA-256, WAHA signs SHA-512; live messages never arrived | PLAN-000 / phase-01 | T-0023 | high | blocked: deploy 3da12df and live check |
-| T-0028 | Private media storage (public photo links) and media in the outgoing webhook | PLAN-002 / phase-01 | T-0027, T-0029, T-0030 | high | blocked: your deploy of 5e7137e with T-0030 and T-0031, the command run, and the live check |
+| T-0028 | Private media storage (public photo links) and media in the outgoing webhook | PLAN-002 / phase-01 | T-0027, T-0029, T-0030 | high | blocked: your deploy of 5e7137e with T-0030, T-0031 and T-0032, the command run, and the live check |
 
 ## Completed (most recent first)
 | ID | Task | Plan / Phase | Completed |
 |----|------|--------------|-----------|
+| T-0032 | Login media link built from the conversation uuid, not the integer id (commit 6282223; live deploy pending) | PLAN-002 / phase-01 | 2026-10-14 |
+| T-0031 | Outgoing composer image stored under its message id; login route serves it (commit 07cd09f; live deploy pending; signed-link decision open) | PLAN-002 / phase-01 | 2026-10-14 |
+| T-0030 | Webhook: WhatsApp Web photo or file sent as a signed link that expires, fresh on each attempt (commit 920b127; live check pending) | PLAN-002 / phase-01 | 2026-10-14 |
+| T-0029 | media:make-private command: dry run by default, --apply moves old public media (commit 7d8c1c0; not run on live data) | PLAN-002 / phase-01 | 2026-10-14 |
 | T-0027 | Images not shown: storage link and photo type mapping; incoming and outgoing images verified live | PLAN-000 / phase-01 | 2026-10-13 17:35 |
 | T-0025 | Graphify output committed and pushed to origin main (4791e38) | PLAN-000 / phase-01 | 2026-10-13 14:29 |
 | T-0024 | Build the graphify knowledge graph of the repo (code, no API key) | PLAN-000 / phase-01 | 2026-10-13 14:03 |
@@ -48,7 +49,7 @@ _Last updated: 2026-10-13 17:56_
 |------|------|---------------|--------------------|
 | PLAN-000-general | One-off tasks | phase-01-ongoing | 0 / 0 |
 | PLAN-001-inbox-speed-and-media | Inbox speed, live updates and media | phase-01-speed-and-media | 1 / 5 |
-| PLAN-002-private-media | Chat media off the public disk; signed webhook media | phase-01-private-media | 0 / 3 |
+| PLAN-002-private-media | Chat media off the public disk; signed webhook media | phase-01-private-media | 4 / 5 |
 
-Next task ID: T-0032   (T-0006 and T-0007 are also in tasks/working from another session; IDs are never reused)
+Next task ID: T-0033   (T-0006 and T-0007 are also in tasks/working from another session; IDs are never reused)
 Next plan ID: PLAN-003
