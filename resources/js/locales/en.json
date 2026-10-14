@@ -1945,6 +1945,8 @@
         "custom_command": "Custom command (advanced)",
         "custom_command_warn": "Runs any shell command on the production server. Requires re-entering the deploy key.",
         "reenter_key": "Re-enter deploy key to confirm",
+        "needs_key": "Needs the deploy key",
+        "needs_key_hint": "This command needs the deploy key. Enter it to run.",
         "run": "Run",
         "danger_zone": "Danger zone",
         "lock_down": "Lock down (remove risky helper files)",

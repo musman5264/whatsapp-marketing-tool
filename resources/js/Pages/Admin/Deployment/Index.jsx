@@ -72,6 +72,19 @@ function ResultBlock({ result }) {
     );
 }
 
+/** Mirrors CommandAllowlist (the server side). Commands that match run without the deploy key. */
+const NO_KEY_EXACT = ['git status', 'git log', 'git log --oneline -20', 'git branch', 'composer install --no-dev', 'composer install --no-dev --optimize-autoloader'];
+const NO_KEY_ARTISAN = ['optimize:clear', 'migrate', 'migrate:status', 'config:clear', 'cache:clear', 'queue:restart', 'storage:link', 'whatsapp-web:status', 'about', 'reverb:launch', 'queue:failed'];
+
+/** True when the server will ask for the deploy key before it runs this command. */
+const needsDeployKey = (command) => {
+    const c = command.trim();
+    if (!/^[A-Za-z0-9 _.:=/-]+$/.test(c)) return true;
+    if (NO_KEY_EXACT.includes(c)) return false;
+    const m = c.match(/^php artisan ([a-z0-9:_-]+)(?: .*)?$/);
+    return !(m && NO_KEY_ARTISAN.includes(m[1]));
+};
+
 export default function DeploymentIndex({ settings, localGit, lastDeploy, history }) {
     const { t } = useTranslation();
 
@@ -353,6 +366,14 @@ export default function DeploymentIndex({ settings, localGit, lastDeploy, histor
                         <option>git status</option>
                         <option>git log --oneline -20</option>
                         <option>composer install --no-dev --optimize-autoloader</option>
+                        <optgroup label={t('deployment.needs_key')}>
+                            <option>php artisan whatsapp-web:resubscribe</option>
+                            <option>php artisan whatsapp-web:sync</option>
+                            <option>php artisan media:fix-links</option>
+                            <option>php artisan media:fix-links --apply</option>
+                            <option>php artisan media:make-private</option>
+                            <option>php artisan media:make-private --apply</option>
+                        </optgroup>
                     </select>
 
                     <button type="button" onClick={() => setShowAdvanced((v) => !v)}
@@ -366,12 +387,17 @@ export default function DeploymentIndex({ settings, localGit, lastDeploy, histor
                             </p>
                             <input value={cmd} onChange={(e) => setCmd(e.target.value)} placeholder="any shell command"
                                 className="w-full rounded border border-red-300 dark:border-red-700 bg-white dark:bg-neutral-800 px-2 py-1.5 text-xs font-mono" />
-                            <input value={confirmKey} onChange={(e) => setConfirmKey(e.target.value)} type="password" placeholder={t('deployment.reenter_key')}
-                                className="w-full rounded border border-red-300 dark:border-red-700 bg-white dark:bg-neutral-800 px-2 py-1.5 text-xs font-mono" />
                         </div>
                     )}
 
-                    <button onClick={runCmd} disabled={busy === 'cmd'}
+                    {needsDeployKey(cmd) && (
+                        <div className="mt-3">
+                            <p className="mb-1 text-[11px] text-amber-700 dark:text-amber-400">{t('deployment.needs_key_hint')}</p>
+                            <input value={confirmKey} onChange={(e) => setConfirmKey(e.target.value)} type="password" placeholder={t('deployment.reenter_key')}
+                                className="w-full rounded border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-2.5 py-2 text-xs font-mono" />
+                        </div>
+                    )}
+                    <button onClick={runCmd} disabled={busy === 'cmd' || (needsDeployKey(cmd) && !confirmKey)}
                         className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-neutral-300 dark:border-neutral-600 px-3 py-1.5 text-xs hover:bg-neutral-50 dark:hover:bg-neutral-800 disabled:opacity-50">
                         {busy === 'cmd' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Terminal className="h-3.5 w-3.5" />}
                         {t('deployment.run')}
