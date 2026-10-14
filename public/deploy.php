@@ -706,7 +706,7 @@ if ($action === 'cmd') {
     ];
     $allowedArtisan = [
         'optimize:clear', 'migrate', 'migrate:status', 'config:clear', 'cache:clear', 'queue:restart',
-        'storage:link', 'whatsapp-web:status', 'about', 'reverb:launch',
+        'storage:link', 'whatsapp-web:status', 'about', 'reverb:launch', 'queue:failed',
     ];
     $isAllowlisted = false;
     if (preg_match('/^[A-Za-z0-9 _.:=\/-]+\z/', $command) === 1) {

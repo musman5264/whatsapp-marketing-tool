@@ -18,7 +18,7 @@ final class CommandAllowlist
     /** `php artisan <name>` runs with any plain arguments. */
     public const ARTISAN = [
         'optimize:clear', 'migrate', 'migrate:status', 'config:clear', 'cache:clear', 'queue:restart',
-        'storage:link', 'whatsapp-web:status', 'about', 'reverb:launch',
+        'storage:link', 'whatsapp-web:status', 'about', 'reverb:launch', 'queue:failed',
     ];
 
     public static function allows(string $command): bool

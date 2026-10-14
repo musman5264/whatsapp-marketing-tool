@@ -40,6 +40,14 @@ class CommandAllowlistTest extends TestCase
             'destructive artisan name' => ['php artisan migrate:fresh --force'],
             'git branch delete' => ['git branch -D main'],
             'unknown command' => ['rm -rf /'],
+            // Re-sends webhooks or writes live data: always behind the second key.
+            'queue retry all' => ['php artisan queue:retry all'],
+            'queue flush' => ['php artisan queue:flush'],
+            'media fix links apply' => ['php artisan media:fix-links --apply'],
+            'media make private apply' => ['php artisan media:make-private --apply'],
+            'whatsapp web resubscribe' => ['php artisan whatsapp-web:resubscribe'],
+            'whatsapp web sync' => ['php artisan whatsapp-web:sync'],
+            'tinker runs arbitrary php' => ['php artisan tinker --execute="echo 1;"'],
         ];
     }
 
@@ -53,6 +61,7 @@ class CommandAllowlistTest extends TestCase
             ['php artisan queue:restart'],
             ['php artisan storage:link'],
             ['php artisan reverb:launch'],
+            ['php artisan queue:failed'],
             ['git status'],
             ['git log --oneline -20'],
             ['composer install --no-dev --optimize-autoloader'],
