@@ -84,12 +84,12 @@ Exit code 1 when there is any conflict, otherwise 0.
 ## How to test
 - `tests/Feature/Inbox/OutboundMediaNamingTest.php` (6 tests, T-0031): a WhatsApp Web composer image is stored under its message id; the payload has `media_path` and the login-route `preview_url`; the login route serves the bytes to a workspace user; the WAHA send gets a signed link to that file; the Cloud path keeps `media_id`; a failed WAHA send keeps the file. Run status is in the T-0031 task file.
 - `tests/Feature/WhatsappWeb/MakePrivateMediaCommandTest.php` (10 tests): dry run changes nothing, copy and delete, links rewritten and other keys kept, `existingPath` finds the copy afterwards, second run is a no-op, different-size file not overwritten, files outside `message-media/` untouched, failed save keeps the public copy, hash-named outbound photo moves to its message id, orphan keeps its path.
-- Status: the tests are written. Until they pass, treat the behaviour described here as **unverified**.
+- Status (2026-10-14): `MakePrivateMediaCommandTest` (10 tests) passes on the private test database. Live runs are not done (see the Unverified list).
 
 ## Unverified
 - Running it on the live site (wa.esystematics.com) is **unverified**. Nothing has been moved there by this change.
 - Whether the `public/storage` symlink exists on the live host (decides whether old files are served by the web server or by `StorageFileController`) is **unverified**.
 - Whether WAHA always fetches a signed `/private-files` link within its 15-minute window is **unverified live**.
 - The nested `image.link` rewrite is a safety net. No live payload has been checked for a `/storage/message-media/` value there.
-- Outgoing composer naming (T-0031) is unverified until `OutboundMediaNamingTest` passes on a test run.
+- Outgoing composer naming (T-0031): `OutboundMediaNamingTest` passes (2026-10-14, private test database). Not verified on the live site.
 - **Open decision:** CLAUDE.md says the signed WAHA link must not be stored or exposed outside the send. `reply()` still saves it on the payload, returns it in the reply JSON, and `MessageSent` broadcasts it. The tests read `payload['link']` from the database, so this was not changed in T-0031.
