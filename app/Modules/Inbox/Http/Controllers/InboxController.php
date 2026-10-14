@@ -189,6 +189,8 @@ class InboxController extends Controller
 
         $msgType = $validated['type'] ?? 'text';
         $msgPayload = $validated['payload'] ?? null;
+        $file = null;     // the uploaded attachment, when there is one
+        $hashPath = null; // where it is first saved (its random name)
 
         // Handle direct file attachment (image / document sent from compose bar)
         if ($request->hasFile('attachment')) {
@@ -201,12 +203,13 @@ class InboxController extends Controller
                     : (str_starts_with($mimeType, 'video/') ? 'video' : 'document');
             }
 
-            // Private disk: the file is not reachable by its name. The inbox reads it through the login check.
-            $storedPath = 'message-media/'.$file->hashName();
-            Storage::disk('local')->putFileAs('message-media', $file, $file->hashName());
+            // Saved under its random name for now. Private disk: the file is not reachable by its name.
+            // Once the message has an id, the transaction below moves it to message-media/{id}.{ext}.
+            $hashName = $file->hashName();
+            $hashPath = 'message-media/'.$hashName;
+            Storage::disk('local')->putFileAs('message-media', $file, $hashName);
 
             $msgPayload = array_merge($msgPayload ?? [], [
-                'media_path' => $storedPath,
                 'mime_type' => $mimeType,
                 'caption' => $validated['body'] ?? null,
                 'filename' => $file->getClientOriginalName(),
@@ -220,9 +223,6 @@ class InboxController extends Controller
                     return response()->json(['error' => 'No active WhatsApp account.'], 422);
                 }
                 $msgPayload['media_id'] = $client->uploadMedia($file->getRealPath(), $mimeType);
-            } else {
-                // WAHA fetches this once to send the file. The link expires after 15 minutes.
-                $msgPayload['link'] = $this->wahaMedia->fetchUrl($storedPath);
             }
 
             // For image/document the 'body' shown in the chat is the caption or filename
@@ -242,18 +242,59 @@ class InboxController extends Controller
             return back()->with('error', 'WhatsApp 24-hour session is closed. Use an approved template to re-engage this contact.');
         }
 
-        $message = Message::create([
-            'conversation_id' => $conversation->id,
-            'direction' => 'out',
-            'channel' => $conversation->channelAccount?->channel ?? 'whatsapp',
-            'type' => $msgType,
-            'body' => $validated['body'],
-            'payload' => $msgPayload,
-            'status' => 'queued',
-            'sent_by' => 'human',
-            'user_id' => $request->user()->id,
-            'sent_at' => now(),
-        ]);
+        // The message row and the file move succeed or fail together. The file takes the message
+        // id as its name, and the payload points at it. The WAHA link is made after the move.
+        try {
+            $message = DB::transaction(function () use ($request, $conversation, $msgType, $validated, $msgPayload, $file, $hashPath) {
+                $message = Message::create([
+                    'conversation_id' => $conversation->id,
+                    'direction' => 'out',
+                    'channel' => $conversation->channelAccount?->channel ?? 'whatsapp',
+                    'type' => $msgType,
+                    'body' => $validated['body'],
+                    'payload' => $msgPayload,
+                    'status' => 'queued',
+                    'sent_by' => 'human',
+                    'user_id' => $request->user()->id,
+                    'sent_at' => now(),
+                ]);
+
+                if ($file) {
+                    $ext = pathinfo($hashPath, PATHINFO_EXTENSION) ?: 'bin';
+                    $mediaPath = 'message-media/'.$message->id.'.'.$ext;
+                    if (! Storage::disk('local')->move($hashPath, $mediaPath)) {
+                        throw new \RuntimeException("Could not move the attachment to {$mediaPath}.");
+                    }
+
+                    $payload = array_merge($msgPayload, [
+                        'media_path' => $mediaPath,
+                        'preview_url' => $this->wahaMedia->authenticatedUrl($message),
+                    ]);
+                    if ($conversation->channelAccount?->getAttribute('provider') === 'whatsapp_web') {
+                        // WAHA fetches this once to send the file. The link expires after 15 minutes.
+                        $payload['link'] = $this->wahaMedia->fetchUrl($mediaPath);
+                    }
+                    $message->update(['payload' => $payload]);
+                }
+
+                return $message;
+            });
+        } catch (\Throwable $e) {
+            // The transaction rolled back, so no message row was kept. Remove the file if it is still under its random name.
+            Log::error('Inbox reply could not save the message', [
+                'conversation_id' => $conversation->id,
+                'error' => $e->getMessage(),
+            ]);
+            if ($hashPath !== null && Storage::disk('local')->exists($hashPath)) {
+                Storage::disk('local')->delete($hashPath);
+            }
+
+            $error = 'The message could not be saved. Please try again.';
+
+            return $request->wantsJson()
+                ? response()->json(['error' => $error], 500)
+                : back()->with('error', $error);
+        }
 
         // Send via the channel driver
         $channel = $conversation->channelAccount?->channel ?? 'whatsapp';

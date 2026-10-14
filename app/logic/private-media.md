@@ -9,7 +9,7 @@ WhatsApp Web (WAHA) photos and files, and files sent from the compose bar, are s
 | Private disk `local` | `storage/app/private` (`config/filesystems.php`) |
 | Public disk `public` | `storage/app/public`, served at `/storage/...` |
 | Store an inbound WAHA file | `app/Modules/WhatsappWeb/Services/WahaMediaStore.php` `store()`, name `message-media/{id}.{ext}` |
-| Compose-bar file | `app/Modules/Inbox/Http/Controllers/InboxController.php` (`reply`), name `message-media/{hash}.{ext}` on the private disk |
+| Compose-bar file | `app/Modules/Inbox/Http/Controllers/InboxController.php` (`reply`). Saved as `message-media/{hash}.{ext}`, then moved to `message-media/{message id}.{ext}` in the same transaction as the message row (see Outgoing composer files). |
 | Login route | `GET /app/inbox/conversations/{conversation}/messages/{message}/media`, name `client.inbox.message-media` (`app/Modules/Inbox/routes/web.php`). `{conversation}` is the conversation's **uuid** (its route key), not its integer id. |
 | Login route handler | `InboxController::serveMedia()` |
 | Find a stored copy | `WahaMediaStore::existingPath()` |
@@ -20,7 +20,20 @@ WhatsApp Web (WAHA) photos and files, and files sent from the compose bar, are s
 - **Login route.** `serveMedia()` checks the user can see the conversation. If the stored copy exists, it streams it from the private disk (`WahaMediaStore::respond()`, `Cache-Control: private`). If the copy is missing, it clears `preview_url` and downloads the file from WAHA again.
 - **Stored copy lookup.** `existingPath()` uses the payload's `media_path` when it is `message-media/{this message id}.{ext}`. Otherwise it derives the name from `mime_type`. Paths that leave the folder or name another message are ignored.
 - **Public copy (old files).** `/storage/{path}` is served by the `public/storage` symlink when it exists, otherwise by `StorageFileController::show()`. Neither checks a login. Once a file is moved, its public URL returns 404.
-- **Signed link for WAHA (15 minutes).** `WahaMediaStore::fetchUrl()` returns `Storage::disk('local')->temporaryUrl($path, now()->addMinutes(15))`. The URL looks like `/private-files/message-media/{name}?expires=...&signature=...`. Laravel's `storage.local` route (`serve => true` in `config/filesystems.php`, url `APP_URL/private-files`) serves it only with a valid signature. Used for outgoing WhatsApp Web files (`InboxController`, around line 225). The code comment says WAHA fetches the link once and it expires after 15 minutes. Whether WAHA always fetches within that time is **unverified live**.
+- **Signed link for WAHA (15 minutes).** `WahaMediaStore::fetchUrl()` returns `Storage::disk('local')->temporaryUrl($path, now()->addMinutes(15))`. The URL looks like `/private-files/message-media/{name}?expires=...&signature=...`. Laravel's `storage.local` route (`serve => true` in `config/filesystems.php`, url `APP_URL/private-files`) serves it only with a valid signature. Used for outgoing WhatsApp Web files: `reply()` calls it after the file has been moved to its message-id name (see Outgoing composer files). The code comment says WAHA fetches the link once and it expires after 15 minutes. Whether WAHA always fetches within that time is **unverified live**.
+
+## Outgoing composer files (T-0031)
+When an agent attaches a file in the compose bar, `reply()` in `InboxController`:
+1. Saves the upload under its random name on the private disk, `message-media/{hash}.{ext}`.
+2. Opens a database transaction and creates the message row. It then moves the file to `message-media/{message id}.{ext}` (same extension) and saves the payload with:
+   - `media_path`: the new path.
+   - `preview_url`: the login-route address (`WahaMediaStore::authenticatedUrl()`). The chat shows the image from it, and `serveMedia()` streams the file.
+   - `link` (WhatsApp Web only): a 15-minute signed link (`WahaMediaStore::fetchUrl()`), made after the move. Cloud API messages keep `media_id` and get no `link`.
+3. Sends the message after the transaction, as before. A failed send keeps the message and the file, with status `failed`.
+
+If the move fails, the transaction rolls back, the random-name file is deleted, and the reply returns an error (JSON 500 for the composer, which asks for JSON; a flash error otherwise). No message is left without its file. A failure after the move, such as a database error on the final save, rolls back the message and leaves the file under its message-id name; that case is not cleaned up.
+
+The signed `link` is saved on the payload row, and the reply JSON and the `MessageSent` broadcast carry the whole payload, so the link is also sent to the browser and to the channel. This is how the code was before T-0031, and it is an open decision (see Unverified).
 
 ## The move command
 ```
@@ -69,6 +82,7 @@ Exit code 1 when there is any conflict, otherwise 0.
 - A different-size file on the private disk is never overwritten.
 
 ## How to test
+- `tests/Feature/Inbox/OutboundMediaNamingTest.php` (6 tests, T-0031): a WhatsApp Web composer image is stored under its message id; the payload has `media_path` and the login-route `preview_url`; the login route serves the bytes to a workspace user; the WAHA send gets a signed link to that file; the Cloud path keeps `media_id`; a failed WAHA send keeps the file. Run status is in the T-0031 task file.
 - `tests/Feature/WhatsappWeb/MakePrivateMediaCommandTest.php` (10 tests): dry run changes nothing, copy and delete, links rewritten and other keys kept, `existingPath` finds the copy afterwards, second run is a no-op, different-size file not overwritten, files outside `message-media/` untouched, failed save keeps the public copy, hash-named outbound photo moves to its message id, orphan keeps its path.
 - Status: the tests are written. Until they pass, treat the behaviour described here as **unverified**.
 
@@ -77,3 +91,5 @@ Exit code 1 when there is any conflict, otherwise 0.
 - Whether the `public/storage` symlink exists on the live host (decides whether old files are served by the web server or by `StorageFileController`) is **unverified**.
 - Whether WAHA always fetches a signed `/private-files` link within its 15-minute window is **unverified live**.
 - The nested `image.link` rewrite is a safety net. No live payload has been checked for a `/storage/message-media/` value there.
+- Outgoing composer naming (T-0031) is unverified until `OutboundMediaNamingTest` passes on a test run.
+- **Open decision:** CLAUDE.md says the signed WAHA link must not be stored or exposed outside the send. `reply()` still saves it on the payload, returns it in the reply JSON, and `MessageSent` broadcasts it. The tests read `payload['link']` from the database, so this was not changed in T-0031.

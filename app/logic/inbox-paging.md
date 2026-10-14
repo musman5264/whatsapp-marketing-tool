@@ -17,7 +17,7 @@
 - Scrolling within 120 px of the top loads the next older page. The reading position is restored after older messages are added above.
 - Reactions: the endpoint returns the new reaction row (`message`); the chat appends it. The chat no longer reloads the whole thread.
 - Media in the chat: fixed-size boxes (16 rem × 12 rem) so a photo that loads does not push the chat around. Stored WhatsApp Web media arrives as `MessageMediaReady` and updates the bubble (see `waha-sync-and-labels.md`, Media).
-- Media links: a payload's `preview_url` is used as an image source or link only when it is `http(s)://` or a same-site path (`safeMediaUrl` in `Show.jsx`). Outbound payloads are stored as the agent sent them, so anything else falls back to the server media route. Checked in the browser with a `javascript:` document link: the rendered link points at the server route.
+- Media links: a payload's `preview_url` is used as an image source or link only when it is `http(s)://` or a same-site path (`safeMediaUrl` in `Show.jsx`). Outbound payloads are stored as the agent sent them, so anything else falls back to the server media route. For a composer image, `reply()` sets `preview_url` itself to the login route, which is an `http(s)://` link (T-0031; see `private-media.md`). Checked in the browser with a `javascript:` document link: the rendered link points at the server route.
 - Loading older messages shows a small overlay at the top of the chat, not a line inside the scroll area, so it does not move the messages (the reader's place stays put; measured in the browser).
 
 ## Scroll rules
