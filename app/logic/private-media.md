@@ -75,6 +75,16 @@ Exit code 1 when there is any conflict, otherwise 0.
 
 **Where to run it.** It is not in the no-key allowlist (`CommandAllowlist::ARTISAN`). Run it from the cPanel terminal, or from the Deployment Run box with the second key. See [deployment-commands.md](deployment-commands.md).
 
+## Repairing links saved with the conversation id (T-0034)
+Between 5e7137e and 6282223 the login link for a WhatsApp Web photo was built with the conversation's **integer** id. The route binds the conversation by its **uuid**, so the request returned 404 and the chat showed a broken image. New links are fixed in 6282223. Links already saved are not, and `media:make-private` skips them because their files are already on the private disk.
+
+`php artisan media:fix-links` finds each message whose `preview_url` or `link` points at `/conversations/{integer}/messages/{this message id}/media` and rewrites it to the uuid route.
+- Without `--apply` it counts the messages and changes nothing.
+- With `--apply` it rewrites them, one transaction per message, re-checking each message under a row lock first.
+- The WAHA engine `link` under the type key (for example `image.link`) is never touched. Working links are left alone, so a second run is a no-op.
+- It does not move files. The stored copy stays where it is.
+- Not run on the live site. Run it from the cPanel terminal after 6282223 is deployed, dry run first.
+
 ## Failure behaviour
 - Copy or database failure for one file: the public copy is kept, the database change for that file is rolled back, the other files continue, and the exit code is 1.
 - Failure to delete the public copy after the links were changed: the links already point at the login route (which serves the private copy), and the public copy stays until the next run.
@@ -84,10 +94,12 @@ Exit code 1 when there is any conflict, otherwise 0.
 ## How to test
 - `tests/Feature/Inbox/OutboundMediaNamingTest.php` (6 tests, T-0031): a WhatsApp Web composer image is stored under its message id; the payload has `media_path` and the login-route `preview_url`; the login route serves the bytes to a workspace user; the WAHA send gets a signed link to that file; the Cloud path keeps `media_id`; a failed WAHA send keeps the file. Run status is in the T-0031 task file.
 - `tests/Feature/WhatsappWeb/MakePrivateMediaCommandTest.php` (10 tests): dry run changes nothing, copy and delete, links rewritten and other keys kept, `existingPath` finds the copy afterwards, second run is a no-op, different-size file not overwritten, files outside `message-media/` untouched, failed save keeps the public copy, hash-named outbound photo moves to its message id, orphan keeps its path.
-- Status (2026-10-14): `MakePrivateMediaCommandTest` (10 tests) passes on the private test database. Live runs are not done (see the Unverified list).
+- `tests/Feature/WhatsappWeb/FixMediaLinksCommandTest.php` (3 tests, T-0034): dry run changes nothing; `--apply` points a broken link at the uuid route and leaves the WAHA `image.link` alone; a working link is untouched and a second run changes nothing.
+- Status (2026-10-14): `MakePrivateMediaCommandTest` (10 tests) and `FixMediaLinksCommandTest` (3 tests) pass on the private test database. Live runs are not done (see the Unverified list).
 
 ## Unverified
 - Running it on the live site (wa.esystematics.com) is **unverified**. Nothing has been moved there by this change.
+- Running `media:fix-links --apply` on the live database is **unverified**. Nothing has been rewritten there yet.
 - Whether the `public/storage` symlink exists on the live host (decides whether old files are served by the web server or by `StorageFileController`) is **unverified**.
 - Whether WAHA always fetches a signed `/private-files` link within its 15-minute window is **unverified live**.
 - The nested `image.link` rewrite is a safety net. No live payload has been checked for a `/storage/message-media/` value there.

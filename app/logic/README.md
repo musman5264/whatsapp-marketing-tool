@@ -11,7 +11,7 @@ Tracked write-ups of what is **built and working now**. Update a file in place w
 | [api-contacts-upsert.md](api-contacts-upsert.md) | Public `POST /api/v1/contacts`: 201 new / 200 existing / restores deleted, no more 500 on repeated numbers |
 | [inbox-paging.md](inbox-paging.md) | Conversation list and chat paging (lazy older messages, cursor, scroll rules), reaction row, media box sizes |
 | [deployment-commands.md](deployment-commands.md) | Deployment page Run box: exact-match command allowlist (app and `public/deploy.php`), second key, no built-in deploy key |
-| [private-media.md](private-media.md) | Chat media on the private disk: login route, signed links (WAHA 15 min), `media:make-private` dry run and `--apply` |
+| [private-media.md](private-media.md) | Chat media on the private disk: login route, signed links (WAHA 15 min), `media:make-private` dry run and `--apply`; `media:fix-links` repairs links saved with the integer conversation id |
 | [webhook-deliveries.md](webhook-deliveries.md) | Outbound webhooks: exact body and headers stored per attempt, `X-Webhook-Signature` format, Deliveries page details, double-encoding fix |
 
 ## How to write one

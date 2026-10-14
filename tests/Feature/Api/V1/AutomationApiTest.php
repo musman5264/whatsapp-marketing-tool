@@ -82,7 +82,9 @@ class AutomationApiTest extends TestCase
             'status' => 'pending',
         ]);
 
-        Queue::assertPushed(ExecuteAutomationRunJob::class);
+        // The workers listen on the 'automation' queue (docker/supervisor/whatsmine.conf).
+        // A run pushed to any other name is never picked up.
+        Queue::assertPushedOn('automation', ExecuteAutomationRunJob::class);
     }
 
     public function test_trigger_automation_invalid_contact_returns_404(): void

@@ -17,10 +17,13 @@ _Last updated: 2026-10-14_
 | T-0023 | Run Reverb on the Easypanel VPS; cPanel uses it as an external realtime server | PLAN-000 / phase-01 | T-0021 | high | blocked: your VPS and Cloudflare setup (code done, commit 4a851b3) |
 | T-0026 | WAHA webhooks rejected: checked SHA-256, WAHA signs SHA-512; live messages never arrived | PLAN-000 / phase-01 | T-0023 | high | blocked: deploy 3da12df and live check |
 | T-0028 | Private media storage (public photo links) and media in the outgoing webhook | PLAN-002 / phase-01 | T-0027, T-0029, T-0030 | high | blocked: your deploy of 5e7137e with T-0030, T-0031 and T-0032, the command run, and the live check |
+| T-0035 | Outgoing message stays at one tick: check the live cause (reload, WAHA ack log), then decide on the dropped-ack fix | PLAN-000 / phase-01 | none (user checks) | high | blocked: needs your reload check and the WAHA log line |
 
 ## Completed (most recent first)
 | ID | Task | Plan / Phase | Completed |
 |----|------|--------------|-----------|
+| T-0034 | media:fix-links repairs saved photo links that use the integer conversation id (dry run by default; not run on live) | PLAN-002 / phase-01 | 2026-10-14 |
+| T-0033 | API-triggered automation runs sent to queue 'automations'; workers listen on 'automation' (fixed, test first) | PLAN-000 / phase-01 | 2026-10-14 |
 | T-0032 | Login media link built from the conversation uuid, not the integer id (commit 6282223; live deploy pending) | PLAN-002 / phase-01 | 2026-10-14 |
 | T-0031 | Outgoing composer image stored under its message id; login route serves it (commit 07cd09f; live deploy pending; signed-link decision open) | PLAN-002 / phase-01 | 2026-10-14 |
 | T-0030 | Webhook: WhatsApp Web photo or file sent as a signed link that expires, fresh on each attempt (commit 920b127; live check pending) | PLAN-002 / phase-01 | 2026-10-14 |
@@ -51,5 +54,5 @@ _Last updated: 2026-10-14_
 | PLAN-001-inbox-speed-and-media | Inbox speed, live updates and media | phase-01-speed-and-media | 1 / 5 |
 | PLAN-002-private-media | Chat media off the public disk; signed webhook media | phase-01-private-media | 4 / 5 |
 
-Next task ID: T-0033   (T-0006 and T-0007 are also in tasks/working from another session; IDs are never reused)
+Next task ID: T-0036   (T-0006 and T-0007 are also in tasks/working from another session; IDs are never reused)
 Next plan ID: PLAN-003

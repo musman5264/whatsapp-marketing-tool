@@ -60,7 +60,7 @@ class AutomationApiController extends WorkspaceScopedController
             'started_at' => now(),
         ]);
 
-        ExecuteAutomationRunJob::dispatch($run->id)->onQueue('automations');
+        ExecuteAutomationRunJob::dispatch($run->id)->onQueue('automation');
 
         return response()->json([
             'run_id' => $run->id,
