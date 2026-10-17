@@ -121,8 +121,8 @@ class MessageSendApiTest extends TestCase
                 'channel' => 'whatsapp',
                 'body' => 'Hello from API',
             ])
-            ->assertStatus(202)
-            ->assertJsonPath('status', 'queued')
+            ->assertStatus(200)
+            ->assertJsonPath('status', 'sent')
             ->assertJsonStructure(['message_id']);
 
         $this->assertNotNull($holder->message);
@@ -153,8 +153,8 @@ class MessageSendApiTest extends TestCase
                 'channel' => 'whatsapp',
                 'body' => 'Hi via personal number',
             ])
-            ->assertStatus(202)
-            ->assertJsonPath('status', 'queued');
+            ->assertStatus(200)
+            ->assertJsonPath('status', 'sent');
 
         $this->assertSame('wamid.WAHA', $holder->message->fresh()->provider_message_id);
 
@@ -181,7 +181,7 @@ class MessageSendApiTest extends TestCase
                 'channel' => 'whatsapp',
                 'template_name' => 'welcome',
             ])
-            ->assertStatus(202);
+            ->assertStatus(200);
 
         $conversation = Conversation::where('contact_id', $contact->id)->first();
         $this->assertSame($cloud->id, $conversation->channel_account_id);
@@ -203,7 +203,7 @@ class MessageSendApiTest extends TestCase
                 'body' => 'Force WAHA',
                 'channel_account_id' => $waha->id,
             ])
-            ->assertStatus(202);
+            ->assertStatus(200);
 
         $conversation = Conversation::where('contact_id', $contact->id)->first();
         $this->assertSame($waha->id, $conversation->channel_account_id);
@@ -250,7 +250,7 @@ class MessageSendApiTest extends TestCase
                 'channel' => 'whatsapp',
                 'body' => 'reply on existing thread',
             ])
-            ->assertStatus(202);
+            ->assertStatus(200);
 
         $this->assertSame(1, Conversation::where('contact_id', $contact->id)->count());
         $this->assertDatabaseHas('messages', [
@@ -274,7 +274,7 @@ class MessageSendApiTest extends TestCase
                 'template_name' => 'order_update',
                 'template_vars' => ['12345', 'shipped'],
             ])
-            ->assertStatus(202)
+            ->assertStatus(200)
             ->assertJsonPath('degraded_to_text', true);
 
         $this->assertSame('template', $holder->message->type);
@@ -296,7 +296,7 @@ class MessageSendApiTest extends TestCase
                 'template_name' => 'order_update',
                 'template_vars' => ['12345'],
             ])
-            ->assertStatus(202)
+            ->assertStatus(200)
             ->assertJsonMissingPath('degraded_to_text');
     }
 
@@ -326,10 +326,11 @@ class MessageSendApiTest extends TestCase
                 'channel' => 'whatsapp',
                 'body' => 'will fail',
             ])
-            ->assertStatus(202)
-            ->assertJsonPath('status', 'queued');
+            ->assertStatus(422)
+            ->assertJsonPath('status', 'failed')
+            ->assertJsonPath('error', 'WhatsApp send failed: boom');
 
-        // The provider error is stored on the message, not returned to the caller.
+        // The provider error is also stored on the message.
         $this->assertDatabaseHas('messages', [
             'conversation_id' => $conversation->id,
             'status' => 'failed',

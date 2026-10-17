@@ -136,8 +136,8 @@ class MessageSendMediaApiTest extends TestCase
                 'caption' => 'Product shot',
                 'attachment' => UploadedFile::fake()->image('photo.jpg', 800, 600),
             ], ['Accept' => 'application/json'])
-            ->assertStatus(202)
-            ->assertJsonPath('status', 'queued');
+            ->assertStatus(200)
+            ->assertJsonPath('status', 'sent');
 
         $this->assertNotNull($holder->message);
         $this->assertSame('image', $holder->message->type);
@@ -174,7 +174,7 @@ class MessageSendMediaApiTest extends TestCase
                 'media_url' => 'https://example.com/invoice.pdf',
                 'filename' => 'invoice-2026.pdf',
             ])
-            ->assertStatus(202);
+            ->assertStatus(200);
 
         $this->assertSame('document', $holder->message->type);
         $this->assertSame('https://example.com/invoice.pdf', $holder->message->payload['link']);
@@ -200,7 +200,7 @@ class MessageSendMediaApiTest extends TestCase
                 'type' => 'image',
                 'attachment' => UploadedFile::fake()->image('pic.png'),
             ], ['Accept' => 'application/json'])
-            ->assertStatus(202);
+            ->assertStatus(200);
 
         $this->assertSame('image', $holder->message->type);
         $this->assertArrayHasKey('link', $holder->message->payload);

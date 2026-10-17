@@ -3,8 +3,10 @@
 namespace App\Modules\Whatsapp\Jobs;
 
 use App\Events\MessageSent;
+use App\Models\User;
 use App\Modules\Shared\Models\Message;
 use App\Modules\Shared\Services\ChannelManager;
+use App\Services\WebhookDispatchService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -29,7 +31,7 @@ class SendQueuedWhatsappMessageJob implements ShouldQueue
         public readonly int $messageId,
     ) {}
 
-    public function handle(ChannelManager $channelManager): void
+    public function handle(ChannelManager $channelManager, WebhookDispatchService $webhooks): void
     {
         $message = Message::with(['conversation.contact', 'conversation.channelAccount'])->find($this->messageId);
 
@@ -51,6 +53,8 @@ class SendQueuedWhatsappMessageJob implements ShouldQueue
                 'error' => $e->getMessage(),
             ]);
 
+            $this->notifySubscribers($webhooks, $message->refresh(), 'message.failed');
+
             return;
         }
 
@@ -59,11 +63,46 @@ class SendQueuedWhatsappMessageJob implements ShouldQueue
 
         MessageSent::dispatch($message->load('conversation'));
 
+        $this->notifySubscribers($webhooks, $message, 'message.sent');
+
         Log::channel('json')->info('api.message.sent', [
             'message_id' => $message->id,
             'channel_account_id' => $message->conversation->getAttribute('channel_account_id'),
             'duration_ms' => $this->elapsedMs($startedAt),
         ]);
+    }
+
+    /**
+     * Tell the webhook endpoints of the API key's user how the send ended. Soft-fail: a webhook problem must
+     * never change the outcome of the send itself.
+     */
+    private function notifySubscribers(WebhookDispatchService $webhooks, Message $message, string $event): void
+    {
+        try {
+            $user = $message->getAttribute('user_id') ? User::find($message->getAttribute('user_id')) : null;
+            if (! $user) {
+                return;
+            }
+
+            $webhooks->dispatch($user, $event, [
+                'event' => $event,
+                'message' => [
+                    'id' => $message->id,
+                    'conversation_id' => $message->getAttribute('conversation_id'),
+                    'channel' => $message->getAttribute('channel'),
+                    'to' => data_get($message, 'conversation.contact.phone_e164'),
+                    'status' => $message->getAttribute('status'),
+                    'provider_message_id' => $message->getAttribute('provider_message_id'),
+                    'error' => $message->error_json['message'] ?? null,
+                ],
+            ]);
+        } catch (\Throwable $e) {
+            Log::channel('json')->warning('api.message.webhook_failed', [
+                'message_id' => $message->id,
+                'event' => $event,
+                'error' => $e->getMessage(),
+            ]);
+        }
     }
 
     private function elapsedMs(float $startedAt): int

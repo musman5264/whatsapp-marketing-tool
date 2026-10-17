@@ -13,6 +13,7 @@ class OutboundWebhookApiController extends WorkspaceScopedController
         'contact.updated',
         'message.received',
         'message.sent',
+        'message.failed',
         'campaign.completed',
         'automation.run.completed',
     ];

@@ -7,7 +7,7 @@ Tracked write-ups of what is **built and working now**. Update a file in place w
 | [realtime-config.md](realtime-config.md) | Pusher/Reverb single source of truth, CSP, why the inbox stops updating live |
 | [waha-sync-and-labels.md](waha-sync-and-labels.md) | WAHA webhook events, phone-sent messages, history sync, unread, auto labels, contact save |
 | [waha-api-coverage.md](waha-api-coverage.md) | Audit of WAHA endpoints vs what the app calls (copy of the old git-ignored `docs/` file; keep this one current) |
-| [api-message-send.md](api-message-send.md) | Public `POST /api/v1/messages/send`: async WhatsApp send (202), job, failure handling |
+| [api-message-send.md](api-message-send.md) | Public `POST /api/v1/messages/send`: async WhatsApp send that waits for the result (200 sent / 422 failed / 202 queued), status endpoint, message.sent / message.failed webhooks |
 | [api-contacts-upsert.md](api-contacts-upsert.md) | Public `POST /api/v1/contacts`: 201 new / 200 existing / restores deleted, no more 500 on repeated numbers |
 | [inbox-paging.md](inbox-paging.md) | Conversation list and chat paging (lazy older messages, cursor, scroll rules), reaction row, media box sizes |
 | [deployment-commands.md](deployment-commands.md) | Deployment page Run box: exact-match command allowlist (app and `public/deploy.php`), second key, no built-in deploy key |

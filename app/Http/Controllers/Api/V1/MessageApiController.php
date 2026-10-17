@@ -21,6 +21,11 @@ class MessageApiController extends WorkspaceScopedController
     /** Message types that carry a file / URL instead of a text body. */
     private const MEDIA_TYPES = ['image', 'video', 'audio', 'document'];
 
+    /** Seconds the send call waits for the background send to finish when the caller sends no `wait`. */
+    private const DEFAULT_WAIT_SECONDS = 15;
+
+    private const MAX_WAIT_SECONDS = 30;
+
     public function __construct(
         private StorageManager $storageManager,
     ) {}
@@ -46,6 +51,7 @@ class MessageApiController extends WorkspaceScopedController
             'template_name' => ['nullable', 'string'],
             'template_vars' => ['nullable', 'array'],
             'channel_account_id' => ['nullable', 'integer'],
+            'wait' => ['nullable', 'integer', 'between:0,'.self::MAX_WAIT_SECONDS],
             'attachment' => [
                 'nullable', 'file', 'max:20480',
                 'mimes:jpg,jpeg,png,webp,gif,mp4,3gp,mov,mp3,aac,m4a,amr,ogg,opus,pdf,doc,docx,xls,xlsx,ppt,pptx,txt,csv',
@@ -85,7 +91,7 @@ class MessageApiController extends WorkspaceScopedController
                 // on the whatsapp queue and the caller gets 202 right away.
                 $result = $this->queueWhatsapp($request, $wsId, $contact, $validated, $isMedia);
 
-                return response()->json(array_merge(['status' => 'queued'], $result), 202);
+                return $this->outcomeResponse($result, (int) ($validated['wait'] ?? self::DEFAULT_WAIT_SECONDS));
             }
 
             $result = match ($channel) {
@@ -99,6 +105,76 @@ class MessageApiController extends WorkspaceScopedController
         }
 
         return response()->json(array_merge(['status' => 'sent'], $result));
+    }
+
+    /**
+     * GET /api/v1/messages/{id}
+     * Final outcome of a message sent through this API: queued, sent or failed.
+     */
+    public function show(Request $request, int $id): JsonResponse
+    {
+        $wsId = $this->workspaceId($request);
+
+        $message = Message::query()
+            ->whereKey($id)
+            ->where('direction', 'out')
+            ->whereHas('conversation', fn ($q) => $q->where('workspace_id', $wsId))
+            ->first();
+
+        if (! $message) {
+            return response()->json(['error' => 'Message not found.'], 404);
+        }
+
+        return response()->json([
+            'message_id' => $message->id,
+            'conversation_id' => $message->getAttribute('conversation_id'),
+            'status' => $message->getAttribute('status'),
+            'provider_message_id' => $message->getAttribute('provider_message_id'),
+            'error' => $message->error_json['message'] ?? null,
+            'sent_at' => $message->getAttribute('sent_at')?->toIso8601String(),
+        ]);
+    }
+
+    /**
+     * Give the background send up to $waitSeconds to finish, then answer with what happened:
+     * 200 sent (with provider_message_id), 422 failed (with the provider error), or 202 still queued.
+     *
+     * @param  array{message_id: int, degraded_to_text?: bool}  $result
+     */
+    private function outcomeResponse(array $result, int $waitSeconds): JsonResponse
+    {
+        $extra = isset($result['degraded_to_text']) ? ['degraded_to_text' => $result['degraded_to_text']] : [];
+
+        if ($waitSeconds === 0) {
+            return response()->json(array_merge(['status' => 'queued'], $result), 202);
+        }
+
+        $deadline = microtime(true) + $waitSeconds;
+
+        while (true) {
+            $message = Message::query()->find($result['message_id']);
+            $status = $message?->getAttribute('status');
+
+            if ($status === 'sent') {
+                return response()->json(array_merge(
+                    ['status' => 'sent', 'message_id' => $result['message_id'], 'provider_message_id' => $message->getAttribute('provider_message_id')],
+                    $extra,
+                ));
+            }
+
+            if ($status === 'failed') {
+                return response()->json(array_merge(
+                    ['status' => 'failed', 'message_id' => $result['message_id'], 'error' => $message->error_json['message'] ?? 'Send failed.'],
+                    $extra,
+                ), 422);
+            }
+
+            if (microtime(true) >= $deadline) {
+                return response()->json(array_merge(['status' => 'queued'], $result), 202);
+            }
+
+            usleep(250_000);
+        }
     }
 
     /**
