@@ -25,6 +25,8 @@ Run from the **Run** box (Admin → Deployment → Advanced) or from the cPanel 
 | `php artisan whatsapp-web:status` | no key | WhatsApp Web session status | Quick health check |
 | `php artisan whatsapp-web:resubscribe` | second key | Re-registers the WAHA webhook. Briefly restarts the session; the number stays linked | After a change to the webhook events (CLAUDE.md) |
 | `php artisan whatsapp-web:sync` | second key | Imports recent chats and messages now (inline) | When messages are missing; add `--queue` to run it in the background |
+| `php artisan whatsapp-web:lid-resolve --session=<name>` | second key | Dry run: asks WAHA (`/lids/{lid}`, `/contacts`) for the real number of every contact of the session and lists those stored under a LID that now map | After a deploy of the LID lookup, to repair old ID-only contacts |
+| `php artisan whatsapp-web:lid-resolve --session=<name> --apply` | second key | Records every mapping found and moves the messages (runs `lid-map --apply` for each) | Only after the dry run |
 | `php artisan whatsapp-web:lid-map <lid> <phone> --session=<name>` | second key | Dry run: shows which messages would move from a LID contact to the real contact | Before recording a LID mapping (see waha-sync-and-labels.md) |
 | `php artisan whatsapp-web:lid-map <lid> <phone> --session=<name> --apply` | second key | Records the mapping and moves the messages (writes live data) | Only after the dry run |
 | `php artisan queue:retry all` | second key | Re-runs **every** failed job. Outbound webhooks are sent again to the client endpoint | Only after the cause is fixed. Re-running a webhook that a receiver rejects just fails again |
