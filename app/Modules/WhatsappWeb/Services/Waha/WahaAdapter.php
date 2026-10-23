@@ -347,6 +347,17 @@ class WahaAdapter implements EngineAdapter
     {
         $resp = $this->client->post($endpoint, $payload);
 
+        // A contact stored under a WhatsApp LID (WhatsApp hid its number and WAHA could not map it,
+        // see InboundNormalizer) has no phone-number JID: GOWS answers "no LID found for <n>@s.whatsapp.net".
+        // Address that person by the LID itself instead. Any other error is not retried.
+        if (! $resp->successful()
+            && str_contains($resp->body(), 'no LID found')
+            && is_string($payload['chatId'] ?? null)
+            && str_ends_with($payload['chatId'], '@c.us')) {
+            $payload['chatId'] = substr($payload['chatId'], 0, -strlen('@c.us')).'@lid';
+            $resp = $this->client->post($endpoint, $payload);
+        }
+
         if (! $resp->successful()) {
             throw new \RuntimeException('WAHA send failed ('.$resp->status().'): '.$resp->body());
         }

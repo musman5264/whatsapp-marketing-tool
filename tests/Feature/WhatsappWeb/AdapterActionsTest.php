@@ -34,6 +34,33 @@ class AdapterActionsTest extends TestCase
     }
 
     #[Test]
+    public function send_retries_through_the_lid_address_when_waha_has_no_lid_for_the_number(): void
+    {
+        Http::fake(['waha.test/api/sendText' => Http::sequence()
+            ->push(['exception' => ['message' => '2 UNKNOWN: no LID found for 120297755815945@s.whatsapp.net from server']], 500)
+            ->push(['id' => ['_serialized' => 'lid_msg_1']], 201)]);
+
+        $id = $this->adapter()->sendText('ws-1', '+120297755815945', 'hi');
+
+        $this->assertSame('lid_msg_1', $id);
+        Http::assertSentCount(2);
+        Http::assertSent(fn ($r) => $r['chatId'] === '120297755815945@lid');
+    }
+
+    #[Test]
+    public function send_does_not_retry_other_waha_errors(): void
+    {
+        Http::fake(['waha.test/api/sendText' => Http::response(['message' => 'boom'], 500)]);
+
+        $this->expectException(\RuntimeException::class);
+        try {
+            $this->adapter()->sendText('ws-1', '+15551230000', 'hi');
+        } finally {
+            Http::assertSentCount(1);
+        }
+    }
+
+    #[Test]
     public function send_reaction_puts_to_the_reaction_endpoint(): void
     {
         Http::fake(['waha.test/api/reaction' => Http::response([], 200)]);
