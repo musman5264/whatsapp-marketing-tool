@@ -110,7 +110,7 @@ class InboundNormalizer
         }
 
         // Resolve the chat to a real phone number.
-        [$phoneDigits, $contactName] = $this->resolveSender($chatJid, $session, $p);
+        [$phoneDigits, $contactName] = $this->resolveSender($chatJid, $session, $p, $fromMe);
         if ($phoneDigits === '') {
             Log::warning('whatsapp_web.inbound.unresolved_sender', ['from' => $chatJid, 'session' => $session->session_name]);
 
@@ -190,7 +190,7 @@ class InboundNormalizer
     /**
      * @return array{0: string, 1: ?string}  [phone digits without +, display name]
      */
-    private function resolveSender(string $fromJid, WhatsappWebSession $session, array $payload = []): array
+    private function resolveSender(string $fromJid, WhatsappWebSession $session, array $payload = [], bool $fromMe = false): array
     {
         $left = explode('@', $fromJid)[0];
 
@@ -212,9 +212,9 @@ class InboundNormalizer
             // The message itself often carries the real number next to the LID, so no WAHA call is needed.
             // NOWEB: _data.key.remoteJidAlt (WAHA issue #1608). GOWS: _data.Info.SenderAlt / RecipientAlt
             // (whatsmeow field names; unverified on the live engine, harmless when absent).
-            $alt = $this->altNumberDigits($payload);
+            $alt = $this->altNumberDigits($payload, $fromMe);
             if ($alt !== '') {
-                $name = $this->pushNameOf($payload);
+                $name = $fromMe ? null : $this->pushNameOf($payload);
                 WhatsappWebLidMapping::query()->insertOrIgnore([
                     'session_name' => $session->session_name,
                     'lid' => $left,
@@ -256,9 +256,14 @@ class InboundNormalizer
             // WAHA could not map this LID to a phone number, or could not be asked. The message
             // is kept (CLAUDE.md: an inbound message is never lost): the LID's own digits stand in
             // for the number. Not cached, so the next message from this sender is resolved again.
-            Log::info('whatsapp_web.inbound.lid_unmapped', ['from' => $fromJid, 'session' => $session->session_name]);
+            // data_keys: shows where (if anywhere) this engine puts the sender's number, so the field names can be checked against a real payload.
+            Log::info('whatsapp_web.inbound.lid_unmapped', [
+                'from' => $fromJid,
+                'session' => $session->session_name,
+                'data_keys' => $this->keyPaths($payload['_data'] ?? null),
+            ]);
 
-            return [$left, $name ?? $this->pushNameOf($payload)];
+            return [$left, $name ?? ($fromMe ? null : $this->pushNameOf($payload))];
         }
 
         return ['', null];
@@ -266,16 +271,19 @@ class InboundNormalizer
 
     /**
      * The real phone number (digits) WAHA put beside a LID chat id in the message payload, or ''.
+     * Keys, at any depth under `_data` (the nesting WAHA uses is not documented):
+     * NOWEB `remoteJidAlt`; GOWS (whatsmeow types.MessageSource) `SenderAlt` for a message we received and
+     * `RecipientAlt` for one we sent. RecipientAlt of a received DM is OUR OWN number, so it is never used there.
      *
      * @param  array<string,mixed>  $p
      */
-    private function altNumberDigits(array $p): string
+    private function altNumberDigits(array $p, bool $fromMe): string
     {
-        $data = is_array($p['_data'] ?? null) ? $p['_data'] : [];
-        $key = is_array($data['key'] ?? null) ? $data['key'] : [];
-        $info = is_array($data['Info'] ?? null) ? $data['Info'] : [];
+        $keys = ['remoteJidAlt', $fromMe ? 'RecipientAlt' : 'SenderAlt'];
+        $found = [];
+        $this->collectByKey($p['_data'] ?? null, $keys, $found);
 
-        foreach ([$key['remoteJidAlt'] ?? null, $info['SenderAlt'] ?? null, $info['RecipientAlt'] ?? null] as $jid) {
+        foreach ($found as $jid) {
             if (is_string($jid) && preg_match('/^(\d{6,15})(?::\d+)?@(s\.whatsapp\.net|c\.us)$/', $jid, $m)) {
                 return $m[1];
             }
@@ -285,17 +293,49 @@ class InboundNormalizer
     }
 
     /**
-     * The customer's own WhatsApp profile name, from the payload (NOWEB `_data.pushName`, GOWS `_data.Info.PushName`).
+     * The customer's own WhatsApp profile name from the payload (NOWEB `pushName`, GOWS `PushName`), any depth.
+     * Only for messages we received: on one we sent it is our own name.
      *
      * @param  array<string,mixed>  $p
      */
     private function pushNameOf(array $p): ?string
     {
-        $data = is_array($p['_data'] ?? null) ? $p['_data'] : [];
-        $info = is_array($data['Info'] ?? null) ? $data['Info'] : [];
-        $name = $data['pushName'] ?? $info['PushName'] ?? null;
+        $found = [];
+        $this->collectByKey($p['_data'] ?? null, ['pushName', 'PushName'], $found);
+        $name = $found[0] ?? null;
 
         return is_string($name) && trim($name) !== '' ? trim($name) : null;
+    }
+
+    /** @param list<string> $keys @param list<mixed> $found */
+    private function collectByKey(mixed $node, array $keys, array &$found, int $depth = 0): void
+    {
+        if (! is_array($node) || $depth > 6) {
+            return;
+        }
+        foreach ($node as $k => $v) {
+            if (in_array($k, $keys, true) && is_string($v)) {
+                $found[] = $v;
+            } elseif (is_array($v)) {
+                $this->collectByKey($v, $keys, $found, $depth + 1);
+            }
+        }
+    }
+
+    /** @return list<string> dotted key paths of a payload (no values), to log its shape */
+    private function keyPaths(mixed $node, string $prefix = '', int $depth = 0): array
+    {
+        if (! is_array($node) || $depth > 3) {
+            return [];
+        }
+        $out = [];
+        foreach ($node as $k => $v) {
+            $path = $prefix === '' ? (string) $k : $prefix.'.'.$k;
+            $out[] = $path;
+            array_push($out, ...$this->keyPaths($v, $path, $depth + 1));
+        }
+
+        return array_slice($out, 0, 60);
     }
 
     /** @param array<string,mixed> $payload */
