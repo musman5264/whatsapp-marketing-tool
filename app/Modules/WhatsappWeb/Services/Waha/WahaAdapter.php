@@ -218,17 +218,32 @@ class WahaAdapter implements EngineAdapter
      */
     public function resolveContact(string $session, string $contactId): ?array
     {
+        // WAHA's documented LID lookup: GET /api/{session}/lids/{lid} -> {lid, pn: "<number>@c.us"|null}.
+        // Tried first; any failure falls through to the contact lookup below.
+        $pn = null;
+        if (str_ends_with($contactId, '@lid')) {
+            try {
+                $lidResp = $this->client->get('/api/'.rawurlencode($session).'/lids/'.rawurlencode(explode('@', $contactId)[0]));
+                $pnJid = $lidResp->successful() ? (string) ($lidResp->json('pn') ?? '') : '';
+                $pn = str_ends_with($pnJid, '@c.us') ? preg_replace('/\D+/', '', explode('@', $pnJid)[0]) : null;
+            } catch (\Throwable $e) {
+                Log::debug('whatsapp_web.waha.lid_lookup_failed', ['session' => $session, 'error' => $e->getMessage()]);
+            }
+        }
+
         $resp = $this->client->get('/api/contacts', [
             'session' => $session,
             'contactId' => $contactId,
         ]);
         if (! $resp->successful()) {
-            return null;
+            return $pn ? ['phone_e164' => '+'.$pn, 'name' => null] : null;
         }
 
         // WAHA returns {id: "923...@c.us", number: "<lid digits>", name: "..."}.
         $jid = (string) ($resp->json('id') ?? '');
         $digits = str_ends_with($jid, '@c.us') ? preg_replace('/\D+/', '', explode('@', $jid)[0]) : '';
+
+        $digits = $digits !== '' ? $digits : (string) $pn;
 
         return [
             'phone_e164' => $digits !== '' ? '+'.$digits : null,

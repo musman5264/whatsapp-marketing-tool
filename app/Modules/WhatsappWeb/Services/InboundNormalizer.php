@@ -110,7 +110,7 @@ class InboundNormalizer
         }
 
         // Resolve the chat to a real phone number.
-        [$phoneDigits, $contactName] = $this->resolveSender($chatJid, $session);
+        [$phoneDigits, $contactName] = $this->resolveSender($chatJid, $session, $p);
         if ($phoneDigits === '') {
             Log::warning('whatsapp_web.inbound.unresolved_sender', ['from' => $chatJid, 'session' => $session->session_name]);
 
@@ -190,7 +190,7 @@ class InboundNormalizer
     /**
      * @return array{0: string, 1: ?string}  [phone digits without +, display name]
      */
-    private function resolveSender(string $fromJid, WhatsappWebSession $session): array
+    private function resolveSender(string $fromJid, WhatsappWebSession $session, array $payload = []): array
     {
         $left = explode('@', $fromJid)[0];
 
@@ -207,6 +207,24 @@ class InboundNormalizer
             $known = WhatsappWebLidMapping::where('session_name', $session->session_name)->where('lid', $left)->first();
             if ($known !== null) {
                 return [preg_replace('/\D+/', '', (string) $known->getAttribute('phone_e164')), $known->getAttribute('name')];
+            }
+
+            // The message itself often carries the real number next to the LID, so no WAHA call is needed.
+            // NOWEB: _data.key.remoteJidAlt (WAHA issue #1608). GOWS: _data.Info.SenderAlt / RecipientAlt
+            // (whatsmeow field names; unverified on the live engine, harmless when absent).
+            $alt = $this->altNumberDigits($payload);
+            if ($alt !== '') {
+                $name = $this->pushNameOf($payload);
+                WhatsappWebLidMapping::query()->insertOrIgnore([
+                    'session_name' => $session->session_name,
+                    'lid' => $left,
+                    'phone_e164' => '+'.$alt,
+                    'name' => $name,
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+
+                return [$alt, $name];
             }
 
             try {
@@ -240,10 +258,44 @@ class InboundNormalizer
             // for the number. Not cached, so the next message from this sender is resolved again.
             Log::info('whatsapp_web.inbound.lid_unmapped', ['from' => $fromJid, 'session' => $session->session_name]);
 
-            return [$left, $name];
+            return [$left, $name ?? $this->pushNameOf($payload)];
         }
 
         return ['', null];
+    }
+
+    /**
+     * The real phone number (digits) WAHA put beside a LID chat id in the message payload, or ''.
+     *
+     * @param  array<string,mixed>  $p
+     */
+    private function altNumberDigits(array $p): string
+    {
+        $data = is_array($p['_data'] ?? null) ? $p['_data'] : [];
+        $key = is_array($data['key'] ?? null) ? $data['key'] : [];
+        $info = is_array($data['Info'] ?? null) ? $data['Info'] : [];
+
+        foreach ([$key['remoteJidAlt'] ?? null, $info['SenderAlt'] ?? null, $info['RecipientAlt'] ?? null] as $jid) {
+            if (is_string($jid) && preg_match('/^(\d{6,15})(?::\d+)?@(s\.whatsapp\.net|c\.us)$/', $jid, $m)) {
+                return $m[1];
+            }
+        }
+
+        return '';
+    }
+
+    /**
+     * The customer's own WhatsApp profile name, from the payload (NOWEB `_data.pushName`, GOWS `_data.Info.PushName`).
+     *
+     * @param  array<string,mixed>  $p
+     */
+    private function pushNameOf(array $p): ?string
+    {
+        $data = is_array($p['_data'] ?? null) ? $p['_data'] : [];
+        $info = is_array($data['Info'] ?? null) ? $data['Info'] : [];
+        $name = $data['pushName'] ?? $info['PushName'] ?? null;
+
+        return is_string($name) && trim($name) !== '' ? trim($name) : null;
     }
 
     /** @param array<string,mixed> $payload */
