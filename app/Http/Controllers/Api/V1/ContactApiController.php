@@ -55,6 +55,15 @@ class ContactApiController extends WorkspaceScopedController
         return ContactResource::collection($query->cursorPaginate(25));
     }
 
+    /** Rewrite a sent phone (03345266444, 0334-5266444, 00923…) to E.164 before validation; unusable values stay as sent so the regex rejects them. */
+    private function normalizePhoneInput(Request $request, ContactService $contacts): void
+    {
+        $phone = $request->input('phone_e164');
+        if (is_string($phone) && ($e164 = $contacts->normalizePhone($phone)) !== null) {
+            $request->merge(['phone_e164' => $e164]);
+        }
+    }
+
     /**
      * POST /api/v1/contacts
      *
@@ -64,6 +73,8 @@ class ContactApiController extends WorkspaceScopedController
      */
     public function store(Request $request, ContactService $contacts): JsonResponse
     {
+        $this->normalizePhoneInput($request, $contacts);
+
         $validated = $request->validate([
             'phone_e164' => ['nullable', 'string', 'regex:/^\+[1-9]\d{6,14}$/'],
             'email' => ['nullable', 'email', 'max:255'],
@@ -108,8 +119,10 @@ class ContactApiController extends WorkspaceScopedController
     /**
      * PATCH /api/v1/contacts/{id}
      */
-    public function update(Request $request, int $id): ContactResource|JsonResponse
+    public function update(Request $request, int $id, ContactService $contacts): ContactResource|JsonResponse
     {
+        $this->normalizePhoneInput($request, $contacts);
+
         $contact = Contact::where('workspace_id', $this->workspaceId($request))->find($id);
 
         if (! $contact) {

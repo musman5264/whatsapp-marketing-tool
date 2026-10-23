@@ -5,6 +5,7 @@ namespace Tests\Feature\Api\V1;
 use App\Modules\Shared\Models\Contact;
 use App\Support\ApiAbilities;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
 
 class ContactApiTest extends TestCase
@@ -123,6 +124,57 @@ class ContactApiTest extends TestCase
         $this->withToken($token)
             ->postJson('/api/v1/contacts', ['phone_e164' => 'not-a-phone'])
             ->assertStatus(422);
+    }
+
+    /** @return array<string, array{string}> */
+    public static function localPhoneFormats(): array
+    {
+        return [
+            'local with leading 0' => ['03345266444'],
+            'local with dash' => ['0334-5266444'],
+            'plus with spaces' => ['+92 334 5266444'],
+            'country code, no plus' => ['923345266444'],
+            '00 prefix' => ['00923345266444'],
+            'brackets' => ['(0334) 5266444'],
+            'already e164' => ['+923345266444'],
+        ];
+    }
+
+    #[DataProvider('localPhoneFormats')]
+    public function test_create_contact_normalises_phone_to_e164(string $input): void
+    {
+        ['user' => $user, 'workspace' => $workspace] = $this->createWorkspaceContext();
+        $token = $user->createToken('t', [ApiAbilities::CONTACTS_WRITE])->plainTextToken;
+
+        $this->withToken($token)
+            ->postJson('/api/v1/contacts', ['phone_e164' => $input])
+            ->assertSuccessful()
+            ->assertJsonPath('data.phone_e164', '+923345266444');
+
+        $this->assertSame(1, Contact::where('workspace_id', $workspace->id)->where('phone_e164', '+923345266444')->count());
+    }
+
+    public function test_different_formats_of_same_number_hit_the_same_contact(): void
+    {
+        ['user' => $user, 'workspace' => $workspace] = $this->createWorkspaceContext();
+        $token = $user->createToken('t', [ApiAbilities::CONTACTS_WRITE])->plainTextToken;
+
+        $first = $this->withToken($token)->postJson('/api/v1/contacts', ['phone_e164' => '03345266444'])->assertStatus(201);
+        $second = $this->withToken($token)->postJson('/api/v1/contacts', ['phone_e164' => '+923345266444'])->assertStatus(200);
+
+        $this->assertSame($first->json('data.id'), $second->json('data.id'));
+    }
+
+    public function test_update_contact_normalises_phone(): void
+    {
+        ['user' => $user, 'workspace' => $workspace] = $this->createWorkspaceContext();
+        $token = $user->createToken('t', [ApiAbilities::CONTACTS_WRITE])->plainTextToken;
+        $contact = Contact::factory()->create(['workspace_id' => $workspace->id]);
+
+        $this->withToken($token)
+            ->patchJson("/api/v1/contacts/{$contact->id}", ['phone_e164' => '0334-5266444'])
+            ->assertOk()
+            ->assertJsonPath('data.phone_e164', '+923345266444');
     }
 
     // ── Show ─────────────────────────────────────────────────────────────────

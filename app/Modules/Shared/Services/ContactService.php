@@ -207,7 +207,7 @@ class ContactService
 
         $data = ['tags' => []];
 
-        if (isset($mapped['phone_e164']) && ($phone = $this->normalizeImportPhone($mapped['phone_e164'])) !== null) {
+        if (isset($mapped['phone_e164']) && ($phone = $this->normalizePhone($mapped['phone_e164'])) !== null) {
             $data['phone_e164'] = $phone;
         }
         if (isset($mapped['email'])) {
@@ -243,15 +243,23 @@ class ContactService
     }
 
     /**
-     * Light phone cleanup towards E.164: strips formatting, converts a leading
-     * "00" to "+", and prefixes "+" on bare digit strings. Returns null when the
-     * result is not a plausible E.164 number.
+     * Phone cleanup to E.164: strips spaces/dashes/brackets, converts a leading
+     * "00" to "+", turns a national number with a trunk "0" (03345266444) into
+     * +<default country code>3345266444, and prefixes "+" on bare digit strings
+     * that already carry a country code. Returns null when the result is not a
+     * plausible E.164 number.
+     *
+     * The default country code is config('api.default_phone_country_code').
+     * shortcut: one default country for the whole install, upgrade to a
+     * per-workspace country when workspaces from several countries use the API.
      */
-    private function normalizeImportPhone(string $raw): ?string
+    public function normalizePhone(string $raw): ?string
     {
         $phone = preg_replace('/[\s().\-]+/', '', trim($raw)) ?? '';
         if (str_starts_with($phone, '00')) {
             $phone = '+'.substr($phone, 2);
+        } elseif (preg_match('/^0\d+$/', $phone) === 1) {
+            $phone = '+'.config('api.default_phone_country_code').substr($phone, 1);
         }
         if ($phone !== '' && $phone[0] !== '+' && ctype_digit($phone)) {
             $phone = '+'.$phone;

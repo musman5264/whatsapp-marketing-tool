@@ -34,4 +34,8 @@ return [
         ],
     ],
 
+    // Calling code (digits, no "+") prepended to national numbers that start
+    // with a trunk "0", e.g. 03345266444 -> +923345266444. Set per install.
+    'default_phone_country_code' => env('DEFAULT_PHONE_COUNTRY_CODE', '92'),
+
 ];
