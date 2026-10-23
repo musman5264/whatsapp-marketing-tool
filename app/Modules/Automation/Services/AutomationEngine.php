@@ -761,6 +761,39 @@ class AutomationEngine
             'phone' => $number,
         ];
 
+        // {{#each api.products}}{{@n}}. {{name}}{{/each}} — one copy of the block per item
+        // of a list saved by an API Call node. Item values are defused so a "{{...}}"
+        // inside API data is never run as a token by the passes below.
+        $template = preg_replace_callback('/\{\{\s*#each\s+([\w.*]+)\s*\}\}(.*?)\{\{\s*\/each\s*\}\}/s', function ($m) use ($context) {
+            [$found, $items] = $this->contextLookup($context, $m[1]);
+            if (! $found || ! is_array($items)) {
+                return '';
+            }
+            $defuse = fn ($v) => str_replace('{{', '{ {', $this->tokenText($v));
+            $out = '';
+            foreach (array_values($items) as $i => $item) {
+                $out .= preg_replace_callback('/\{\{\s*(@n|this|[\w.]+)\s*\}\}/', function ($t) use ($item, $i, $defuse) {
+                    if ($t[1] === '@n') {
+                        return (string) ($i + 1);
+                    }
+                    if ($t[1] === 'this') {
+                        return $defuse($item);
+                    }
+                    if (is_array($item)) {
+                        $missing = new \stdClass;
+                        $v = data_get($item, $t[1], $missing);
+                        if ($v !== $missing) {
+                            return $defuse($v);
+                        }
+                    }
+
+                    return $t[0]; // not an item field: left for the passes below
+                }, $m[2]);
+            }
+
+            return $out;
+        }, $template);
+
         // {{whatsapp.name}}, {{whatsapp.number}}, {{whatsapp.phone}}
         $template = preg_replace_callback('/\{\{\s*whatsapp\.(\w+)\s*\}\}/i', function ($m) use ($whatsapp) {
             return (string) ($whatsapp[strtolower($m[1])] ?? '');
@@ -788,10 +821,11 @@ class AutomationEngine
 
         // Context tokens: {{context.key}} AND bare {{key}} that matches a context var
         // (Ask Question / AI Reply save their answers under a bare name).
-        $template = preg_replace_callback('/\{\{\s*(?:context\.)?([a-zA-Z_]\w*)\s*\}\}/', function ($matches) use ($context) {
-            $key = $matches[1];
-            if (array_key_exists($key, $context)) {
-                return (string) $context[$key];
+        // A dotted path reads into a saved API response: {{api.customer.name}}, {{api.products.0.name}}.
+        $template = preg_replace_callback('/\{\{\s*(?:context\.)?([a-zA-Z_]\w*(?:\.[\w*]+)*)\s*\}\}/', function ($matches) use ($context) {
+            [$found, $value] = $this->contextLookup($context, $matches[1]);
+            if ($found) {
+                return $this->tokenText($value);
             }
 
             // Leave known-prefix tokens for the passes above (already handled) but
@@ -805,6 +839,67 @@ class AutomationEngine
         $template = preg_replace('/[ \t]{2,}/', ' ', (string) $template);
 
         return trim((string) $template);
+    }
+
+    /**
+     * Read "root.a.b.0.c" from the run context. The root may hold an array or the raw JSON
+     * text an API Call node saved. "*" collects a field from every item.
+     *
+     * @return array{0: bool, 1: mixed} [found, value]
+     */
+    private function contextLookup(array $context, string $path): array
+    {
+        $path = preg_replace('/^context\./', '', $path);
+        $parts = explode('.', $path);
+        $root = array_shift($parts);
+        if (! array_key_exists($root, $context)) {
+            return [false, null];
+        }
+        $value = $context[$root];
+        if ($parts === []) {
+            return [true, $value];
+        }
+        if (is_string($value) && in_array(substr(ltrim($value), 0, 1), ['{', '['], true)) {
+            $decoded = json_decode($value, true);
+            $value = is_array($decoded) ? $decoded : $value;
+        }
+        if (! is_array($value)) {
+            return [false, null];
+        }
+        $missing = new \stdClass;
+        $found = data_get($value, implode('.', $parts), $missing);
+
+        return $found === $missing ? [false, null] : [true, $found];
+    }
+
+    /** A looked-up value as message text: lists of plain values join with ", ", other structures become JSON. */
+    private function tokenText(mixed $v): string
+    {
+        if ($v === null) {
+            return '';
+        }
+        if (is_bool($v)) {
+            return $v ? 'true' : 'false';
+        }
+        if (is_scalar($v)) {
+            return (string) $v;
+        }
+        $isPlainList = array_is_list($v) && count(array_filter($v, 'is_scalar')) === count($v);
+
+        return $isPlainList ? implode(', ', array_map(fn ($x) => (string) $x, $v)) : (string) json_encode($v, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    }
+
+    /** Poll options: a single "{{api.products.*.name}}" expands to one option per item; otherwise tokens are filled in the text. */
+    private function pollOptions(mixed $raw, Contact $contact, array $context): array
+    {
+        if (is_string($raw) && preg_match('/^\s*\{\{\s*([\w.*]+)\s*\}\}\s*$/', $raw, $m)) {
+            [$found, $items] = $this->contextLookup($context, $m[1]);
+            if ($found && is_array($items)) {
+                return $this->toList(array_map(fn ($x) => $this->tokenText($x), array_values($items)));
+            }
+        }
+
+        return $this->toList(is_string($raw) ? $this->renderTokens($raw, $contact, $context) : $raw);
     }
 
     // ─── Existing helpers ────────────────────────────────────────────────────
@@ -957,9 +1052,12 @@ class AutomationEngine
             $request = $request->withHeaders($headers);
         }
 
+        // Internal run keys (_awaiting_reply, _poll_result_var …) are not for the other server.
+        $sharedContext = array_filter($context, fn ($k) => ! str_starts_with((string) $k, '_'), ARRAY_FILTER_USE_KEY);
+
         $response = $method === 'get'
             ? $request->get($url, $payload)
-            : $request->{$method}($url, array_merge($payload, ['context' => $context]));
+            : $request->{$method}($url, array_merge($payload, ['context' => $sharedContext]));
 
         $contextUpdate = ['webhook_status' => $response->status()];
 
@@ -1038,8 +1136,7 @@ class AutomationEngine
             $field === 'whatsapp.number' => optional($contact)->phone_e164,
             (bool) $field && str_starts_with((string) $field, 'contact.') => optional($contact)->{str_replace('contact.', '', $field)},
             $field === 'message.body' => $context['message_body'] ?? null,
-            (bool) $field && str_starts_with((string) $field, 'context.') => $context[str_replace('context.', '', $field)] ?? null,
-            default => $context[$field] ?? null,
+            default => $this->conditionContextValue($context, (string) $field),
         };
 
         return match ($operator) {
@@ -1056,6 +1153,18 @@ class AutomationEngine
             'lt' => (float) $actual < (float) $value,
             default => false,
         };
+    }
+
+    /** Condition field from the run context. A dotted path ("api.hours.open_now") reads into a saved API reply; true/false there compare as "true"/"false". */
+    private function conditionContextValue(array $context, string $field): mixed
+    {
+        $key = preg_replace('/^context\./', '', $field);
+        if (! str_contains($key, '.')) {
+            return $context[$key] ?? null;
+        }
+        [$found, $value] = $this->contextLookup($context, $key);
+
+        return ! $found ? null : (is_bool($value) ? ($value ? 'true' : 'false') : $value);
     }
 
     /**
@@ -1374,7 +1483,7 @@ class AutomationEngine
             return ['status' => 'skipped', 'message' => 'Contact not found.'];
         }
         $question = $this->renderTokens((string) ($data['question'] ?? ''), $contact, $context);
-        $options = $this->toList($data['options'] ?? []);
+        $options = $this->pollOptions($data['options'] ?? [], $contact, $context);
         if ($question === '' || empty($options)) {
             return ['status' => 'error', 'message' => 'Question and options are required.'];
         }

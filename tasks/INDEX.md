@@ -21,11 +21,15 @@ _Last updated: 2026-10-14_
 | T-0035 | Outgoing message stays at one tick: check the live cause (reload, WAHA ack log), then decide on the dropped-ack fix | PLAN-000 / phase-01 | none (user checks) | high | blocked: needs your reload check and the WAHA log line |
 | T-0036 | Live WhatsApp Web sync and API/automation sends not working after the switch to redis | PLAN-000 / phase-01 | none (user checks) | high | blocked: needs the live env names, Redis ping, failed jobs and the log lines |
 | T-0037 | Outbound webhook 401 from the client endpoint; retries never run (release then fail) | PLAN-000 / phase-01 | none | medium | pending: needs the receiver's response body; retry fix is test-first |
+| T-0044 | Alibaba-style product cards on a QR number (photo + caption per product, then a poll) | PLAN-000 / phase-01 | T-0042 | medium | pending: design approval |
 | T-0039 | Inbound messages from LID senders were dropped when WAHA could not map the number (fixed in code, test first) | PLAN-000 / phase-01 | none (user checks) | high | blocked: needs the live log grep and one test message from a LID chat |
 
 ## Completed (most recent first)
 | ID | Task | Plan / Phase | Completed |
 |----|------|--------------|-----------|
+| T-0043 | EPOS integration spec for the EPOS team (EPOS-INTEGRATION-SPEC.md) | PLAN-000 / phase-01 | 2026-10-24 |
+| T-0042 | API Call node: nested variables, {{#each}} lists, poll options from a list, nested conditions, rename (tests green; live and visual check pending) | PLAN-000 / phase-01 | 2026-10-24 |
+| T-0041 | Logic doc for the automation API Call node (app/logic/automation-webhook-node.md) | PLAN-000 / phase-01 | 2026-10-24 |
 | T-0038 | Deployment command list: queue:failed on the no-key list; write commands documented behind the second key | PLAN-000 / phase-01 | 2026-10-14 |
 | T-0034 | media:fix-links repairs saved photo links that use the integer conversation id (dry run by default; not run on live) | PLAN-002 / phase-01 | 2026-10-14 |
 | T-0033 | API-triggered automation runs sent to queue 'automations'; workers listen on 'automation' (fixed, test first) | PLAN-000 / phase-01 | 2026-10-14 |
@@ -59,5 +63,5 @@ _Last updated: 2026-10-14_
 | PLAN-001-inbox-speed-and-media | Inbox speed, live updates and media | phase-01-speed-and-media | 1 / 5 |
 | PLAN-002-private-media | Chat media off the public disk; signed webhook media | phase-01-private-media | 4 / 5 |
 
-Next task ID: T-0041   (T-0006 and T-0007 are also in tasks/working from another session; IDs are never reused)
+Next task ID: T-0045   (T-0006 and T-0007 are also in tasks/working from another session; IDs are never reused)
 Next plan ID: PLAN-003

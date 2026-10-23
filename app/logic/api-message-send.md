@@ -42,7 +42,9 @@ SMS is unchanged (synchronous, `200`, `provider_message_id`).
 ## Looking the result up later
 `GET /api/v1/messages/{id}` (same token) returns
 `{message_id, conversation_id, status, provider_message_id, error, sent_at}`.
-`status` is `queued`, `sent` or `failed`. Only outbound messages of the token's own workspace are found (404 otherwise).
+`status` is the message row's status: `queued`, `sent` or `failed`, and on a WhatsApp Web (QR) number it later becomes
+`delivered` or `read` when WAHA reports the ticks (`WahaEventProcessor::handleAck()` → `applyStatusUpdate()`; Cloud API path unverified).
+No webhook fires for `delivered` / `read`. Only outbound messages of the token's own workspace are found (404 otherwise).
 
 ## Webhooks
 Endpoints registered with `POST /api/v1/webhooks` by the same user as the API key get `message.sent`

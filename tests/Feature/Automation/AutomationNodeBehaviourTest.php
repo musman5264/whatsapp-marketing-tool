@@ -501,6 +501,115 @@ class AutomationNodeBehaviourTest extends TestCase
             && isset($req['context']));
     }
 
+    // ─── API CALL: nested response variables, loops, poll options ──────────────
+
+    private function apiReply(): array
+    {
+        return [
+            'customer' => ['name' => 'Bilal', 'contact' => '0300111'],
+            'products' => [
+                ['name' => 'Club sandwich', 'price' => 500],
+                ['name' => 'Zinger', 'price' => 650],
+            ],
+        ];
+    }
+
+    private function apiRun(string $body): AutomationRun
+    {
+        Http::fake(['shop.test/*' => Http::response($this->apiReply(), 200)]);
+
+        return $this->runNodes(
+            [
+                ['id' => 'n1', 'type' => 'webhook', 'position' => ['x' => 0, 'y' => 100], 'data' => ['url' => 'https://shop.test/api', 'method' => 'GET', 'result_var' => 'api']],
+                ['id' => 'n2', 'type' => 'send_whatsapp', 'position' => ['x' => 0, 'y' => 200], 'data' => ['body' => $body]],
+            ],
+            [['id' => 'e1', 'source' => 'trigger-1', 'target' => 'n1'], ['id' => 'e2', 'source' => 'n1', 'target' => 'n2']],
+        );
+    }
+
+    public function test_api_call_response_fields_are_readable_with_dotted_paths(): void
+    {
+        $run = $this->apiRun('Hi {{api.customer.name}} ({{api.customer.contact}}), first: {{api.products.0.name}}');
+
+        $this->assertEquals('completed', $run->status);
+        $this->assertEquals('Hi Bilal (0300111), first: Club sandwich', $this->lastOutbound()->body);
+    }
+
+    public function test_dotted_path_that_does_not_exist_renders_empty_not_raw_token(): void
+    {
+        $this->apiRun('Hi{{api.customer.missing}}there');
+
+        $this->assertEquals('Hithere', $this->lastOutbound()->body);
+    }
+
+    public function test_each_block_lists_every_item_with_a_number(): void
+    {
+        $this->apiRun("Sandwiches:\n{{#each api.products}}{{@n}}. {{name}} - Rs {{price}}\n{{/each}}Reply with a number.");
+
+        $this->assertEquals("Sandwiches:\n1. Club sandwich - Rs 500\n2. Zinger - Rs 650\nReply with a number.", $this->lastOutbound()->body);
+    }
+
+    public function test_each_block_does_not_run_tokens_found_inside_api_data(): void
+    {
+        Http::fake(['shop.test/*' => Http::response(['products' => [['name' => '{{whatsapp.number}}']]], 200)]);
+        $this->runNodes(
+            [
+                ['id' => 'n1', 'type' => 'webhook', 'position' => ['x' => 0, 'y' => 100], 'data' => ['url' => 'https://shop.test/api', 'method' => 'GET', 'result_var' => 'api']],
+                ['id' => 'n2', 'type' => 'send_whatsapp', 'position' => ['x' => 0, 'y' => 200], 'data' => ['body' => '{{#each api.products}}[{{name}}]{{/each}}']],
+            ],
+            [['id' => 'e1', 'source' => 'trigger-1', 'target' => 'n1'], ['id' => 'e2', 'source' => 'n1', 'target' => 'n2']],
+        );
+
+        $this->assertStringNotContainsString('+15550000001', (string) $this->lastOutbound()->body);
+    }
+
+    public function test_poll_options_can_come_from_an_api_list(): void
+    {
+        $this->runSingleNode(
+            'send_poll',
+            ['question' => 'Pick one', 'options' => '{{api.products.*.name}}'],
+            ['api' => json_encode($this->apiReply())],
+        );
+
+        $titles = array_map(fn ($b) => $b['reply']['title'], $this->lastOutbound()->payload['interactive']['action']['buttons']);
+        $this->assertEquals(['Club sandwich', 'Zinger'], $titles);
+    }
+
+    public function test_condition_can_branch_on_a_nested_api_field(): void
+    {
+        foreach ([[true, 'OPEN'], [false, 'CLOSED']] as [$open, $expected]) {
+            // One URL per pass: a second Http::fake for the same URL would never be reached.
+            Http::fake(["shop.test/hours-{$expected}" => Http::response(['hours' => ['open_now' => $open, 'reopens' => 'Mon 09:00']], 200)]);
+
+            $this->runNodes(
+                [
+                    ['id' => 'n1', 'type' => 'webhook', 'position' => ['x' => 0, 'y' => 100], 'data' => ['url' => "https://shop.test/hours-{$expected}", 'method' => 'GET', 'result_var' => 'api']],
+                    ['id' => 'n2', 'type' => 'condition', 'position' => ['x' => 0, 'y' => 200], 'data' => ['field' => 'api.hours.open_now', 'operator' => 'equals', 'value' => 'true']],
+                    ['id' => 'n3', 'type' => 'send_whatsapp', 'position' => ['x' => 0, 'y' => 300], 'data' => ['body' => 'OPEN']],
+                    ['id' => 'n4', 'type' => 'send_whatsapp', 'position' => ['x' => 100, 'y' => 300], 'data' => ['body' => 'CLOSED, back {{api.hours.reopens}}']],
+                ],
+                [
+                    ['id' => 'e1', 'source' => 'trigger-1', 'target' => 'n1'],
+                    ['id' => 'e2', 'source' => 'n1', 'target' => 'n2'],
+                    ['id' => 'e3', 'source' => 'n2', 'target' => 'n3', 'sourceHandle' => 'true'],
+                    ['id' => 'e4', 'source' => 'n2', 'target' => 'n4', 'sourceHandle' => 'false'],
+                ],
+            );
+
+            $this->assertStringStartsWith($expected, (string) $this->lastOutbound()->body);
+        }
+        $this->assertEquals('CLOSED, back Mon 09:00', $this->lastOutbound()->body);
+    }
+
+    public function test_api_call_does_not_send_internal_run_keys_to_the_other_server(): void
+    {
+        Http::fake(['example.com/*' => Http::response(['ok' => true], 200)]);
+
+        $this->runSingleNode('webhook', ['url' => 'https://example.com/hook', 'method' => 'POST'], ['_awaiting_reply' => true, 'answer' => 'sandwiches']);
+
+        Http::assertSent(fn ($req) => $req['context']['answer'] === 'sandwiches' && ! array_key_exists('_awaiting_reply', $req['context']));
+    }
+
     // ─── MULTI-ACCOUNT / MULTI-CHANNEL / WORKSPACE ─────────────────────────────
 
     public function test_whatsapp_send_uses_contacts_existing_account_not_first(): void

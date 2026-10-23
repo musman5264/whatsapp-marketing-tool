@@ -13,6 +13,9 @@ Tracked write-ups of what is **built and working now**. Update a file in place w
 | [deployment-commands.md](deployment-commands.md) | Deployment page Run box: exact-match command allowlist (app and `public/deploy.php`), second key, no built-in deploy key |
 | [private-media.md](private-media.md) | Chat media on the private disk: login route, signed links (WAHA 15 min), `media:make-private` dry run and `--apply`; `media:fix-links` repairs links saved with the integer conversation id |
 | [webhook-deliveries.md](webhook-deliveries.md) | Outbound webhooks: exact body and headers stored per attempt, `X-Webhook-Signature` format, Deliveries page details, double-encoding fix |
+| [automation-webhook-node.md](automation-webhook-node.md) | Automation "API Call" node (was Call Webhook): fields, what runs, response saved as variables, dotted paths, `{{#each}}` lists, poll options from a list, conditions on nested fields, QR-number caveats |
+
+The contract for the EPOS team is [EPOS-INTEGRATION-SPEC.md](../../EPOS-INTEGRATION-SPEC.md) (repo root).
 
 ## How to write one
 Short sections: what it does, where the code is (file paths), the data flow, failure behaviour, how to test, known unverified points.

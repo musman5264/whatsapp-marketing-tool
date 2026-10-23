@@ -1583,10 +1583,16 @@ function WebhookFields({ d, set }) {
                     placeholder="e.g. customer"
                 />
                 {rv && (
-                    <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">
-                        Use <code className="font-mono">{`{{${rv}_fieldname}}`}</code> in messages below.
-                        e.g. <code className="font-mono">{`{{${rv}_reply_text}}`}</code>
-                    </p>
+                    <div className="mt-1 space-y-1 text-xs text-gray-400 dark:text-gray-500">
+                        <p>
+                            {t('automation.api_call_hint_field')}
+                            <code className="font-mono">{`{{${rv}.customer.name}}`}</code>, <code className="font-mono">{`{{${rv}.products.0.name}}`}</code>
+                        </p>
+                        <p>
+                            {t('automation.api_call_hint_list')}
+                            <code className="font-mono break-all">{`{{#each ${rv}.products}}{{@n}}. {{name}}{{/each}}`}</code>
+                        </p>
+                    </div>
                 )}
             </Field>
         </>
