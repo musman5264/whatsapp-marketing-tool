@@ -121,6 +121,15 @@ class AutomationEngine
             $var = $context['_reply_var'] ?? 'answer';
             $context[$var] = $messageBody;
             unset($context['_awaiting_reply'], $context['_reply_var']);
+
+            // Parked with no step to continue at (an Ask Question with nothing connected after it): resuming
+            // would restart the flow from the trigger and repeat the question, so the reply just ends the run.
+            if (empty($run->resume_node_id)) {
+                $run->update(['context' => $context, 'status' => 'completed', 'completed_at' => now()]);
+
+                continue;
+            }
+
             $run->update(['context' => $context]);
 
             $this->runNowOrQueue($run);
@@ -1390,6 +1399,10 @@ class AutomationEngine
         $var = ($data['variable'] ?? '') ?: 'answer';
         $edges = collect($run->automation->edges ?? []);
         $resumeNodeId = $this->nextNodeId($edges, (string) $run->current_node_id, null);
+        if ($resumeNodeId === null) {
+            // Nothing to continue to, so nothing to wait for: waiting here made the next reply restart the flow.
+            return ['status' => 'ok', 'message' => 'Asked question. Nothing is connected after it, so the flow ends here (connect a step to use the answer).'];
+        }
         $run->update(['status' => 'waiting', 'resume_node_id' => $resumeNodeId]);
 
         return [

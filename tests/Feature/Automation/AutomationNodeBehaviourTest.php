@@ -255,6 +255,34 @@ class AutomationNodeBehaviourTest extends TestCase
         $this->assertTrue($this->contact->fresh()->tags()->where('name', 'replied')->exists());
     }
 
+    public function test_ask_question_with_nothing_after_it_does_not_wait_and_never_repeats_the_question(): void
+    {
+        $run = $this->runSingleNode('ask_question', ['question' => 'Pick one', 'variable' => 'user']);
+
+        // Nothing to continue to, so there is nothing to wait for.
+        $this->assertEquals('completed', $run->status);
+        $this->assertEquals(1, Message::where('direction', 'out')->count());
+
+        // A reply must not restart the flow and send the question again.
+        app(AutomationEngine::class)->resumeAwaitingReplies($this->workspace->id, $this->contact->id, '1');
+
+        $this->assertEquals(1, Message::where('direction', 'out')->count());
+    }
+
+    public function test_a_run_already_parked_with_no_next_step_ends_on_the_reply_instead_of_restarting(): void
+    {
+        $run = $this->runSingleNode('ask_question', ['question' => 'Pick one', 'variable' => 'user']);
+        // How the old code left it: waiting for a reply, with no step to resume at.
+        $run->update(['status' => 'waiting', 'resume_node_id' => null, 'context' => ['_awaiting_reply' => true, '_reply_var' => 'user']]);
+        $before = Message::where('direction', 'out')->count();
+
+        app(AutomationEngine::class)->resumeAwaitingReplies($this->workspace->id, $this->contact->id, '3');
+
+        $this->assertEquals('completed', $run->fresh()->status);
+        $this->assertEquals('3', $run->fresh()->context['user']);
+        $this->assertEquals($before, Message::where('direction', 'out')->count());
+    }
+
     // ─── LOGIC ────────────────────────────────────────────────────────────────
 
     public function test_condition_routes_true_branch(): void

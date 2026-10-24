@@ -14,6 +14,7 @@ Tracked write-ups of what is **built and working now**. Update a file in place w
 | [private-media.md](private-media.md) | Chat media on the private disk: login route, signed links (WAHA 15 min), `media:make-private` dry run and `--apply`; `media:fix-links` repairs links saved with the integer conversation id |
 | [webhook-deliveries.md](webhook-deliveries.md) | Outbound webhooks: exact body and headers stored per attempt, `X-Webhook-Signature` format, Deliveries page details, double-encoding fix |
 | [automation-webhook-node.md](automation-webhook-node.md) | Automation "API Call" node (was Call Webhook): fields, what runs, response saved as variables, dotted paths, `{{#each}}` lists, poll options from a list, conditions on nested fields, QR-number caveats |
+| [automation-ask-question.md](automation-ask-question.md) | Ask Question node: waiting for a reply, which message resumes it, why an unconnected Ask Question used to repeat the menu on every message (fixed) |
 | [epos-integration.md](epos-integration.md) | EPOS link API (`/api/v1/integrations`), manifest cache and validation, health/backoff, SSRF-safe outbound client (slice 1; executor, builder node and inbox panel not built yet) |
 
 The contract for the EPOS team is [EPOS-INTEGRATION-SPEC.md](../../EPOS-INTEGRATION-SPEC.md) (repo root).
