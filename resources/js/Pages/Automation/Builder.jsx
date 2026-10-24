@@ -1,6 +1,6 @@
 import { Head, router, usePage } from '@inertiajs/react';
 import ClientLayout from '@/Layouts/ClientLayout';
-import { useCallback, useContext, useState, createContext, useMemo } from 'react';
+import { useCallback, useContext, useEffect, useState, createContext, useMemo } from 'react';
 import {
     ArrowLeft, Save, Play, Pause, Copy, Check, RefreshCw,
     X, Zap, Mail, Phone, Clock, GitBranch,
@@ -17,6 +17,8 @@ import MediaUpload from '@/Components/MediaUpload';
 import { Link } from '@inertiajs/react';
 import { useTranslation } from 'react-i18next';
 import axios from 'axios';
+import { EposContext, EposFields, eposExitKeys, resolveEpos } from './EposNode';
+import { pickLabel } from '@/lib/epos';
 import {
     ReactFlow,
     ReactFlowProvider,
@@ -101,6 +103,8 @@ const NODE_DEFS = {
     google_sheets:       { labelKey: 'automation.node_google_sheets',       color: '#0f9d58', bg: '#f0fdf4', icon: Sheet,             category: 'integrations', qr: true },
     google_docs:         { labelKey: 'automation.node_google_docs',         color: '#4285f4', bg: '#eff6ff', icon: FileText,          category: 'integrations', qr: true },
     google_forms:        { labelKey: 'automation.node_google_forms',        color: '#7248b9', bg: '#f5f3ff', icon: ClipboardCheck,    category: 'integrations', qr: true },
+    // Shown in the palette only while the workspace has a linked E-POS.
+    epos:                { labelKey: 'automation.node_epos',                color: '#0f766e', bg: '#f0fdfa', icon: Store,             category: 'integrations', qr: true },
 };
 
 /* Small green "(QR)" tag: this node sends as-is on a personal / QR-linked number. */
@@ -178,6 +182,7 @@ function collectFlowVariables(nodes) {
             const rv = String(d.result_var).trim();
             if (rv) vars.add(rv);
         }
+        if (nt === 'epos') vars.add(String(d.result_var ?? '').trim() || 'epos');
 
         for (const k of TEXT_KEYS) {
             const v = d[k];
@@ -218,16 +223,25 @@ const NodeActionsContext = createContext({ onConfigure: () => {}, onDelete: () =
 
 /* ─── Custom Nodes ───────────────────────────────────────────── */
 function BaseNode({ id, data, selected }) {
-    const { t } = useTranslation();
+    const { t, i18n } = useTranslation();
     const { onConfigure, onDelete } = useContext(NodeActionsContext);
     const { nodeType, label, configured } = data;
     const def = NODE_DEFS[nodeType];
     const defLabel = def ? t(def.labelKey) : nodeType;
     const defColor = def?.color ?? '#6b7280';
-    const isCondition = nodeType === 'condition';
+    const eposCtx = useContext(EposContext);
+    const isEpos = nodeType === 'epos';
+    const epos = isEpos ? resolveEpos(data, eposCtx.integrations) : null;
+    // Two exits: a condition is Yes / No; an E-POS step is Found / No data (Sent / Not sent for an action).
+    const isCondition = nodeType === 'condition' || isEpos;
+    const [exitYes, exitNo] = isEpos ? eposExitKeys(epos.capability).map((k) => t(k)) : [t('common.yes'), t('common.no')];
 
     const hasLabel = label && label !== defLabel;
-    const summary = hasLabel ? label : (configured ? summarizeConfig(data, t) : '');
+    const eposSummary = isEpos && configured
+        ? (epos.capability ? pickLabel(epos.capability.label, i18n.language) : data.capability)
+        : '';
+    const summary = hasLabel ? label : (isEpos ? eposSummary : (configured ? summarizeConfig(data, t) : ''));
+    const eposGone = isEpos && eposCtx.loaded && !eposCtx.failed && (epos.gone || (data.capability && eposCtx.integrations.length === 0));
 
     const actionBtnStyle = {
         display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -275,6 +289,11 @@ function BaseNode({ id, data, selected }) {
                     }}>
                         {summary || t('automation.click_to_configure')}
                     </div>
+                    {eposGone && (
+                        <div role="status" style={{ display: 'flex', alignItems: 'center', gap: 3, marginTop: 2, fontSize: 10, fontWeight: 600, color: '#b45309' }}>
+                            <AlertTriangle size={10} aria-hidden="true" /> {eposCtx.integrations.length === 0 ? t('automation.epos_unlinked_badge') : t('automation.epos_gone_badge')}
+                        </div>
+                    )}
                 </div>
 
                 <div className="nodrag" style={{ display: 'flex', alignItems: 'center', gap: 1, flexShrink: 0 }}>
@@ -305,8 +324,8 @@ function BaseNode({ id, data, selected }) {
             {isCondition ? (
                 <>
                     <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0 12px 7px', fontSize: 9, fontWeight: 600 }}>
-                        <span style={{ color: '#10b981' }}>✓ {t('common.yes')}</span>
-                        <span style={{ color: '#ef4444' }}>✗ {t('common.no')}</span>
+                        <span style={{ color: '#10b981' }}>✓ {exitYes}</span>
+                        <span style={{ color: '#ef4444' }}>✗ {exitNo}</span>
                     </div>
                     <Handle type="source" id="true"  position={Position.Bottom} style={{ left: '30%', background: '#fff', width: 9, height: 9, border: '2px solid #10b981' }} />
                     <Handle type="source" id="false" position={Position.Bottom} style={{ left: '70%', background: '#fff', width: 9, height: 9, border: '2px solid #ef4444' }} />
@@ -437,6 +456,7 @@ const FIELD_COMPONENTS = {
     google_sheets: GoogleSheetsFields,
     google_docs: GoogleDocsFields,
     google_forms: GoogleFormsFields,
+    epos: EposFields,
 };
 
 function ConfigPanel({ node, onClose, onChange }) {
@@ -488,7 +508,7 @@ function ConfigPanel({ node, onClose, onChange }) {
                 </Field>
 
                 {/* Per-type fields */}
-                {Fields && <Fields d={d} set={set} />}
+                {Fields && <Fields d={d} set={set} setMany={(patch) => onChange(node.id, { ...d, ...patch, configured: true })} />}
 
                 {/* Token inserter */}
                 <TokenBar />
@@ -2088,6 +2108,18 @@ function AutomationBuilderInner({ automation: initial }) {
     const [aiError, setAiError] = useState(null);
     const [confirmDelete, setConfirmDelete] = useState(null);
 
+    // Linked E-POS systems, loaded after the page opens so a slow E-POS never delays the builder.
+    const [epos, setEpos] = useState({ loaded: false, failed: false, integrations: [] });
+    useEffect(() => {
+        let live = true;
+        axios.get(route('client.automations.epos'))
+            .then(res => { if (live) setEpos({ loaded: true, failed: false, integrations: res.data.integrations ?? [] }); })
+            .catch(() => { if (live) setEpos({ loaded: true, failed: true, integrations: [] }); });
+        return () => { live = false; };
+    }, []);
+    const flowVars = useMemo(() => collectFlowVariables(nodes), [nodes]);
+    const eposCtx = useMemo(() => ({ ...epos, flowVars }), [epos, flowVars]);
+
     const webhookUrl = automation.trigger_token
         ? `${window.location.origin}/webhooks/automation/${automation.trigger_token}`
         : null;
@@ -2254,12 +2286,15 @@ function AutomationBuilderInner({ automation: initial }) {
     const grouped = CATEGORY_ORDER.map(cat => ({
         cat,
         items: Object.entries(NODE_DEFS).filter(([type, def]) =>
-            def.category === cat && (q === '' || type.includes(q) || t(def.labelKey).toLowerCase().includes(q))
+            def.category === cat
+            && (type !== 'epos' || epos.integrations.length > 0)
+            && (q === '' || type.includes(q) || t(def.labelKey).toLowerCase().includes(q))
         ),
     })).filter(g => g.items.length > 0);
 
     return (
         <NodeActionsContext.Provider value={{ onConfigure: configureNode, onDelete: deleteNode }}>
+        <EposContext.Provider value={eposCtx}>
         <div style={{ display: 'flex', height: 'calc(100vh - 130px)', borderRadius: 16, overflow: 'hidden', border: '1px solid #e5e7eb', boxShadow: '0 4px 24px rgba(0,0,0,0.07)' }}>
             {/* ── Sidebar ── */}
             <div style={{ width: 234, display: 'flex', flexDirection: 'column', background: '#fafafa', borderRight: '1px solid #e5e7eb', overflowY: 'auto' }}>
@@ -2318,6 +2353,17 @@ function AutomationBuilderInner({ automation: initial }) {
 
             {/* ── Canvas ── */}
             <div style={{ flex: 1, position: 'relative' }} onDrop={onDrop} onDragOver={onDragOver}>
+                {/* Only workspace administrators receive a status, so only they see this. */}
+                {epos.integrations.some(i => i.status === 'unreachable') && (
+                    <div role="alert" style={{
+                        position: 'absolute', top: 64, left: 8, right: 8, zIndex: 8, display: 'flex', alignItems: 'center', gap: 8,
+                        padding: '8px 12px', borderRadius: 10, background: '#fef2f2', border: '1px solid #fecaca', color: '#991b1b', fontSize: 12,
+                    }}>
+                        <AlertTriangle size={14} aria-hidden="true" style={{ flexShrink: 0 }} />
+                        <span style={{ flex: 1 }}>{t('automation.epos_unreachable_banner')}</span>
+                        <Link href={route('client.integrations.epos.index')} style={{ fontWeight: 600, textDecoration: 'underline', whiteSpace: 'nowrap' }}>{t('automation.epos_open_status')}</Link>
+                    </div>
+                )}
                 <ReactFlow
                     nodes={nodes}
                     edges={edges}
@@ -2447,6 +2493,7 @@ function AutomationBuilderInner({ automation: initial }) {
             {aiOpen && <AiGenerateModal prompt={aiPrompt} setPrompt={setAiPrompt} loading={aiLoading} error={aiError} onClose={() => setAiOpen(false)} onGenerate={generateAi} />}
             {confirmDelete && <ConfirmDeleteModal target={confirmDelete} onCancel={() => resolveDelete(false)} onConfirm={() => resolveDelete(true)} />}
         </div>
+        </EposContext.Provider>
         </NodeActionsContext.Provider>
     );
 }

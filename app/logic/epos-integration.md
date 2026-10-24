@@ -77,3 +77,29 @@ Variables written: `{{epos}}` (the JSON answer, so `{{epos.name}}`, `{{#each epo
 The run never fails because of EPOS. Log line `external.call` has integration id, capability, status, ms, found; no phone, key or body.
 
 Checked 2026-10-24: `OK (134 tests, 349 assertions)` for `tests/Feature/Automation`, `ProductionHardening/AutomationEngineTest`, `Integrations`, `IntegrationApiTest`; phpstan level 6 clean on `app/Modules/Integrations/Services/External`. Real checks on this machine: a server that sleeps 6 s gives `unreachable` after 5.2 s; `CURLOPT_RESOLVE` pinning connects to the pinned address and honours a wrong pin. HTTPS to a public host fails here only because this PHP has no CA bundle (a plain request fails the same way); not checked on the server image.
+
+## Builder node and status page (slice 3)
+Code read, tests run and screens looked at in a browser on 2026-10-24 (local, private test database, a seeded link; no real EPOS).
+
+| Piece | File |
+|---|---|
+| Builder data endpoint `GET /app/automations/epos` (`client.automations.epos`) | `app/Modules/Automation/Http/Controllers/AutomationController.php` `epos()` |
+| E-POS node UI: context, panel fields, exit labels | `resources/js/Pages/Automation/EposNode.jsx`, wired in `Builder.jsx` (`NODE_DEFS.epos`, `BaseNode`, `FIELD_COMPONENTS`, provider, palette filter, banner) |
+| Helpers (`pickLabel`, `prefixTemplate`, `isCustomerPhoneParam`, `outputVariables`) | `resources/js/lib/epos.js`, tests `resources/js/__tests__/epos.test.js` |
+| Admin status page `GET /app/integrations/epos`, check `POST /app/integrations/epos/{id}/check` | `app/Http/Controllers/Client/EposIntegrationController.php`, `resources/js/Pages/client/Integrations/Epos.jsx` |
+| Backend tests | `tests/Feature/Client/EposIntegrationScreensTest.php` (the page test needs `public/build` to contain the page) |
+| Strings | `resources/js/locales/en.json` (`automation.epos_*`, `epos_status.*`), `ur.json` (only these keys) |
+
+How it behaves:
+- The builder loads the E-POS list after it opens (not with the page), so a slow EPOS never delays the builder. The endpoint re-reads a manifest older than 10 minutes. It returns capabilities with params and outputs, never the key or the host. `status` and `issues` are only sent to workspace administrators (`isClientAdministrator()`); everyone else gets none, so only administrators see the unreachable banner.
+- **Palette:** "E-POS" (Integrations group) appears only while the workspace has a link. A node already on the canvas stays visible without one and shows the badge "E-POS not linked".
+- **Node panel:** business picker (only if more than one link), question picker grouped by `group` (label in the user's language, English fallback), then one control per manifest param: customer phone params (type `phone`, source `sender_phone`, or named `phone`) are a disabled box "Customer's WhatsApp number"; a `choice` param is a dropdown of the manifest choices plus earlier answers (`{{var}}`); other types are an input plus an "answer from the chat" picker. The result variable (default `epos`), the answer variables (`{{epos.path}}` with type, plus `{{epos.reason}}` for actions), the exits hint, and a read-only copy of `summary_template` (with the variable name put in front of top-level fields and each-lists) are shown. No URL, header or key field exists on this node.
+- **Exits:** handles `true` / `false`, labelled Found / No data, or Sent / Not sent for an action.
+- **Removed question:** a node whose question is no longer in the manifest shows "Question removed" on the canvas and a warning in the panel; at run time it takes the "No data" exit (slice 2).
+- **Status page** (administrators; staff get 403): per link the address host, list version, last read, question count, next retry and failed attempts, the skipped-question list with reasons, a "Check now" button, and the red banner while unreachable. Nothing on the page can change or remove the link: linking, key rotation and unlinking happen from EPOS through the API.
+- **RTL:** manifest labels, descriptions and the reply text use `dir="auto"` so Urdu text lays out right to left. The page and builder chrome follow the document direction (a locale's `is_rtl` flag).
+- **Urdu:** `ur.json` holds only the new strings. The language is not offered until an admin adds a locale with code `ur` (and RTL on) in the admin Locales screen; other keys then fall back to English.
+
+Checked: `OK (258 tests, 735 assertions)` for `tests/Feature/{Client,Automation,Integrations,Api}`, `ApiTokenTest`, `AutomationEngineTest`; vitest `21 passed` (this also needed `resources/js/__tests__/setup.js` renamed to `setup.jsx` because it contains JSX and the whole vitest suite could not start before). eslint clean on the new files (the existing `Builder.jsx` has 1 error and 3 warnings in code I did not touch). Looked at in a browser: status page at 360px and 1920px in light and dark; builder at 1920px in light (node, exits, removed badge, panel, banner). **Not looked at:** the builder at 360px or in dark mode (the builder canvas uses fixed inline light colours and was not made responsive before this change), an Urdu locale on screen, an RTL builder.
+
+Known gaps: no sidebar link to the status page (reachable from the builder banner, the node panel and the URL); the builder does not warn when an E-POS node has an unconnected exit.

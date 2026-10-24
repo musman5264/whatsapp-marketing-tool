@@ -8,6 +8,7 @@ use App\Http\Controllers\Client\ApiUsageController;
 use App\Http\Controllers\Client\AuditLogController as ClientAuditLogController;
 use App\Http\Controllers\Client\BillingController;
 use App\Http\Controllers\Client\DashboardController as ClientDashboardController;
+use App\Http\Controllers\Client\EposIntegrationController;
 use App\Http\Controllers\Client\InvitationController;
 use App\Http\Controllers\Client\MediaController;
 use App\Http\Controllers\Client\NotificationController;
@@ -52,6 +53,10 @@ Route::middleware(['verified'])->group(function () {
 
     // Audit log (client admins only)
     Route::get('/audit-log', [ClientAuditLogController::class, 'index'])->name('audit-log.index');
+
+    // Linked E-POS systems: status page (client admins only)
+    Route::get('/integrations/epos', [EposIntegrationController::class, 'index'])->name('integrations.epos.index');
+    Route::post('/integrations/epos/{integration}/check', [EposIntegrationController::class, 'check'])->whereNumber('integration')->name('integrations.epos.check');
 
     // Settings
     Route::get('/settings', [ClientSettingsController::class, 'index'])->name('settings.index');

@@ -11,7 +11,9 @@ use App\Modules\Automation\Services\AutomationEngine;
 use App\Modules\Automation\Services\WorkflowGenerator;
 use App\Modules\Broadcasting\Models\Campaign;
 use App\Modules\Ecommerce\Models\EcommerceStore;
+use App\Modules\Integrations\Models\ExternalIntegration;
 use App\Modules\Integrations\Models\IntegrationConfig;
+use App\Modules\Integrations\Services\External\ManifestFetcher;
 use App\Modules\Whatsapp\Models\WhatsappTemplate;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -50,6 +52,36 @@ class AutomationController extends Controller
         ]));
 
         return redirect()->route('client.automations.edit', $auto->uuid)->with('success', 'Automation created.');
+    }
+
+    /**
+     * The linked E-POS systems and the questions each one offers, for the builder's E-POS node.
+     * Loaded by the builder after it opens, so a slow EPOS never delays the page. A manifest older
+     * than 10 minutes is re-read here. Never the key or the host; status and issues are for
+     * workspace administrators only.
+     */
+    public function epos(Request $request, ManifestFetcher $manifests): JsonResponse
+    {
+        $isAdmin = $request->user()->isClientAdministrator();
+        $rows = ExternalIntegration::where('workspace_id', $this->workspaceId($request))->where('type', 'epos')->orderBy('id')->get();
+
+        $integrations = $rows->map(function (ExternalIntegration $i) use ($manifests, $isAdmin) {
+            $manifests->refreshIfStale($i);
+
+            return [
+                'id' => $i->id,
+                'name' => $i->name,
+                'manifest_version' => $i->manifest_version,
+                'capabilities' => collect($i->manifest['capabilities'] ?? [])->map(fn ($c) => array_intersect_key($c, array_flip([
+                    'key', 'kind', 'group', 'label', 'description', 'params', 'outputs', 'summary_template',
+                ])))->values(),
+            ] + ($isAdmin ? [
+                'status' => $i->status,
+                'issues' => $i->manifest_issues ?? [],
+            ] : []);
+        });
+
+        return response()->json(['integrations' => $integrations->values()]);
     }
 
     public function edit(Request $request, Automation $automation): Response
