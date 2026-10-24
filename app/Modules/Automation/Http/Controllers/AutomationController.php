@@ -19,6 +19,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -82,6 +83,74 @@ class AutomationController extends Controller
         });
 
         return response()->json(['integrations' => $integrations->values()]);
+    }
+
+    /**
+     * Import an exported automation file as a NEW draft in the importer's own workspace. The file is untrusted:
+     * its workspace, status, token and ids are never used, it is size-limited, and only its steps, connections
+     * and trigger settings are kept. It never touches an existing automation.
+     */
+    public function import(Request $request): RedirectResponse
+    {
+        $request->validate(['payload' => ['required', 'string', 'max:1000000']]);
+        $file = json_decode($request->input('payload'), true);
+
+        $nodes = $file['automation']['nodes'] ?? null;
+        $fail = fn (string $why) => throw ValidationException::withMessages(['payload' => $why]);
+
+        if (! is_array($file) || ($file['format'] ?? null) !== 'whatsmine.automation' || ! is_array($file['automation'] ?? null)) {
+            $fail('This is not an exported automation file.');
+        }
+        if (! is_int($file['version'] ?? null) || $file['version'] < 1 || $file['version'] > 1) {
+            $fail('This file was made by a newer version and cannot be imported.');
+        }
+        if (! is_array($nodes) || $nodes === [] || count($nodes) > 200) {
+            $fail('The file must contain between 1 and 200 steps.');
+        }
+
+        $ids = [];
+        $cleanNodes = [];
+        foreach ($nodes as $node) {
+            $id = is_array($node) ? ($node['id'] ?? null) : null;
+            $type = is_array($node) ? ($node['type'] ?? null) : null;
+            if (! is_string($id) || $id === '' || strlen($id) > 64 || isset($ids[$id])
+                || ! is_string($type) || ! preg_match('/^[A-Za-z][A-Za-z0-9_]{1,39}$/', $type)) {
+                $fail('A step in the file is not valid.');
+            }
+            $ids[$id] = true;
+            $cleanNodes[] = [
+                'id' => $id,
+                'type' => $type,
+                'position' => is_array($node['position'] ?? null) ? $node['position'] : ['x' => 0, 'y' => 0],
+                'data' => is_array($node['data'] ?? null) ? $node['data'] : [],
+            ];
+        }
+
+        $edges = [];
+        foreach ((array) ($file['automation']['edges'] ?? []) as $edge) {
+            if (is_array($edge) && isset($ids[$edge['source'] ?? null], $ids[$edge['target'] ?? null]) && count($edges) < 400) {
+                $edges[] = [
+                    'id' => is_string($edge['id'] ?? null) ? $edge['id'] : 'e'.(count($edges) + 1),
+                    'source' => $edge['source'],
+                    'target' => $edge['target'],
+                    'sourceHandle' => is_string($edge['sourceHandle'] ?? null) ? $edge['sourceHandle'] : null,
+                    'targetHandle' => is_string($edge['targetHandle'] ?? null) ? $edge['targetHandle'] : null,
+                ];
+            }
+        }
+
+        $triggerType = $file['automation']['trigger_type'] ?? null;
+        $automation = Automation::create([
+            'workspace_id' => $this->workspaceId($request),
+            'name' => Str::limit((string) ($file['automation']['name'] ?? 'Automation'), 110, '').' (imported)',
+            'status' => 'draft',
+            'trigger_type' => is_string($triggerType) && preg_match('/^[a-z0-9_.]{1,64}$/', $triggerType) ? $triggerType : null,
+            'trigger_config' => is_array($file['automation']['trigger_config'] ?? null) ? $file['automation']['trigger_config'] : [],
+            'nodes' => $cleanNodes,
+            'edges' => $edges,
+        ]);
+
+        return redirect()->route('client.automations.edit', $automation->uuid)->with('success', 'Automation imported as a draft. Check its steps, then activate it.');
     }
 
     public function edit(Request $request, Automation $automation): Response

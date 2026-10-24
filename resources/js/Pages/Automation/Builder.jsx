@@ -11,6 +11,7 @@ import {
     UserCheck, ExternalLink, MapPin, BarChart3, CalendarClock, Video,
     ClipboardList, ClipboardCheck, Store, Sheet, LayoutTemplate, AlertTriangle, GripVertical,
     FlaskConical, Loader2, CheckCircle2, MinusCircle, AlertCircle, ChevronDown, SmilePlus,
+    ArrowUpDown, Download, Upload,
 } from 'lucide-react';
 import { ChannelBrandIcon } from '@/Components/BrandIcons';
 import MediaUpload from '@/Components/MediaUpload';
@@ -19,6 +20,7 @@ import { useTranslation } from 'react-i18next';
 import axios from 'axios';
 import { EposContext, EposFields, eposExitKeys, resolveEpos } from './EposNode';
 import { pickLabel } from '@/lib/epos';
+import { buildExport, downloadText, fileSafeName, flowToMarkdown } from '@/lib/automationFile';
 import {
     ReactFlow,
     ReactFlowProvider,
@@ -1797,6 +1799,44 @@ function ConfirmDeleteModal({ target, onCancel, onConfirm }) {
 
 const AI_EXAMPLES = ['automation.ai_example_welcome', 'automation.ai_example_abandoned', 'automation.ai_example_faq'];
 
+/** Export (JSON to import again, Markdown to read) and import (as a new draft in this workspace). */
+function FileMenuModal({ onClose, onExportJson, onExportMarkdown, onImport, importing, error }) {
+    const { t } = useTranslation();
+    const rowBtn = { ...ghostBtnStyle, display: 'flex', alignItems: 'center', gap: 8, width: '100%', textAlign: 'left', padding: '10px 12px' };
+    const heading = { fontSize: 11, fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 };
+    const note = { fontSize: 11, color: '#6b7280', marginTop: 6, lineHeight: 1.4 };
+    return (
+        <div onClick={importing ? undefined : onClose} style={overlayStyle}>
+            <div role="dialog" aria-modal="true" aria-label={t('automation.file_title')} onClick={e => e.stopPropagation()} style={{ ...modalStyle, width: 460 }}>
+                <div style={modalHeaderStyle}>
+                    <div style={{ fontWeight: 700, fontSize: 14, color: '#111827' }}>{t('automation.file_title')}</div>
+                    <button onClick={onClose} disabled={importing} style={iconBtnStyle} aria-label={t('common.close')}><X size={16} /></button>
+                </div>
+                <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 14 }}>
+                    <div>
+                        <div style={heading}>{t('automation.file_export')}</div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                            <button onClick={onExportJson} style={rowBtn}><Download size={14} aria-hidden="true" /> {t('automation.file_export_json')}</button>
+                            <button onClick={onExportMarkdown} style={rowBtn}><FileText size={14} aria-hidden="true" /> {t('automation.file_export_md')}</button>
+                        </div>
+                        <p style={note}>{t('automation.file_export_note')}</p>
+                    </div>
+                    <div>
+                        <div style={heading}>{t('automation.file_import')}</div>
+                        <label style={{ ...rowBtn, cursor: importing ? 'not-allowed' : 'pointer', opacity: importing ? 0.7 : 1 }}>
+                            {importing ? <Loader2 size={14} className="animate-spin" aria-hidden="true" /> : <Upload size={14} aria-hidden="true" />} {t('automation.file_import_choose')}
+                            <input type="file" accept=".json,application/json" disabled={importing} style={{ display: 'none' }}
+                                onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) onImport(f); }} />
+                        </label>
+                        <p style={note}>{t('automation.file_import_note')}</p>
+                        {error && <div role="alert" style={{ marginTop: 8, padding: '8px 10px', borderRadius: 8, background: '#fef2f2', border: '1px solid #fecaca', color: '#991b1b', fontSize: 12 }}>{error}</div>}
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+}
+
 function AiGenerateModal({ prompt, setPrompt, loading, error, onClose, onGenerate }) {
     const { t } = useTranslation();
     return (
@@ -1865,6 +1905,15 @@ function runFlowLint(nodes, edges, automation) {
         if (node.type === 'triggerNode') continue; // Skip trigger
         const outs = outgoing.get(node.id) ?? [];
         const nodeType = node.data?.nodeType;
+
+        if (nodeType === 'ask_question' && outs.length === 0) {
+            warnings.push({
+                id: `ask-end-${node.id}`,
+                nodeId: node.id,
+                type: 'dead_end',
+                messageKey: 'automation.warn_ask_question_end',
+            });
+        }
 
         if (nodeType === 'condition') {
             const hasYes = outs.some(o => o.handle === 'true');
@@ -2070,7 +2119,7 @@ function FlowLint({ nodes, edges, automation }) {
                                         })()
                                         : 'Trigger'}
                                 </div>
-                                <div>{warn.message}</div>
+                                <div>{warn.messageKey ? t(warn.messageKey) : warn.message}</div>
                             </div>
                         ))}
                     </div>
@@ -2103,6 +2152,9 @@ function AutomationBuilderInner({ automation: initial }) {
     const [testResult, setTestResult] = useState(null);
     const [showTest, setShowTest] = useState(false);
     const [aiOpen, setAiOpen] = useState(false);
+    const [fileOpen, setFileOpen] = useState(false);
+    const [importing, setImporting] = useState(false);
+    const [importError, setImportError] = useState(null);
     const [aiPrompt, setAiPrompt] = useState('');
     const [aiLoading, setAiLoading] = useState(false);
     const [aiError, setAiError] = useState(null);
@@ -2237,6 +2289,29 @@ function AutomationBuilderInner({ automation: initial }) {
     };
 
     // Dry-run the live canvas through the engine and show a step-by-step trace (no real sends).
+    const exportJson = () => {
+        const file = buildExport(automation, serializeNodes(nodes), edges);
+        downloadText(`${fileSafeName(automation.name)}.json`, JSON.stringify(file, null, 2), 'application/json');
+    };
+
+    const exportMarkdown = () => {
+        const file = buildExport(automation, serializeNodes(nodes), edges);
+        const labelFor = (type) => (NODE_DEFS[type] ? t(NODE_DEFS[type].labelKey) : type);
+        downloadText(`${fileSafeName(automation.name)}.md`, flowToMarkdown(file, labelFor), 'text/markdown');
+    };
+
+    // Adds the file as a NEW draft in this workspace and opens it; the flow on screen is never changed.
+    const importFile = async (file) => {
+        setImportError(null);
+        if (file.size > 1_000_000) { setImportError(t('automation.file_import_too_big')); return; }
+        const text = await file.text();
+        setImporting(true);
+        router.post(route('client.automations.import'), { payload: text }, {
+            onError: (errs) => setImportError(errs.payload || t('automation.file_import_failed')),
+            onFinish: () => setImporting(false),
+        });
+    };
+
     const runTest = () => {
         setShowTest(true);
         setTesting(true);
@@ -2407,6 +2482,13 @@ function AutomationBuilderInner({ automation: initial }) {
                             }}>
                                 {testing ? <Loader2 size={13} className="animate-spin" /> : <FlaskConical size={13} />} {t('automation.test')}
                             </button>
+                            <button onClick={() => { setImportError(null); setFileOpen(true); }} title={t('automation.file_title')} style={{
+                                display: 'flex', alignItems: 'center', gap: 6, borderRadius: 8,
+                                background: '#f0fdf4', padding: '6px 12px', fontSize: 12, fontWeight: 600,
+                                color: '#15803d', border: '1px solid #bbf7d0', cursor: 'pointer', transition: 'all 0.15s',
+                            }}>
+                                <ArrowUpDown size={13} /> {t('automation.file_short')}
+                            </button>
                             <button onClick={save} disabled={saving} style={{
                                 display: 'flex', alignItems: 'center', gap: 6, borderRadius: 8,
                                 background: '#6366f1', padding: '6px 14px', fontSize: 12, fontWeight: 600,
@@ -2490,6 +2572,7 @@ function AutomationBuilderInner({ automation: initial }) {
             </div>
 
             {showTest && <TestResultModal result={testResult} loading={testing} onClose={() => setShowTest(false)} onRerun={runTest} />}
+            {fileOpen && <FileMenuModal onClose={() => setFileOpen(false)} onExportJson={exportJson} onExportMarkdown={exportMarkdown} onImport={importFile} importing={importing} error={importError} />}
             {aiOpen && <AiGenerateModal prompt={aiPrompt} setPrompt={setAiPrompt} loading={aiLoading} error={aiError} onClose={() => setAiOpen(false)} onGenerate={generateAi} />}
             {confirmDelete && <ConfirmDeleteModal target={confirmDelete} onCancel={() => resolveDelete(false)} onConfirm={() => resolveDelete(true)} />}
         </div>
