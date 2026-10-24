@@ -5,7 +5,7 @@ import {
     LayoutDashboard, CreditCard, Package, FileText, Users, Settings,
     Layers, Webhook, Key, BookOpen, Image, Radio, Inbox, Bot, Database,
     Zap, Share2, MapPin, Tag, LifeBuoy, ExternalLink, Mail, MessageSquare,
-    ShoppingBag, KanbanSquare, Activity,
+    ShoppingBag, KanbanSquare, Activity, Link2,
 } from 'lucide-react';
 
 const iconClass = 'h-4 w-4';
@@ -43,6 +43,7 @@ export default function useClientNav() {
         accountSettingsItems.push(
             { label: t('nav.team'),      href: safeRoute('client.team.index'),      icon: <Users className={iconClass} />,    activePattern: 'client.team.*' },
             { label: t('nav.audit_log'), href: safeRoute('client.audit-log.index'), icon: <FileText className={iconClass} />, activePattern: 'client.audit-log.*' },
+            { label: t('nav.epos'),      href: safeRoute('client.integrations.epos.index'), icon: <Link2 className={iconClass} />, activePattern: 'client.integrations.epos.*' },
         );
     }
 

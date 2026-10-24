@@ -102,7 +102,7 @@ How it behaves:
 
 Checked: `OK (258 tests, 735 assertions)` for `tests/Feature/{Client,Automation,Integrations,Api}`, `ApiTokenTest`, `AutomationEngineTest`; vitest `21 passed` (this also needed `resources/js/__tests__/setup.js` renamed to `setup.jsx` because it contains JSX and the whole vitest suite could not start before). eslint clean on the new files (the existing `Builder.jsx` has 1 error and 3 warnings in code I did not touch). Looked at in a browser: status page at 360px and 1920px in light and dark; builder at 1920px in light (node, exits, removed badge, panel, banner). **Not looked at:** the builder at 360px or in dark mode (the builder canvas uses fixed inline light colours and was not made responsive before this change), an Urdu locale on screen, an RTL builder.
 
-Known gaps: no sidebar link to the status page (reachable from the builder banner, the node panel and the URL); the builder does not warn when an E-POS node has an unconnected exit.
+Sidebar: administrators see "E-POS" in the account group (after Audit Log), `resources/js/Layouts/useClientNav.jsx`, key `nav.epos`; staff do not get the link. It is shown to every administrator, linked or not (an unlinked workspace sees the empty-state instructions). Known gap: the builder does not warn when an E-POS node has an unconnected exit.
 
 ## Where the E-POS logs are (recent calls table and debug switch)
 Code written, tested and looked at in a browser on 2026-10-24 (local, private test database). Not run on the live site.
