@@ -290,6 +290,15 @@ class WahaEventProcessor
             return;
         }
 
+        // Keep each voter's latest choice on the poll so the inbox can show the results.
+        // shortcut: last event received wins; WAHA can deliver votes out of order (compare vote.timestamp if that bites).
+        $poll = Message::where('provider_message_id', $pollMessageId)->where('type', 'poll')->first();
+        if ($poll && $voter !== '') {
+            $data = $poll->payload ?? [];
+            $data['votes'][$voter] = $selected;
+            $poll->update(['payload' => $data]);
+        }
+
         $this->engine->applyPollVote($pollMessageId, $selected);
     }
 

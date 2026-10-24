@@ -178,8 +178,13 @@ class InboxController extends Controller
 
         $validated = $request->validate([
             'body' => ['nullable', 'string', 'max:4096'],
-            'type' => ['nullable', 'in:text,template,image,document,video,audio'],
+            'type' => ['nullable', 'in:text,template,image,document,video,audio,poll'],
             'payload' => ['nullable', 'array'],
+            // type=poll: 2-12 options is WhatsApp's own poll limit.
+            'payload.poll.question' => ['required_if:type,poll', 'string', 'max:255'],
+            'payload.poll.options' => ['required_if:type,poll', 'array', 'min:2', 'max:12'],
+            'payload.poll.options.*' => ['string', 'max:255'],
+            'payload.poll.multiple' => ['nullable', 'boolean'],
             // Allow-list of messaging media types (no HTML/SVG/executables).
             'attachment' => [
                 'nullable', 'file', 'max:20480',
@@ -227,6 +232,19 @@ class InboxController extends Controller
 
             // For image/document the 'body' shown in the chat is the caption or filename
             $validated['body'] = $validated['body'] ?? $file->getClientOriginalName();
+        }
+
+        if ($msgType === 'poll') {
+            if ($conversation->channelAccount?->provider !== 'whatsapp_web') {
+                return response()->json(['error' => 'Polls are only supported on a WhatsApp Web (QR) number.'], 422);
+            }
+            $poll = $validated['payload']['poll'];
+            $validated['body'] = $poll['question'];
+            $msgPayload = ['poll' => [
+                'question' => $poll['question'],
+                'options' => array_values($poll['options']),
+                'multiple' => (bool) ($poll['multiple'] ?? false),
+            ]];
         }
 
         // Require body for plain text messages

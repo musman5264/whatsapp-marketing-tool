@@ -46,6 +46,12 @@ Body: `contact_id`, `channel: "whatsapp"`, `type: "poll"`, `body` (the question)
 optional `poll_multiple` (bool). The reply is the same as for any send; `provider_message_id` is the poll's id.
 A Cloud API number answers 422 ("Polls are only supported on a WhatsApp Web (QR) number"): the Cloud API has no native poll.
 
+**Inbox composer (T-0046).** An agent can also send a poll from the inbox: the poll button in the composer toolbar (shown only when
+`conversation.channel_account.provider === 'whatsapp_web'`) opens `PollPicker` (`resources/js/Pages/Inbox/Show.jsx`) and posts
+`type: "poll"`, `payload.poll {question, options 2-12, multiple}` to `InboxController::reply()`; a Cloud API number gets 422.
+Each vote is stored on the poll message as `payload.votes[<voter jid>] = [chosen options]` (latest vote per voter wins) and the
+poll bubble shows a count beside each option. The chat does not refresh by itself when a vote arrives: counts show on the next load.
+
 Votes come back as `poll.vote` webhooks (`WahaEventProcessor::handlePollVote`). The poll id in the event is matched to the
 stored message in full or bare form (GOWS ids are bare; NOWEB/WEBJS ids are `true_<chat>_<id>`), the voter is
 `payload.vote.from`, and the choice lands in the run context of an automation that sent the poll. A vote on an API-sent
@@ -78,6 +84,7 @@ A retry after a timeout can deliver the same message twice, so the job runs once
 ## Tests
 `tests/Feature/Api/V1/MessageSendApiTest.php`, `MessageSendMediaApiTest.php`, `MessageSendOutcomeApiTest.php` (13: reply
 outcome, `wait`, status endpoint, webhooks), `MessageSendPollApiTest.php` (poll send, limits, Cloud refusal);
+inbox send and stored votes: `tests/Feature/Inbox/InboxPollReplyTest.php`;
 vote matching: `tests/Feature/WhatsappWeb/PollVoteInboundTest.php` (real WAHA payload shape, GOWS/NOWEB/WEBJS id forms).
 Run: `DB_PASSWORD= php -d memory_limit=1G vendor/phpunit/phpunit/phpunit --filter=MessageSend`.
 The test queue is `sync`, so the job runs inline and the first check already sees `sent`/`failed`.

@@ -619,19 +619,27 @@ function InteractiveBubble({ payload, isOut }) {
 function PollTopLevelBubble({ payload, isOut }) {
     const { t } = useTranslation();
     const poll = payload?.poll ?? {};
-    const title = poll.title ?? t('inbox.poll');
+    const title = poll.title ?? poll.question ?? t('inbox.poll');
     const options = poll.options ?? [];
+    // payload.votes = { voter: [chosen options] }, kept up to date by the poll.vote webhook.
+    const votes = Object.values(payload?.votes ?? {});
     return (
         <div className={`rounded-xl px-3 py-2.5 mb-1 ${isOut ? 'bg-white/20' : 'bg-neutral-100 dark:bg-neutral-700'}`}>
             <div className="flex items-center gap-1.5 mb-2">
                 <BarChart2 className="h-3.5 w-3.5 shrink-0" />
                 <span className="text-xs font-semibold">{title}</span>
             </div>
-            {options.map((opt, i) => (
-                <div key={i} className="text-xs px-2 py-1 rounded mt-1 opacity-80 border border-current/10">
-                    {opt.name ?? opt.title ?? opt}
-                </div>
-            ))}
+            {options.map((opt, i) => {
+                const label = opt.name ?? opt.title ?? opt;
+                const count = votes.filter(v => Array.isArray(v) && v.includes(label)).length;
+                return (
+                    <div key={i} className="flex items-center justify-between gap-2 text-xs px-2 py-1 rounded mt-1 opacity-80 border border-current/10">
+                        <span className="min-w-0 break-words">{label}</span>
+                        {count > 0 && <span className="shrink-0 font-semibold">{count}</span>}
+                    </div>
+                );
+            })}
+            {poll.multiple && <div className="text-[11px] opacity-60 mt-1.5">{t('inbox.poll_multiple_hint')}</div>}
         </div>
     );
 }
@@ -1441,6 +1449,84 @@ function ProductPicker({ conversationId, onSent, onClose }) {
     );
 }
 
+/* ─── poll picker (native poll, WhatsApp Web numbers only) ─── */
+const POLL_MAX_OPTIONS = 12;
+
+function PollPicker({ conversationId, onSent, onClose }) {
+    const { t } = useTranslation();
+    const ref = useRef(null);
+    const [question, setQuestion] = useState('');
+    const [options, setOptions]   = useState(['', '']);
+    const [multiple, setMultiple] = useState(false);
+    const [sending, setSending]   = useState(false);
+    const [error, setError]       = useState('');
+
+    useEffect(() => {
+        const h = (e) => { if (ref.current && !ref.current.contains(e.target)) onClose(); };
+        document.addEventListener('mousedown', h);
+        return () => document.removeEventListener('mousedown', h);
+    }, [onClose]);
+
+    const filled = options.map(o => o.trim()).filter(Boolean);
+    const canSend = question.trim() !== '' && filled.length >= 2 && !sending;
+    const setOption = (i, v) => setOptions(prev => prev.map((o, j) => (j === i ? v : o)));
+
+    const send = () => {
+        if (!canSend) return;
+        setSending(true);
+        setError('');
+        axios.post(route('client.inbox.reply', conversationId),
+            { type: 'poll', payload: { poll: { question: question.trim(), options: filled, multiple } } },
+            { headers: { Accept: 'application/json' } })
+            .then(r => onSent(r.data?.message, r.data?.error))
+            .catch(err => setError(err.response?.data?.error ?? err.response?.data?.message ?? t('inbox.poll_send_failed')))
+            .finally(() => setSending(false));
+    };
+
+    return (
+        <div ref={ref} className="absolute bottom-full mb-2 left-0 right-0 z-20 rounded-xl border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 shadow-xl flex flex-col max-h-96">
+            <div className="p-2 border-b border-neutral-100 dark:border-neutral-800 flex items-center gap-2">
+                <BarChart2 className="h-4 w-4 text-neutral-400 shrink-0" />
+                <span className="flex-1 text-sm font-medium text-neutral-700 dark:text-neutral-200">{t('inbox.poll_new')}</span>
+                <button type="button" onClick={onClose} aria-label={t('common.close')} className="text-neutral-400 hover:text-neutral-600 transition"><X className="h-4 w-4" /></button>
+            </div>
+            <div className="overflow-y-auto p-3 space-y-2">
+                <input autoFocus value={question} maxLength={255} onChange={e => setQuestion(e.target.value)}
+                    placeholder={t('inbox.poll_question_placeholder')}
+                    className="w-full rounded-lg border border-neutral-200 dark:border-neutral-700 bg-transparent px-3 py-2 text-sm text-neutral-800 dark:text-neutral-100 focus:outline-none focus:ring-2 focus:ring-brand-500/40" />
+                {options.map((opt, i) => (
+                    <div key={i} className="flex items-center gap-2">
+                        <input value={opt} maxLength={255} onChange={e => setOption(i, e.target.value)}
+                            placeholder={t('inbox.poll_option_placeholder', { n: i + 1 })}
+                            className="flex-1 min-w-0 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-transparent px-3 py-1.5 text-sm text-neutral-800 dark:text-neutral-100 focus:outline-none focus:ring-2 focus:ring-brand-500/40" />
+                        {options.length > 2 && (
+                            <button type="button" onClick={() => setOptions(prev => prev.filter((_, j) => j !== i))}
+                                aria-label={t('inbox.poll_remove_option')} className="text-neutral-400 hover:text-red-500 transition shrink-0"><X className="h-4 w-4" /></button>
+                        )}
+                    </div>
+                ))}
+                {options.length < POLL_MAX_OPTIONS && (
+                    <button type="button" onClick={() => setOptions(prev => [...prev, ''])}
+                        className="flex items-center gap-1 text-xs text-brand-600 dark:text-brand-400 hover:underline">
+                        <Plus className="h-3.5 w-3.5" />{t('inbox.poll_add_option')}
+                    </button>
+                )}
+            </div>
+            {error && <p className="px-3 pb-2 text-xs text-red-500">{error}</p>}
+            <div className="p-2 border-t border-neutral-100 dark:border-neutral-800 flex items-center gap-3">
+                <label className="flex-1 flex items-center gap-2 text-xs text-neutral-600 dark:text-neutral-300">
+                    <input type="checkbox" checked={multiple} onChange={e => setMultiple(e.target.checked)} />
+                    {t('inbox.poll_multiple')}
+                </label>
+                <button type="button" onClick={send} disabled={!canSend}
+                    className="flex items-center gap-1.5 rounded-lg bg-brand-600 hover:bg-brand-700 text-white text-sm px-3 py-1.5 transition disabled:opacity-50 disabled:cursor-not-allowed">
+                    {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}{t('inbox.poll_send')}
+                </button>
+            </div>
+        </div>
+    );
+}
+
 /* ─── agent assign dropdown ──────────────────────────── */
 function AgentDropdown({ teamMembers, currentUserId, conversationId, onAssigned, onClose }) {
     const { t } = useTranslation();
@@ -1585,6 +1671,7 @@ export default function InboxShow({
     const [showEmoji, setShowEmoji]           = useState(false);
     const [showTemplates, setShowTemplates]   = useState(false);
     const [showProducts, setShowProducts]     = useState(false);
+    const [showPoll, setShowPoll]             = useState(false);
     const [showAgentDrop, setShowAgentDrop]   = useState(false);
     const [attachPreview, setAttachPreview]   = useState(null); // { file, url, type }
     const fileRef = useRef(null);
@@ -2268,6 +2355,19 @@ export default function InboxShow({
                                 />
                             )}
 
+                            {/* Poll composer (QR numbers only) */}
+                            {showPoll && (
+                                <PollPicker
+                                    conversationId={conversation.uuid}
+                                    onSent={(msg, err) => {
+                                        if (msg) setMessages(prev => prev.some(m => m.id === msg.id) ? prev : [...prev, msg]);
+                                        if (err) setSendError(err);
+                                        setShowPoll(false);
+                                    }}
+                                    onClose={() => setShowPoll(false)}
+                                />
+                            )}
+
                             <form onSubmit={handleSend}>
                                 {/* Toolbar */}
                                 <div className="flex items-center gap-1 mb-1.5">
@@ -2296,6 +2396,14 @@ export default function InboxShow({
                                             disabled={isWhatsApp && !isWindowOpen}
                                             className={`p-1.5 rounded-lg text-neutral-400 hover:text-neutral-600 hover:bg-neutral-100 dark:hover:bg-neutral-800 transition disabled:opacity-40 disabled:cursor-not-allowed ${showProducts ? 'bg-neutral-100 dark:bg-neutral-800 text-neutral-600' : ''}`}>
                                             <ShoppingBag className="h-4 w-4" />
+                                        </button>
+                                    )}
+                                    {/* Poll: a native WhatsApp poll exists only on a QR (WhatsApp Web) number */}
+                                    {conversation.channel_account?.provider === 'whatsapp_web' && (
+                                        <button type="button" onClick={() => setShowPoll(v => !v)}
+                                            title={t('inbox.poll_send_title')}
+                                            className={`p-1.5 rounded-lg text-neutral-400 hover:text-neutral-600 hover:bg-neutral-100 dark:hover:bg-neutral-800 transition ${showPoll ? 'bg-neutral-100 dark:bg-neutral-800 text-neutral-600' : ''}`}>
+                                            <BarChart2 className="h-4 w-4" />
                                         </button>
                                     )}
                                     {/* WA Template */}
