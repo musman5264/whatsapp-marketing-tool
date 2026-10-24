@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\V1\AutomationApiController;
 use App\Http\Controllers\Api\V1\CampaignApiController;
 use App\Http\Controllers\Api\V1\ContactApiController;
 use App\Http\Controllers\Api\V1\ConversationApiController;
+use App\Http\Controllers\Api\V1\IntegrationApiController;
 use App\Http\Controllers\Api\V1\MeController;
 use App\Http\Controllers\Api\V1\MessageApiController;
 use App\Http\Controllers\Api\V1\MobileAuthController;
@@ -149,6 +150,16 @@ Route::prefix('v1')->middleware(['auth:sanctum', 'throttle:api', 'demo', LogApiR
         ->middleware('api.ability:webhooks:write');
     Route::delete('/webhooks/{id}', [OutboundWebhookApiController::class, 'destroy'])
         ->middleware('api.ability:webhooks:write');
+
+    // ─── Integrations: a remote system (EPOS) links itself (integrations:write) ─
+    Route::middleware('api.ability:integrations:write')->prefix('integrations')->whereNumber('id')->group(function () {
+        Route::get('/', [IntegrationApiController::class, 'index']);
+        Route::post('/', [IntegrationApiController::class, 'store']);
+        Route::get('/{id}', [IntegrationApiController::class, 'show']);
+        Route::put('/{id}', [IntegrationApiController::class, 'update']);
+        Route::delete('/{id}', [IntegrationApiController::class, 'destroy']);
+        Route::post('/{id}/check', [IntegrationApiController::class, 'check']);
+    });
 
     // ─── AI — Chatbots (ai:read / ai:write) ───────────────────────────────────
     Route::get('/ai/chatbots', [AiChatbotApiController::class, 'index'])
