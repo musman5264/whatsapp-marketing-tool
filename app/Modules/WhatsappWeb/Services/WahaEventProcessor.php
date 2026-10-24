@@ -274,13 +274,16 @@ class WahaEventProcessor
     private function handlePollVote(array $payload): void
     {
         $p = $payload['payload'] ?? [];
-        $pollMessageId = (string) ($p['pollMessageId'] ?? ($p['poll']['id'] ?? ''));
-        $voter = (string) ($p['from'] ?? ($p['voter'] ?? ''));
+        $pollMessageId = InboundNormalizer::idOf($p['pollMessageId'] ?? ($p['poll']['id'] ?? ''));
+        $voter = (string) ($p['vote']['from'] ?? ($p['from'] ?? ($p['voter'] ?? '')));
         $selected = array_values((array) ($p['vote']['selectedOptions'] ?? ($p['selectedOptions'] ?? [])));
 
         if ($pollMessageId === '') {
             return;
         }
+
+        // GOWS ids are bare, NOWEB/WEBJS ids are `true_<chat>_<id>`: match the stored poll in either form.
+        $pollMessageId = (string) ($this->findOwnMessage($pollMessageId)?->getAttribute('provider_message_id') ?: $pollMessageId);
 
         $key = 'pollvote:'.$pollMessageId.':'.$voter.':'.implode(',', $selected);
         if (! app(WebhookIdempotencyService::class)->isNewEvent('whatsapp_web', $key)) {

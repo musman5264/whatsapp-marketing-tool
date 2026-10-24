@@ -43,8 +43,12 @@ class MessageApiController extends WorkspaceScopedController
         $validated = $request->validate([
             'contact_id' => ['required', 'integer'],
             'channel' => ['required', 'string', 'in:whatsapp,sms,email'],
-            'type' => ['nullable', 'string', 'in:text,template,image,video,audio,document'],
-            'body' => ['nullable', 'string'],
+            'type' => ['nullable', 'string', 'in:text,template,image,video,audio,document,poll'],
+            'body' => ['nullable', 'required_if:type,poll', 'string'],
+            // type=poll: `body` is the question. 2-12 options is WhatsApp's own poll limit.
+            'poll_options' => ['required_if:type,poll', 'array', 'min:2', 'max:12'],
+            'poll_options.*' => ['string', 'max:255'],
+            'poll_multiple' => ['nullable', 'boolean'],
             'caption' => ['nullable', 'string', 'max:1024'],
             'filename' => ['nullable', 'string', 'max:255'],
             'media_url' => ['nullable', 'url', 'max:2048'],
@@ -211,13 +215,24 @@ class MessageApiController extends WorkspaceScopedController
         $isTemplate = ! empty($payload['template_name']);
         $isWhatsappWeb = $account->provider === 'whatsapp_web';
 
-        [$type, $body, $messagePayload] = $isMedia
-            ? $this->buildMediaMessage($request, $wsId, $isWhatsappWeb, $payload)
-            : [
+        $isPoll = ($payload['type'] ?? null) === 'poll';
+        if ($isPoll && ! $isWhatsappWeb) {
+            throw new \RuntimeException('Polls are only supported on a WhatsApp Web (QR) number.');
+        }
+
+        [$type, $body, $messagePayload] = match (true) {
+            $isMedia => $this->buildMediaMessage($request, $wsId, $isWhatsappWeb, $payload),
+            $isPoll => ['poll', $payload['body'], ['poll' => [
+                'question' => $payload['body'],
+                'options' => array_values($payload['poll_options']),
+                'multiple' => (bool) ($payload['poll_multiple'] ?? false),
+            ]]],
+            default => [
                 $isTemplate ? 'template' : 'text',
                 $payload['body'] ?? null,
                 $isTemplate ? $this->templatePayload($payload) : null,
-            ];
+            ],
+        };
 
         // Cloud API enforces WhatsApp's 24-hour session window for non-template
         // free-form messages; WhatsApp Web personal numbers are exempt.

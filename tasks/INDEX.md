@@ -8,6 +8,7 @@ _Last updated: 2026-10-14_
 | T-0012 | Page the conversation list and each chat, lazy-load older messages (live check pending) | PLAN-001 / phase-01 | high | 2026-10-13 01:24 |
 | T-0013 | Stop chat jumping to bottom; reserve media space (live check pending) | PLAN-001 / phase-01 | medium | 2026-10-13 01:24 |
 | T-0040 | API send tells the caller sent or failed (wait for result, status endpoint, webhooks; commit 4820004, live check pending) | PLAN-000 / phase-01 | high | 2026-10-17 14:30 |
+| T-0045 | Polls on any WAHA engine: API `type: poll`, votes matched by bare or full id, real payload tests (tests green; live GOWS/NOWEB check pending) | PLAN-000 / phase-01 | high | 2026-10-24 13:20 |
 
 ## Pending
 | ID | Task | Plan / Phase | Depends on | Priority | Status |
@@ -63,5 +64,5 @@ _Last updated: 2026-10-14_
 | PLAN-001-inbox-speed-and-media | Inbox speed, live updates and media | phase-01-speed-and-media | 1 / 5 |
 | PLAN-002-private-media | Chat media off the public disk; signed webhook media | phase-01-private-media | 4 / 5 |
 
-Next task ID: T-0045   (T-0006 and T-0007 are also in tasks/working from another session; IDs are never reused)
+Next task ID: T-0046   (T-0006 and T-0007 are also in tasks/working from another session; IDs are never reused)
 Next plan ID: PLAN-003

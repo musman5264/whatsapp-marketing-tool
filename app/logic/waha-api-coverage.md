@@ -42,7 +42,7 @@ called anywhere · **n/a** = not applicable to this product.
 | `POST /api/sendImage · sendFile · sendVoice · sendVideo` | ✓ `sendMedia` | ✓ native, by public URL | Send Media, sequence media steps | **wired** |
 | `POST /api/sendLocation` | ✓ `sendLocation` | ✓ native | Send Location | **wired** |
 | `POST /api/sendButtons · sendList · send/buttons/reply` | ✓ interactive | flattened to "1. … 2. …" text | Quick Replies, List Message, Call to Action | **partial** |
-| `POST /api/sendPoll` | emulated as buttons/list | flattened to text — **WAHA has a native poll this app never calls** | Send Poll | **partial** |
+| `POST /api/sendPoll` | emulated as buttons/list (automation only) | ✓ native on any engine (`WahaAdapter::sendPoll`) from the Send Poll node and `POST /api/v1/messages/send` `type: poll`; votes via `poll.vote` | Send Poll | **wired** |
 | `POST /api/sendContactVcard` | — (inbound `contacts` type parsed, never sent) | not implemented | none | **missing** |
 | `PUT /api/reaction` | inbound reactions stored; no outbound | not implemented | none — no "React" node or inbox reaction button | **missing** |
 | `POST /api/forwardMessage` | — | not implemented | none | **missing** |
@@ -163,7 +163,8 @@ Re-register on existing sessions with `php artisan whatsapp-web:resubscribe` (or
 | `message.reaction` | only via the plain `message` shape | a dedicated reaction feed / "customer reacted" trigger | **partial** |
 | `message.revoked` | not subscribed | show "this message was deleted" in the inbox | **missing** |
 | `call.received` · `call.accepted` · `call.rejected` | not subscribed | missed-call automations, call logging | **missing** |
-| `poll.vote` | not subscribed | native poll results back into automation context | **missing** |
+| `poll.vote` | ✓ `handlePollVote` (poll id matched in full or bare form; voter = `payload.vote.from`) | native poll results back into automation context | **wired** |
+| `poll.vote.failed` | not subscribed | tell the contact to vote again when WAHA cannot decrypt a vote | **missing** |
 | `presence.update` | not subscribed | "contact is online / last seen" in the inbox | **missing** |
 | `label.upsert` · `label.deleted` · `label.chat.added` · `label.chat.deleted` | handled by `WahaLabelSync::handleWebhook()`; needs subscription + hook in `WahaEventProcessor` | applied locally without echoing back to WhatsApp | **wired (pending hook)** |
 | `group.*` · `chat.archive` | not subscribed | out of scope (see Groups) | **n/a** |

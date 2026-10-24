@@ -153,6 +153,62 @@ class PollVoteInboundTest extends TestCase
         $this->assertArrayNotHasKey('_awaiting_poll', $run->fresh()->context);
     }
 
+    /** The shape WAHA documents for poll.vote (swagger WAHAWebhookPollVote), any engine. */
+    private function realVotePayload(string $pollId, string $engine): array
+    {
+        return [
+            'event' => 'poll.vote',
+            'engine' => $engine,
+            'session' => $this->session->session_name,
+            'payload' => [
+                'vote' => ['id' => 'vote1', 'to' => 'me@c.us', 'from' => '15551230000@c.us', 'fromMe' => false,
+                    'selectedOptions' => ['Coffee'], 'timestamp' => 1700000000],
+                'poll' => ['id' => $pollId, 'to' => '15551230000@c.us', 'from' => 'me@c.us', 'fromMe' => true],
+            ],
+        ];
+    }
+
+    #[Test]
+    public function a_vote_matches_the_poll_whichever_id_form_the_engine_uses(): void
+    {
+        Http::fake(['*' => Http::response([], 200)]);
+
+        // GOWS: the send reply and the vote event both use the bare id.
+        // NOWEB / WEBJS: the send reply is `true_<chat>_<id>`; the vote may carry either form.
+        foreach ([
+            ['stored' => '3EB0POLL001', 'event' => 'true_15551230000@c.us_3EB0POLL001', 'engine' => 'GOWS'],
+            ['stored' => 'true_15551230000@c.us_3EB0ABCDEF', 'event' => '3EB0ABCDEF', 'engine' => 'NOWEB'],
+            ['stored' => 'true_15551230000@c.us_3EB0WEBJS99', 'event' => 'true_15551230000@c.us_3EB0WEBJS99', 'engine' => 'WEBJS'],
+        ] as $case) {
+            $run = $this->makeParkedRun();
+            Message::where('provider_message_id', 'poll_abc')->update(['provider_message_id' => $case['stored']]);
+
+            app(WahaEventProcessor::class)->process($this->realVotePayload($case['event'], $case['engine']), $this->session);
+
+            $this->assertSame('Coffee', $run->fresh()->context['drink'], $case['engine']);
+            $this->assertNotSame('waiting', $run->fresh()->status, $case['engine']);
+
+            Message::where('provider_message_id', $case['stored'])->delete();
+        }
+    }
+
+    #[Test]
+    public function two_voters_choosing_the_same_option_are_both_counted(): void
+    {
+        Http::fake(['*' => Http::response([], 200)]);
+        $spy = $this->partialMock(AutomationEngine::class);
+        $this->makeParkedRun();
+
+        $a = $this->realVotePayload('poll_abc', 'GOWS');
+        $b = $this->realVotePayload('poll_abc', 'GOWS');
+        $b['payload']['vote']['from'] = '15559990000@c.us';
+
+        app(WahaEventProcessor::class)->process($a, $this->session);
+        app(WahaEventProcessor::class)->process($b, $this->session);
+
+        $spy->shouldHaveReceived('applyPollVote')->twice();
+    }
+
     #[Test]
     public function the_same_vote_delivered_twice_hits_the_engine_only_once(): void
     {

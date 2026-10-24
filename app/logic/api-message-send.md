@@ -39,6 +39,19 @@ seconds for the result** so the caller learns "sent or failed" in the same reply
 `wait` defaults to **15** seconds, maximum 30. `wait=0` skips the wait and always answers 202.
 SMS is unchanged (synchronous, `200`, `provider_message_id`).
 
+## Sending a poll
+`type: "poll"` on a WhatsApp Web (QR) number sends a native poll through WAHA `POST /api/sendPoll`
+(`WahaAdapter::sendPoll`; WAHA lists it for WEBJS, WPP, NOWEB and GOWS).
+Body: `contact_id`, `channel: "whatsapp"`, `type: "poll"`, `body` (the question), `poll_options` (2 to 12 strings),
+optional `poll_multiple` (bool). The reply is the same as for any send; `provider_message_id` is the poll's id.
+A Cloud API number answers 422 ("Polls are only supported on a WhatsApp Web (QR) number"): the Cloud API has no native poll.
+
+Votes come back as `poll.vote` webhooks (`WahaEventProcessor::handlePollVote`). The poll id in the event is matched to the
+stored message in full or bare form (GOWS ids are bare; NOWEB/WEBJS ids are `true_<chat>_<id>`), the voter is
+`payload.vote.from`, and the choice lands in the run context of an automation that sent the poll. A vote on an API-sent
+poll is accepted and de-duplicated but only an automation run can consume it (no API event for votes yet).
+Engine setting that matters: on GOWS, `gows.storage.messageSecrets` must stay on (WAHA default) or votes cannot be decrypted.
+
 ## Looking the result up later
 `GET /api/v1/messages/{id}` (same token) returns
 `{message_id, conversation_id, status, provider_message_id, error, sent_at}`.
@@ -64,10 +77,14 @@ A retry after a timeout can deliver the same message twice, so the job runs once
 
 ## Tests
 `tests/Feature/Api/V1/MessageSendApiTest.php`, `MessageSendMediaApiTest.php`, `MessageSendOutcomeApiTest.php` (13: reply
-outcome, `wait`, status endpoint, webhooks).
+outcome, `wait`, status endpoint, webhooks), `MessageSendPollApiTest.php` (poll send, limits, Cloud refusal);
+vote matching: `tests/Feature/WhatsappWeb/PollVoteInboundTest.php` (real WAHA payload shape, GOWS/NOWEB/WEBJS id forms).
 Run: `DB_PASSWORD= php -d memory_limit=1G vendor/phpunit/phpunit/phpunit --filter=MessageSend`.
 The test queue is `sync`, so the job runs inline and the first check already sees `sent`/`failed`.
 
 ## Unverified
+- Polls against a live GOWS / NOWEB / WEBJS session: sending and vote matching are tested with WAHA's documented payloads
+  only. The id form each engine returns from `sendPoll`, and whether NOWEB needs `noweb.store.enabled` to decrypt votes,
+  are not checked on a running engine. `poll.vote.failed` (undecryptable vote) is not subscribed.
 - Behaviour against the live queue worker, live WAHA and the client's real HTTP timeout is not yet checked
   (needs a deploy and a test send).
