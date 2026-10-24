@@ -19,6 +19,8 @@ use App\Modules\Broadcasting\Services\Sms\SmsDriverManager;
 use App\Modules\Ecommerce\Models\EcommerceProduct;
 use App\Modules\Integrations\Services\Clients\GoogleClient;
 use App\Modules\Shared\Models\ChannelAccount;
+use App\Modules\Integrations\Models\ExternalIntegration;
+use App\Modules\Integrations\Services\External\EposExecutor;
 use App\Modules\Shared\Models\Contact;
 use App\Modules\Shared\Models\ContactTag;
 use App\Modules\Shared\Models\Conversation;
@@ -419,6 +421,7 @@ class AutomationEngine
                     }
                     return $ok('Would call '.strtoupper($data['method'] ?? 'POST').' '.$this->snippet($render($data['url']), 50), ['context_update' => $seed]);
                 })(),
+            'epos' => $ok('Would ask E-POS "'.($data['capability'] ?? '?').'" about this customer (not called in test).', ['context_update' => [(($data['result_var'] ?? '') ?: 'epos') => '{"found":true}']]),
             'run_subflow' => $ok('Would run sub-flow '.($data['subflow_name'] ?? ($data['automation_uuid'] ?? '?')).'.'),
             'ai_reply' => $ok('Would generate an AI reply'.(! empty($data['chatbot_id']) ? ' via chatbot #'.$data['chatbot_id'] : '').' and send it.', ['context_update' => ['last_ai_reply' => '[AI generated reply]']]),
             'add_tag' => ($data['tag'] ?? '') === '' ? $skip('No tag name.') : $ok('Would add tag "'.$data['tag'].'".'),
@@ -468,6 +471,7 @@ class AutomationEngine
                 'remove_tag' => $this->executeTagAction($data, $run, 'remove'),
                 'update_contact' => $this->executeUpdateContact($data, $run, $context),
                 'webhook' => $this->executeWebhook($data, $run, $context),
+                'epos' => $this->executeEpos($data, $run, $context),
                 'condition' => $this->executeCondition($data, $run, $context),
                 'send_whatsapp' => $this->executeSendWhatsapp($data, $run, $context),
                 'send_sms' => $this->executeSendSms($data, $run, $context),
@@ -1083,6 +1087,42 @@ class AutomationEngine
             'message' => "Webhook {$method} {$url} → {$response->status()}",
             'output' => ['status' => $response->status(), 'result_var' => $resultVar ?: null],
             'context_update' => $contextUpdate,
+        ];
+    }
+
+    /**
+     * E-POS node: asks the linked EPOS about the customer who is chatting. The customer's number is bound
+     * server-side (see EposExecutor); the node has no URL, header or key. Every problem is a "no data" exit,
+     * never a failed run. Branch 'true' = found (or action done), 'false' = not found / no data / not sent.
+     */
+    private function executeEpos(array $data, AutomationRun $run, array $context): array
+    {
+        $var = preg_replace('/\s+/', '_', trim((string) ($data['result_var'] ?? ''))) ?: 'epos';
+        $contact = $run->contact_id ? Contact::find($run->contact_id) : null;
+
+        $query = ExternalIntegration::where('workspace_id', $run->automation->workspace_id)->where('type', 'epos');
+        $integration = ! empty($data['integration_id'])
+            ? $query->find($data['integration_id'])
+            : ((clone $query)->count() === 1 ? $query->first() : null);
+
+        if ($integration && $contact) {
+            $params = array_map(fn ($v) => is_string($v) ? $this->renderTokens($v, $contact, $context) : $v, (array) ($data['params'] ?? []));
+            $phone = preg_match('/^\+[1-9]\d{6,14}$/', (string) $contact->phone_e164) ? (string) $contact->phone_e164 : null;
+            $result = app(EposExecutor::class)->execute($integration, (string) ($data['capability'] ?? ''), $phone, $params, $run->id.':'.$run->current_node_id);
+        } else {
+            $result = ['outcome' => 'no_data', 'message' => 'E-POS is not linked.', 'body' => ['found' => false, 'ok' => false, 'reason' => 'no_data']];
+        }
+
+        return [
+            'status' => 'ok',
+            'message' => $result['message'],
+            'branch' => $result['outcome'] === 'found' ? 'true' : 'false',
+            'output' => ['capability' => $data['capability'] ?? null, 'outcome' => $result['outcome']],
+            'context_update' => [
+                $var => json_encode($result['body'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+                "{$var}_status" => $result['outcome'],
+                "{$var}_found" => $result['outcome'] === 'found' ? 'true' : 'false',
+            ],
         ];
     }
 

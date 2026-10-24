@@ -1,6 +1,6 @@
-# EPOS integration: link, manifest, safe client (slice 1)
+# EPOS integration: link, manifest, safe client, flow node (slices 1-2)
 
-A remote system (EPOS) links itself to a workspace with one API call. The tool then keeps a cached copy of the manifest (the list of questions EPOS can answer). Built so far: the link API, manifest cache, health tracking and the guarded outbound client. **Not built yet:** the flow node that calls EPOS during a chat, the builder UI, the inbox panel (T-0048 to T-0050). Requirements: `TEMP/intake-2026-10-24-1408.md` (R1-R9); design: `tasks/plans/PLAN-003-epos-integration/PLAN.md`.
+A remote system (EPOS) links itself to a workspace with one API call. The tool then keeps a cached copy of the manifest (the list of questions EPOS can answer). Built so far: the link API, manifest cache, health tracking, the guarded outbound client and the `epos` flow node (executor). **Not built yet:** the builder UI for the node and the status page (T-0049), the inbox panel (T-0050). Until T-0049 the node can only be placed through saved flow data, not the builder. Requirements: `TEMP/intake-2026-10-24-1408.md` (R1-R9); design: `tasks/plans/PLAN-003-epos-integration/PLAN.md`.
 Code read and tests run on 2026-10-24. Nothing here has run against a real EPOS or on the live site.
 
 ## Where the code is
@@ -41,7 +41,7 @@ Other workspace's id: `404`. No ability: `403`. Validation: field-level `422`.
 
 ## Health
 `IntegrationHealth`: each failed manifest fetch or ping adds 1 to `consecutive_failures`. At 3 the status becomes `unreachable` and `next_retry_at` is set; later failures push the retry out 1 min, 5 min, 30 min. The next success resets it to `connected`. `ping()` runs at most once a minute unless forced (`/check` forces it).
-Nothing yet reads `unreachable` to stop live calls or show a banner: that is the executor (T-0048) and builder (T-0049).
+The executor reads `unreachable` (see below); the banner is the builder (T-0049).
 
 ## Logging
 `external.manifest` lines carry integration id, status and milliseconds. Never the key, the manifest body or a phone number (test `test_key_never_reaches_the_logs`).
@@ -53,6 +53,27 @@ DB_PASSWORD= php -d memory_limit=1G vendor/phpunit/phpunit/phpunit tests/Feature
 Result 2026-10-24 on private DB `wm3_test_t0047`: `OK (31 tests, 98 assertions)`; with `tests/Feature/ApiTokenTest.php tests/Feature/Api tests/Feature/WebhookEndpointTest.php` `OK (128 tests, 359 assertions)`. phpstan level 6 on the new files: no errors.
 
 ## Known gaps
-- Retry/backoff is only recorded; no scheduler or job calls `ping()`/`refreshIfStale()` yet (the executor and panels will).
+- No scheduler or job calls `ping()`/`refreshIfStale()` yet: an unreachable integration recovers only when a chat lets the one probe call through after `next_retry_at`, or when EPOS calls `/check`. The builder and panel (T-0049/T-0050) will call `refreshIfStale()`.
 - The `integrations:write` scope is not in the token-screen docs list in `resources/js/Pages/client/Api/Docs.jsx` (frontend build avoided in this slice); it is in `ApiAbilities::all()` and `labels()`.
-- `X-Epos-Manifest-Version` mismatch refresh (R2b) needs the executor; not built.
+
+## The `epos` flow node (slice 2)
+Node type `epos` in `AutomationEngine::executeEpos()`; the work is in `.../External/EposExecutor.php`. Tests: `tests/Feature/Automation/EposNodeTest.php`.
+
+Saved node data: `integration_id` (optional when the workspace has exactly one EPOS link), `capability` (manifest key), `params` (`{name: value}`, `{{tokens}}` allowed), `result_var` (default `epos`). No URL, header or key exists on the node.
+
+What happens when it runs:
+1. Capability not in the cached manifest, or no link: "no data" (run log says "no longer available" / "not linked"), no call.
+2. Integration `unreachable` with `next_retry_at` still in the future: "no data" at once, no call. After that time one call is let through as the probe.
+3. **Identity:** any manifest param whose type is `phone`, whose source is `sender_phone`, or that is named `phone` is filled with the chat contact's `phone_e164`, only if it is `+` and 7-15 digits. Whatever the author or the chat put there is ignored. No verified number: "no data", no call. (WAHA groups are never ingested, only 1:1 chats, so there is no group case.)
+4. Other params: author value (tokens rendered) or the manifest `default`, checked by type (`number`; `date` as YYYY-MM-DD; `choice` must be one of the manifest values; `text` up to 200 chars). A missing required value (`optional` and `required_if` honoured) is "no data". Params the manifest does not list are never sent.
+5. Rate limit 60 calls a minute per integration (`epos-calls:{id}`); over it: "no data".
+6. Call through `SafeHttp`: query = `GET path?params`, action = `POST` JSON with an `Idempotency-Key` (sha1 of run id, node id, capability). Neither is retried (the spec allows one retry for queries; not done). 5 s, 100 KB.
+7. Connection error, non-2xx or non-JSON: "no data" and one failure on the integration health (3 in a row = `unreachable`). An `unsafe_target` is not counted.
+8. A response header `X-Epos-Manifest-Version` different from the cached one triggers a manifest refresh.
+9. Queries with no phone param are cached 60 s per integration, capability and params. Anything carrying the phone is never cached.
+
+Exits (builder handle ids): `true` = found (for an action: `ok` was true), `false` = not found, no data, or action not done.
+Variables written: `{{epos}}` (the JSON answer, so `{{epos.name}}`, `{{#each epos.orders}}` and conditions work as for the API Call node), `{{epos_status}}` (`found` / `not_found` / `no_data`), `{{epos_found}}` (`true` / `false`). For no data the body is `{"found":false,"ok":false,"reason":"no_data"}`, so `{{epos.reason}}` is always set. For an action EPOS's own reason (`rate_limited`, `window_closed`, ...) is kept.
+The run never fails because of EPOS. Log line `external.call` has integration id, capability, status, ms, found; no phone, key or body.
+
+Checked 2026-10-24: `OK (134 tests, 349 assertions)` for `tests/Feature/Automation`, `ProductionHardening/AutomationEngineTest`, `Integrations`, `IntegrationApiTest`; phpstan level 6 clean on `app/Modules/Integrations/Services/External`. Real checks on this machine: a server that sleeps 6 s gives `unreachable` after 5.2 s; `CURLOPT_RESOLVE` pinning connects to the pinned address and honours a wrong pin. HTTPS to a public host fails here only because this PHP has no CA bundle (a plain request fails the same way); not checked on the server image.

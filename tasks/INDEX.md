@@ -25,13 +25,13 @@ _Last updated: 2026-10-14_
 | T-0037 | Outbound webhook 401 from the client endpoint; retries never run (release then fail) | PLAN-000 / phase-01 | none | medium | pending: needs the receiver's response body; retry fix is test-first |
 | T-0044 | Alibaba-style product cards on a QR number (photo + caption per product, then a poll) | PLAN-000 / phase-01 | T-0042 | medium | pending: design approval |
 | T-0039 | Inbound messages from LID senders were dropped when WAHA could not map the number (fixed in code, test first) | PLAN-000 / phase-01 | none (user checks) | high | blocked: needs the live log grep and one test message from a LID chat |
-| T-0048 | EPOS: executor and the epos flow node | PLAN-003 / phase-01 | T-0047 (done) | high | pending: ready to start |
-| T-0049 | EPOS: builder node, status page, Urdu | PLAN-003 / phase-01 | T-0048 | medium | blocked: T-0048 |
-| T-0050 | EPOS: inbox panel with ledger PDF button | PLAN-003 / phase-01 | T-0048 | medium | blocked: T-0048 |
+| T-0049 | EPOS: builder node, status page, Urdu | PLAN-003 / phase-01 | T-0048 (done) | medium | pending: ready to start |
+| T-0050 | EPOS: inbox panel with ledger PDF button | PLAN-003 / phase-01 | T-0048 (done) | medium | pending: ready to start |
 
 ## Completed (most recent first)
 | ID | Task | Plan / Phase | Completed |
 |----|------|--------------|-----------|
+| T-0048 | EPOS slice 2: executor and the epos flow node (tests green; builder cannot place it until T-0049; live EPOS check pending) | PLAN-003 / phase-01 | 2026-10-24 |
 | T-0047 | EPOS slice 1: Integrations API, manifest cache, safe client, health (tests green; migration + live EPOS check pending) | PLAN-003 / phase-01 | 2026-10-24 |
 | T-0043 | EPOS integration spec for the EPOS team (EPOS-INTEGRATION-SPEC.md) | PLAN-000 / phase-01 | 2026-10-24 |
 | T-0042 | API Call node: nested variables, {{#each}} lists, poll options from a list, nested conditions, rename (tests green; live and visual check pending) | PLAN-000 / phase-01 | 2026-10-24 |
@@ -68,7 +68,7 @@ _Last updated: 2026-10-14_
 | PLAN-000-general | One-off tasks | phase-01-ongoing | 0 / 0 |
 | PLAN-001-inbox-speed-and-media | Inbox speed, live updates and media | phase-01-speed-and-media | 1 / 5 |
 | PLAN-002-private-media | Chat media off the public disk; signed webhook media | phase-01-private-media | 4 / 5 |
-| PLAN-003-epos-integration | Manifest-driven EPOS link: API, executor, builder node, inbox panel | phase-01-integrations-api | 1 / 4 |
+| PLAN-003-epos-integration | Manifest-driven EPOS link: API, executor, builder node, inbox panel | phase-01-integrations-api | 2 / 4 |
 
 Next task ID: T-0051   (T-0006 and T-0007 are also in tasks/working from another session; IDs are never reused)
 Next plan ID: PLAN-004
