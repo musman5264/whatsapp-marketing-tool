@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Client;
 
 use App\Http\Controllers\Controller;
+use App\Modules\Integrations\Models\ExternalCallLog;
 use App\Modules\Integrations\Models\ExternalIntegration;
 use App\Modules\Integrations\Services\External\ExternalCallException;
 use App\Modules\Integrations\Services\External\IntegrationHealth;
@@ -41,6 +42,10 @@ class EposIntegrationController extends Controller
                     'label' => $c['label'],
                 ], $i->manifest['capabilities'] ?? []),
                 'issues' => $i->manifest_issues ?? [],
+                'debug_until' => $i->isDebugging() ? $i->debug_until?->toIso8601String() : null,
+                'calls' => ExternalCallLog::where('integration_id', $i->id)->orderByDesc('id')->limit(50)
+                    ->get(['id', 'capability', 'outcome', 'status', 'ms', 'message', 'request', 'response', 'created_at'])
+                    ->map(fn (ExternalCallLog $c) => $c->toArray())->all(),
             ])->values(),
         ]);
     }
@@ -60,6 +65,17 @@ class EposIntegrationController extends Controller
         }
 
         return back()->with('success', __('E-POS answered and its question list is up to date.'));
+    }
+
+    /** Switch request/response recording on for one hour, or off. It switches itself off. */
+    public function debug(Request $request, int $integration): RedirectResponse
+    {
+        $this->authoriseAdmin($request);
+        $row = ExternalIntegration::where('workspace_id', $this->workspaceId($request))->findOrFail($integration);
+        $on = $request->boolean('on');
+        $row->forceFill(['debug_until' => $on ? now()->addHour() : null])->save();
+
+        return back()->with('success', $on ? __('Recording requests and responses for one hour.') : __('Recording switched off.'));
     }
 
     private function authoriseAdmin(Request $request): void

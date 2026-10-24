@@ -2,6 +2,7 @@
 
 namespace App\Modules\Integrations\Services\External;
 
+use App\Modules\Integrations\Models\ExternalCallLog;
 use App\Modules\Integrations\Models\ExternalIntegration;
 use Illuminate\Support\Facades\Log;
 
@@ -72,9 +73,11 @@ class ManifestFetcher
             $this->apply($integration, $this->fetch($integration->manifest_url, $integration->key));
             $this->health->recordSuccess($integration);
             Log::info('external.manifest', ['integration_id' => $integration->id, 'status' => 'ok', 'ms' => $this->ms($started)]);
+            $this->record($integration, 'found', 'ok', $this->ms($started), 'Question list read.');
         } catch (ExternalCallException $e) {
             $this->health->recordFailure($integration);
             Log::warning('external.manifest', ['integration_id' => $integration->id, 'status' => $e->reason, 'ms' => $this->ms($started)]);
+            $this->record($integration, 'no_data', $e->reason, $this->ms($started), $e->getMessage());
 
             throw $e;
         }
@@ -104,6 +107,15 @@ class ManifestFetcher
         $integration->manifest_issues = $manifest['issues'];
         $integration->manifest_fetched_at = now();
         $integration->save();
+    }
+
+    private function record(ExternalIntegration $integration, string $outcome, string $status, int $ms, string $message): void
+    {
+        try {
+            ExternalCallLog::record($integration, 'manifest', $outcome, $status, $ms, $message);
+        } catch (\Throwable) {
+            Log::warning('external.call_log_failed', ['integration_id' => $integration->id]);
+        }
     }
 
     private function ms(float $started): int

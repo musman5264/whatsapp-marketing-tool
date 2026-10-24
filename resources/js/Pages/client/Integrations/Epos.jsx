@@ -31,6 +31,98 @@ function Fact({ label, children }) {
     );
 }
 
+const OUTCOME_STYLE = {
+    found: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300',
+    not_found: 'bg-neutral-100 text-neutral-700 dark:bg-neutral-700 dark:text-neutral-200',
+    no_data: 'bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-300',
+};
+
+/** Records what was sent to E-POS and what came back (numbers hidden) for one hour. Off by default. */
+function DebugSwitch({ item, when }) {
+    const { t } = useTranslation();
+    const [busy, setBusy] = useState(false);
+    const active = Boolean(item.debug_until);
+    const toggle = () => router.post(route('client.integrations.epos.debug', item.id), { on: !active }, {
+        preserveScroll: true,
+        onStart: () => setBusy(true),
+        onFinish: () => setBusy(false),
+    });
+
+    return (
+        <div className="flex flex-wrap items-start gap-3 border-t border-neutral-100 px-4 py-3 dark:border-neutral-700">
+            <div className="min-w-0 flex-1 basis-64">
+                <h3 className="text-sm font-semibold text-neutral-900 dark:text-white">{t('epos_status.debug_title')}</h3>
+                <p className="mt-0.5 text-xs text-neutral-500 dark:text-neutral-400">{t('epos_status.debug_hint')}</p>
+                {active && (
+                    <p role="status" className="mt-1 text-xs font-medium text-amber-700 dark:text-amber-300">
+                        {t('epos_status.debug_active', { time: when(item.debug_until) })}
+                    </p>
+                )}
+            </div>
+            <button
+                type="button"
+                onClick={toggle}
+                disabled={busy}
+                aria-pressed={active}
+                className="rounded-lg border border-neutral-300 px-3 py-2 text-sm font-medium text-neutral-800 hover:bg-neutral-50 disabled:opacity-60 dark:border-neutral-600 dark:text-neutral-100 dark:hover:bg-neutral-700"
+            >
+                {active ? t('epos_status.debug_off') : t('epos_status.debug_on')}
+            </button>
+        </div>
+    );
+}
+
+/** The last 50 calls. A row has "Details" only when debug recording was on for it. */
+function CallsTable({ calls, tz, labelFor }) {
+    const { t } = useTranslation();
+    const time = (iso) => formatInTz(iso, tz, { ...fmtOpts, second: '2-digit' });
+
+    return (
+        <div className="border-t border-neutral-100 px-4 py-3 dark:border-neutral-700">
+            <h3 className="text-sm font-semibold text-neutral-900 dark:text-white">{t('epos_status.calls_title')}</h3>
+            {calls.length === 0 ? (
+                <p className="mt-2 text-sm text-neutral-500 dark:text-neutral-400">{t('epos_status.calls_empty')}</p>
+            ) : (
+                <div className="mt-2 overflow-x-auto">
+                    <table className="w-full min-w-[34rem] text-start text-xs">
+                        <thead>
+                            <tr className="text-neutral-500 dark:text-neutral-400">
+                                {['col_time', 'col_question', 'col_result', 'col_status', 'col_took'].map((c) => (
+                                    <th key={c} scope="col" className="py-1.5 pe-3 text-start font-medium">{t(`epos_status.${c}`)}</th>
+                                ))}
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-neutral-100 dark:divide-neutral-700">
+                            {calls.map((c) => (
+                                <tr key={c.id} className="align-top text-neutral-800 dark:text-neutral-100">
+                                    <td className="whitespace-nowrap py-1.5 pe-3">{time(c.created_at)}</td>
+                                    <td className="py-1.5 pe-3" dir="auto">
+                                        {labelFor(c.capability)}
+                                        {c.message && <div className="text-neutral-500 dark:text-neutral-400" dir="auto">{c.message}</div>}
+                                        {(c.request || c.response) && (
+                                            <details className="mt-1">
+                                                <summary className="cursor-pointer font-medium text-brand-600">{t('epos_status.details')}</summary>
+                                                <div dir="ltr" className="mt-1 space-y-2">
+                                                    {c.request && <div><div className="font-semibold">{t('epos_status.request_sent')}</div><pre className="max-h-48 overflow-auto whitespace-pre-wrap break-all rounded bg-neutral-100 p-2 font-mono dark:bg-neutral-900">{c.request}</pre></div>}
+                                                    {c.response && <div><div className="font-semibold">{t('epos_status.answer_received')}</div><pre className="max-h-48 overflow-auto whitespace-pre-wrap break-all rounded bg-neutral-100 p-2 font-mono dark:bg-neutral-900">{c.response}</pre></div>}
+                                                    <p className="text-neutral-500 dark:text-neutral-400">{t('epos_status.details_note')}</p>
+                                                </div>
+                                            </details>
+                                        )}
+                                    </td>
+                                    <td className="py-1.5 pe-3"><span className={`rounded-full px-2 py-0.5 font-semibold ${OUTCOME_STYLE[c.outcome] ?? OUTCOME_STYLE.not_found}`}>{t(`epos_status.outcome_${c.outcome}`)}</span></td>
+                                    <td className="py-1.5 pe-3 font-mono">{c.status}</td>
+                                    <td className="whitespace-nowrap py-1.5 pe-3 font-mono">{c.ms} ms</td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            )}
+        </div>
+    );
+}
+
 function IntegrationCard({ item, tz }) {
     const { t, i18n } = useTranslation();
     const [checking, setChecking] = useState(false);
@@ -90,6 +182,17 @@ function IntegrationCard({ item, tz }) {
                     </ul>
                 </details>
             )}
+
+            <DebugSwitch item={item} when={when} />
+            <CallsTable
+                calls={item.calls ?? []}
+                tz={tz}
+                labelFor={(key) => {
+                    if (key === 'manifest') return t('epos_status.manifest_row');
+                    const cap = item.capabilities.find((c) => c.key === key);
+                    return cap ? pickLabel(cap.label, i18n.language) : key;
+                }}
+            />
 
             {item.issues.length > 0 && (
                 <div className="border-t border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-900/50 dark:bg-amber-900/10">

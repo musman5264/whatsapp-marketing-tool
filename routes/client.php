@@ -57,6 +57,7 @@ Route::middleware(['verified'])->group(function () {
     // Linked E-POS systems: status page (client admins only)
     Route::get('/integrations/epos', [EposIntegrationController::class, 'index'])->name('integrations.epos.index');
     Route::post('/integrations/epos/{integration}/check', [EposIntegrationController::class, 'check'])->whereNumber('integration')->name('integrations.epos.check');
+    Route::post('/integrations/epos/{integration}/debug', [EposIntegrationController::class, 'debug'])->whereNumber('integration')->name('integrations.epos.debug');
 
     // Settings
     Route::get('/settings', [ClientSettingsController::class, 'index'])->name('settings.index');

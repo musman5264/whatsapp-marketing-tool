@@ -2,6 +2,7 @@
 
 namespace App\Modules\Integrations\Services\External;
 
+use App\Modules\Integrations\Models\ExternalCallLog;
 use App\Modules\Integrations\Models\ExternalIntegration;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
@@ -34,24 +35,34 @@ class EposExecutor
     {
         $started = microtime(true);
         $status = 'skipped';
-        $result = $this->run($integration, $capabilityKey, $phone, $authorParams, $idempotencySeed, $status);
+        $debug = null;
+        $result = $this->run($integration, $capabilityKey, $phone, $authorParams, $idempotencySeed, $status, $debug);
+        $ms = (int) round((microtime(true) - $started) * 1000);
 
         Log::info('external.call', [
             'integration_id' => $integration->id,
             'capability' => $capabilityKey,
             'status' => $status,
-            'ms' => (int) round((microtime(true) - $started) * 1000),
+            'ms' => $ms,
             'found' => $result['outcome'] === 'found',
         ]);
+
+        // The table the admin reads. Never allowed to break a chat.
+        try {
+            ExternalCallLog::record($integration, $capabilityKey, $result['outcome'], $status, $ms, $result['message'], $debug['request'] ?? null, $debug['response'] ?? null);
+        } catch (\Throwable) {
+            Log::warning('external.call_log_failed', ['integration_id' => $integration->id]);
+        }
 
         return $result;
     }
 
     /**
      * @param  array<string, mixed>  $author
+     * @param  array{request?: string, response?: string}|null  $debug  filled only while the admin has debug recording on
      * @return array{outcome: string, body: array<string, mixed>, message: string}
      */
-    private function run(ExternalIntegration $integration, string $key, ?string $phone, array $author, string $idempotencySeed, string &$status): array
+    private function run(ExternalIntegration $integration, string $key, ?string $phone, array $author, string $idempotencySeed, string &$status, ?array &$debug): array
     {
         $capability = null;
         foreach ($integration->manifest['capabilities'] ?? [] as $candidate) {
@@ -89,6 +100,13 @@ class EposExecutor
         RateLimiter::hit($limiter, 60);
 
         $url = rtrim($integration->base_url, '/').$capability['path'];
+        if ($integration->isDebugging()) {
+            $isAction = $capability['kind'] === 'action';
+            $debug = ['request' => ExternalCallLog::payload(
+                ($isAction ? 'POST ' : 'GET ').$capability['path'].(! $isAction && $values ? '?'.http_build_query($values) : '').($isAction ? '
+'.json_encode($values, JSON_UNESCAPED_UNICODE) : '')
+            )];
+        }
         try {
             // shortcut: queries are not retried (spec says MAY); add one retry on a connection error if EPOS proves flaky.
             $response = $capability['kind'] === 'action'
@@ -96,6 +114,9 @@ class EposExecutor
                 : $this->http->request('GET', $url.($values ? '?'.http_build_query($values) : ''), $integration->key);
         } catch (ExternalCallException $e) {
             $status = $e->reason;
+            if ($debug !== null) {
+                $debug['response'] = 'ERROR '.$e->reason;
+            }
             if ($e->reason !== 'unsafe_target') {
                 $this->health->recordFailure($integration);
             }
@@ -104,6 +125,9 @@ class EposExecutor
         }
 
         $status = (string) $response->status();
+        if ($debug !== null) {
+            $debug['response'] = ExternalCallLog::payload($response->status().' '.$response->body());
+        }
         $json = $response->json();
         if (! $response->successful() || ! is_array($json)) {
             $this->health->recordFailure($integration);

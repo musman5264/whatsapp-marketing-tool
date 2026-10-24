@@ -21,6 +21,7 @@ use Illuminate\Support\Carbon;
  * @property int $consecutive_failures
  * @property Carbon|null $next_retry_at
  * @property Carbon|null $last_ping_at
+ * @property Carbon|null $debug_until
  *
  * A remote system (EPOS today) linked to a workspace. Holds its API key (encrypted)
  * and the cached manifest of questions it publishes. Customer data is never stored here.
@@ -46,7 +47,14 @@ class ExternalIntegration extends Model
             'manifest_fetched_at' => 'datetime',
             'next_retry_at' => 'datetime',
             'last_ping_at' => 'datetime',
+            'debug_until' => 'datetime',
         ];
+    }
+
+    /** True while an administrator has request/response recording switched on (it switches itself off). */
+    public function isDebugging(): bool
+    {
+        return (bool) $this->debug_until?->isFuture();
     }
 
     public function capabilityCount(): int

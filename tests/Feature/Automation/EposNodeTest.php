@@ -6,6 +6,7 @@ use App\Modules\Automation\Jobs\ExecuteAutomationRunJob;
 use App\Modules\Automation\Models\Automation;
 use App\Modules\Automation\Models\AutomationRun;
 use App\Modules\Automation\Services\AutomationEngine;
+use App\Modules\Integrations\Models\ExternalCallLog;
 use App\Modules\Integrations\Models\ExternalIntegration;
 use App\Modules\Integrations\Services\External\HostResolver;
 use App\Modules\Shared\Contracts\ChannelDriverInterface;
@@ -392,6 +393,85 @@ class EposNodeTest extends TestCase
         }
 
         $this->assertSame('unreachable', $this->integration->fresh()->status);
+    }
+
+    public function test_every_call_is_recorded_without_payloads_when_debug_is_off(): void
+    {
+        $this->fakeEpos(['*' => $this->eposJson(['found' => true, 'name' => 'Secret Customer Name'])]);
+
+        $this->runFlow(['capability' => 'contact.profile']);
+
+        $row = ExternalCallLog::where('integration_id', $this->integration->id)->sole();
+        $this->assertSame('contact.profile', $row->capability);
+        $this->assertSame('found', $row->outcome);
+        $this->assertSame('200', $row->status);
+        $this->assertIsInt($row->ms);
+        $this->assertNull($row->request);
+        $this->assertNull($row->response);
+        $this->assertStringNotContainsString('5550000001', json_encode($row->toArray()));
+    }
+
+    public function test_a_no_data_call_is_recorded_with_its_reason(): void
+    {
+        $this->fakeEpos(['*' => fn () => throw new ConnectionException('cURL error 28')]);
+
+        $this->runFlow(['capability' => 'contact.profile']);
+
+        $row = ExternalCallLog::sole();
+        $this->assertSame('no_data', $row->outcome);
+        $this->assertSame('unreachable', $row->status);
+        $this->assertStringContainsString('unreachable', $row->message);
+    }
+
+    public function test_a_call_that_never_left_is_recorded_too(): void
+    {
+        $this->fakeEpos(['*' => $this->eposJson(['found' => true])]);
+
+        $this->runFlow(['capability' => 'products.search']);
+
+        $row = ExternalCallLog::sole();
+        $this->assertSame('no_data', $row->outcome);
+        $this->assertStringContainsString('no longer available', $row->message);
+    }
+
+    public function test_debug_on_keeps_the_masked_request_and_response_but_never_the_key(): void
+    {
+        $this->integration->forceFill(['debug_until' => now()->addHour()])->save();
+        $this->fakeEpos(['*' => $this->eposJson(['found' => true, 'name' => 'Ali', 'mobile' => '+15550000001', 'pad' => str_repeat('x', 5000)])]);
+
+        $this->runFlow(['capability' => 'contact.profile']);
+
+        $row = ExternalCallLog::sole();
+        $this->assertStringContainsString('GET', $row->request);
+        $this->assertStringContainsString('/api/whatsapp/v1/profile', $row->request);
+        $this->assertStringContainsString('+1555•••0001', urldecode($row->request));
+        $this->assertStringNotContainsString('5550000001', $row->request.$row->response);
+        $this->assertStringContainsString('+1555•••0001', $row->response);
+        $this->assertStringContainsString('Ali', $row->response);
+        $this->assertLessThanOrEqual(2100, strlen($row->response));
+        $this->assertStringNotContainsString('wak_live_secret', $row->request.$row->response.$row->message);
+    }
+
+    public function test_debug_that_has_expired_records_no_payload(): void
+    {
+        $this->integration->forceFill(['debug_until' => now()->subMinute()])->save();
+        $this->fakeEpos(['*' => $this->eposJson(['found' => true])]);
+
+        $this->runFlow(['capability' => 'contact.profile']);
+
+        $this->assertNull(ExternalCallLog::sole()->request);
+    }
+
+    public function test_a_manifest_refresh_is_recorded(): void
+    {
+        $this->fakeEpos([
+            'epos.example.com/api/whatsapp/v1/manifest' => HttpFactory::response(['manifest_version' => 'v2', 'capabilities' => $this->capabilities()]),
+            'epos.example.com/api/whatsapp/v1/profile*' => $this->eposJson(['found' => true], 200, 'v2'),
+        ]);
+
+        $this->runFlow(['capability' => 'contact.profile']);
+
+        $this->assertSame(['contact.profile', 'manifest'], ExternalCallLog::orderBy('id')->pluck('capability')->sort()->values()->all());
     }
 
     public function test_audit_line_has_no_phone_key_or_body(): void

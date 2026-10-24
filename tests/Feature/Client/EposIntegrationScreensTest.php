@@ -3,6 +3,7 @@
 namespace Tests\Feature\Client;
 
 use App\Models\User;
+use App\Modules\Integrations\Models\ExternalCallLog;
 use App\Modules\Integrations\Models\ExternalIntegration;
 use App\Modules\Integrations\Services\External\HostResolver;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -141,6 +142,55 @@ class EposIntegrationScreensTest extends TestCase
         $this->actingAs($this->admin)->post("/app/integrations/epos/{$this->integration->id}/check")->assertRedirect();
 
         $this->assertSame('v3', $this->integration->fresh()->manifest_version);
+    }
+
+    public function test_status_page_lists_the_recent_calls_newest_first(): void
+    {
+        foreach ([3, 2, 1] as $minutesAgo) {
+            ExternalCallLog::create([
+                'integration_id' => $this->integration->id, 'capability' => "q.{$minutesAgo}", 'outcome' => 'found', 'status' => '200', 'ms' => 40,
+                'message' => 'E-POS answered.', 'request' => $minutesAgo === 1 ? 'GET /p?phone=%2B9233•••6444' : null, 'response' => $minutesAgo === 1 ? '{"found":true}' : null,
+                'created_at' => now()->subMinutes($minutesAgo),
+            ]);
+        }
+
+        $this->actingAs($this->admin)->get('/app/integrations/epos')
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->where('integrations.0.calls.0.capability', 'q.1')
+                ->where('integrations.0.calls.0.request', 'GET /p?phone=%2B9233•••6444')
+                ->where('integrations.0.calls.2.capability', 'q.3')
+                ->where('integrations.0.debug_until', null));
+    }
+
+    public function test_only_fifty_calls_are_sent_to_the_page(): void
+    {
+        for ($i = 0; $i < 60; $i++) {
+            ExternalCallLog::create(['integration_id' => $this->integration->id, 'capability' => 'c', 'outcome' => 'found', 'status' => '200', 'ms' => 1]);
+        }
+
+        $this->actingAs($this->admin)->get('/app/integrations/epos')
+            ->assertInertia(fn ($page) => $page->has('integrations.0.calls', 50));
+    }
+
+    public function test_admin_turns_debug_recording_on_for_one_hour_and_off_again(): void
+    {
+        $this->actingAs($this->admin)->post("/app/integrations/epos/{$this->integration->id}/debug", ['on' => true])->assertRedirect();
+        $until = $this->integration->fresh()->debug_until;
+        $this->assertEqualsWithDelta(3600, now()->diffInSeconds($until, false), 5);
+
+        $this->actingAs($this->admin)->post("/app/integrations/epos/{$this->integration->id}/debug", ['on' => false])->assertRedirect();
+        $this->assertNull($this->integration->fresh()->debug_until);
+    }
+
+    public function test_staff_and_other_workspaces_cannot_switch_debug(): void
+    {
+        $this->actingAs($this->staff())->post("/app/integrations/epos/{$this->integration->id}/debug", ['on' => true])->assertForbidden();
+
+        $other = $this->createWorkspaceContext()['user'];
+        $this->app['auth']->forgetGuards();
+        $this->actingAs($other)->post("/app/integrations/epos/{$this->integration->id}/debug", ['on' => true])->assertNotFound();
+        $this->assertNull($this->integration->fresh()->debug_until);
     }
 
     public function test_staff_cannot_run_check_now(): void

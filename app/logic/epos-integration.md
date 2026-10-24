@@ -103,3 +103,21 @@ How it behaves:
 Checked: `OK (258 tests, 735 assertions)` for `tests/Feature/{Client,Automation,Integrations,Api}`, `ApiTokenTest`, `AutomationEngineTest`; vitest `21 passed` (this also needed `resources/js/__tests__/setup.js` renamed to `setup.jsx` because it contains JSX and the whole vitest suite could not start before). eslint clean on the new files (the existing `Builder.jsx` has 1 error and 3 warnings in code I did not touch). Looked at in a browser: status page at 360px and 1920px in light and dark; builder at 1920px in light (node, exits, removed badge, panel, banner). **Not looked at:** the builder at 360px or in dark mode (the builder canvas uses fixed inline light colours and was not made responsive before this change), an Urdu locale on screen, an RTL builder.
 
 Known gaps: no sidebar link to the status page (reachable from the builder banner, the node panel and the URL); the builder does not warn when an E-POS node has an unconnected exit.
+
+## Where the E-POS logs are (recent calls table and debug switch)
+Code written, tested and looked at in a browser on 2026-10-24 (local, private test database). Not run on the live site.
+
+Three places, each with a different level of detail:
+| Where | What it holds |
+|---|---|
+| Flow "View Runs" page (Automations → the flow) | One line per E-POS step: its message ("E-POS answered.", "E-POS call failed: unreachable.", "no longer available"). Shown from `automation_run_logs`; no request or answer. |
+| Server file `storage/logs/laravel.log` | `external.call` and `external.manifest` lines: integration id, question key, status, milliseconds, found. No phone, key or body. |
+| **Admin page `/app/integrations/epos` → "Recent calls"** (table `external_call_logs`) | The last 50 calls per link: time, question, result (Found / Not found / No data), HTTP status or failure reason, milliseconds, message. Manifest reads appear as "Question list". Admins only. |
+
+**Debug switch** (same page, per link, off by default): "Switch on for 1 hour" sets `external_integrations.debug_until` to now + 1 hour; it can be switched off at any time and switches itself off. While on, each call row also keeps `request` (method, path and params, e.g. `GET /api/whatsapp/v1/profile?phone=%2B9233•••6444`; for an action also the JSON params) and `response` (HTTP status and the first 2 KB of the body, or `ERROR <reason>`), shown under "Details". The key is never recorded. Phone numbers are masked in both (`+923345266444` and `03345266444` become `+9233•••6444` / `0334•••6444`) before the text is cut, so a cut can never leave a half number. The body can still contain names and balances: use it only while testing.
+
+Retention (`ExternalCallLog::prune()`, run on about 1 write in 50): request/response are wiped after 1 day; rows are deleted after 30 days. A link's rows are deleted with the link.
+
+Where: `app/Modules/Integrations/Models/ExternalCallLog.php` (`record`, `prune`, `payload`, `mask`), migration `2026_10_24_000002_create_external_call_logs_and_debug_switch.php` (run `php artisan migrate --force` after deploy), recording in `EposExecutor::execute()` and `ManifestFetcher::refresh()`, switch route `POST /app/integrations/epos/{id}/debug` (`client.integrations.epos.debug`), page `resources/js/Pages/client/Integrations/Epos.jsx`. A failure to write a log row is caught and never breaks a chat.
+Tests: `tests/Feature/Integrations/ExternalCallLogTest.php`, `EposNodeTest.php` (recording, masking, key never present, expired switch), `EposIntegrationScreensTest.php` (newest first, 50 cap, admin-only switch, other workspace 404): `OK (46 tests, 154 assertions)`. Only these files were run for this change.
+Not checked: dark mode and 1920px of the new table; the Urdu strings on screen.
