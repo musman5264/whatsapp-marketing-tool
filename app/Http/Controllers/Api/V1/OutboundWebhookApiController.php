@@ -43,17 +43,29 @@ class OutboundWebhookApiController extends WorkspaceScopedController
             'description' => ['nullable', 'string', 'max:200'],
         ]);
 
+        // One endpoint per URL: registering the same URL again must not add a second copy, because every
+        // copy gets every event and a receiver that only knows the newest secret rejects the others as "bad signature".
         $secret = WebhookEndpoint::generateSecret();
-        $endpoint = WebhookEndpoint::create([
-            'user_id' => $request->user()->id,
-            'url' => $validated['url'],
+        $attributes = [
             'events' => $validated['events'] ?? [],
-            'description' => $validated['description'] ?? null,
             'secret' => $secret,
             'enabled' => true,
-        ]);
+        ];
+        $same = WebhookEndpoint::where('user_id', $request->user()->id)->where('url', $validated['url'])->orderBy('id')->get();
+        $endpoint = $same->first();
 
-        return response()->json(array_merge($this->format($endpoint), ['secret' => $secret]), 201);
+        if ($endpoint) {
+            $endpoint->update($attributes + ['description' => $validated['description'] ?? $endpoint->description]);
+            $same->skip(1)->each->delete(); // duplicates left by earlier registrations
+        } else {
+            $endpoint = WebhookEndpoint::create($attributes + [
+                'user_id' => $request->user()->id,
+                'url' => $validated['url'],
+                'description' => $validated['description'] ?? null,
+            ]);
+        }
+
+        return response()->json(array_merge($this->format($endpoint), ['secret' => $secret]), $endpoint->wasRecentlyCreated ? 201 : 200);
     }
 
     /**

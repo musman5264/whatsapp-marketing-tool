@@ -115,3 +115,8 @@ Static checks: `npx eslint resources/js/Pages/client/Webhooks/Deliveries.jsx` (n
 ## Deploy notes
 
 Run `php artisan migrate --force` after deploy, then `php artisan config:clear`. Until the migration runs, the job fails on the new columns.
+
+## One endpoint per URL when registering through the API (fixed 2026-10-24)
+`POST /api/v1/webhooks` used to create a new endpoint every time, even for a URL already registered by the same user. Each copy has its own secret and receives every event, so a receiver that only knows the newest secret (EPOS did) answered 401 "Bad signature" for the older copies while accepting the newest: its API log showed the same message once refused and once accepted.
+Now (`OutboundWebhookApiController::store()`): the same `url` for the same user updates the existing endpoint (events replaced, re-enabled, description kept unless sent), issues a **new secret** returned once, answers `200` (a new URL still answers `201`), and deletes any older duplicate endpoints of that URL. Different URLs, and the same URL for a different user, stay separate. The caller must store the new secret each time it registers, because registering again replaces the old one.
+Test: `tests/Feature/Api/V1/OutboundWebhookApiTest.php` (3 new tests, 11 in the file OK). Not run on the live site: existing duplicates there disappear the next time the receiver registers, or by deleting them on the Webhooks page.
