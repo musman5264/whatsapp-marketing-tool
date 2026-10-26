@@ -46,6 +46,7 @@ function Notice({ tone = 'amber', children }) {
 
 function Param({ param, value, onChange, flowVars, lang }) {
     const { t } = useTranslation();
+    const { alertVars = [] } = useContext(EposContext);
     const id = `epos-param-${param.name}`;
     const title = (
         <label htmlFor={id} className={labelCls}>
@@ -65,7 +66,12 @@ function Param({ param, value, onChange, flowVars, lang }) {
     }
 
     const fromChat = param.from === 'chat_answer';
-    const answers = fromChat ? flowVars.map((v) => `{{${v}}}`) : [];
+    // Answers marked as an alert come first: they are the ones meant for E-POS.
+    const answers = fromChat
+        ? [...flowVars]
+            .sort((a, b) => Number(alertVars.includes(b)) - Number(alertVars.includes(a)))
+            .map((v) => ({ value: `{{${v}}}`, label: `{{${v}}}${alertVars.includes(v) ? ` — ${t('automation.alert_answer_option')}` : ''}` }))
+        : [];
 
     if (param.type === 'choice') {
         return (
@@ -80,7 +86,7 @@ function Param({ param, value, onChange, flowVars, lang }) {
                     </optgroup>
                     {answers.length > 0 && (
                         <optgroup label={t('automation.epos_from_chat')}>
-                            {answers.map((a) => <option key={a} value={a}>{a}</option>)}
+                            {answers.map((a) => <option key={a.value} value={a.value}>{a.label}</option>)}
                         </optgroup>
                     )}
                 </select>
@@ -107,7 +113,7 @@ function Param({ param, value, onChange, flowVars, lang }) {
             {answers.length > 0 && (
                 <select className={`${inputCls} mt-1`} value="" aria-label={t('automation.epos_from_chat')} onChange={(e) => e.target.value && onChange(e.target.value)}>
                     <option value="">{t('automation.epos_from_chat')}…</option>
-                    {answers.map((a) => <option key={a} value={a}>{a}</option>)}
+                    {answers.map((a) => <option key={a.value} value={a.value}>{a.label}</option>)}
                 </select>
             )}
         </div>

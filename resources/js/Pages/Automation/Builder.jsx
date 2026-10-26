@@ -9,7 +9,7 @@ import {
     ShoppingBag, PackageCheck, XCircle, ShoppingCart, UserPlus,
     Image, Layers, MousePointerClick, List, HelpCircle, Workflow, Variable, Sparkles,
     UserCheck, ExternalLink, MapPin, BarChart3, CalendarClock, Video,
-    ClipboardList, ClipboardCheck, Store, Sheet, LayoutTemplate, AlertTriangle, GripVertical,
+    ClipboardList, ClipboardCheck, Store, Sheet, LayoutTemplate, AlertTriangle, Bell, GripVertical,
     FlaskConical, Loader2, CheckCircle2, MinusCircle, AlertCircle, ChevronDown, SmilePlus,
     ArrowUpDown, Download, Upload,
 } from 'lucide-react';
@@ -293,6 +293,11 @@ function BaseNode({ id, data, selected }) {
                     }}>
                         {summary || t('automation.click_to_configure')}
                     </div>
+                    {nodeType === 'ask_question' && data.alert && (
+                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 3, marginTop: 3, padding: '1px 6px', borderRadius: 999, background: '#fef3c7', border: '1px solid #fcd34d', fontSize: 9.5, fontWeight: 700, color: '#92400e' }}>
+                            <Bell size={9} aria-hidden="true" /> {t('automation.alert_badge')}
+                        </div>
+                    )}
                     {eposGone && (
                         <div role="status" style={{ display: 'flex', alignItems: 'center', gap: 3, marginTop: 2, fontSize: 10, fontWeight: 600, color: '#b45309' }}>
                             <AlertTriangle size={10} aria-hidden="true" /> {eposCtx.integrations.length === 0 ? t('automation.epos_unlinked_badge') : t('automation.epos_gone_badge')}
@@ -1071,6 +1076,8 @@ function AskQuestionFields({ d, set }) {
                 <input className={inputCls} value={d.variable ?? 'answer'} onChange={e => set('variable', e.target.value)} placeholder="answer" />
             </Field>
             <ChannelSelect d={d} set={set} />
+            <CheckField label={t('automation.field_alert_answer')} checked={d.alert} onChange={v => set('alert', v)} />
+            {d.alert && <p style={{ fontSize: 11, color: '#92400e' }}>{t('automation.alert_answer_hint')}</p>}
             <div style={{ background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 8, padding: '8px 10px', fontSize: 10, color: '#9a3412' }}>
                 {t('automation.ask_question_hint', { var: `{{context.${d.variable || 'answer'}}}` })}
             </div>
@@ -1957,6 +1964,25 @@ function runFlowLint(nodes, edges, automation) {
         }
     }
 
+    // An answer marked "alert" has to be used by an E-POS step, or nobody is ever alerted.
+    const eposTexts = nodes
+        .filter(n => n.data?.nodeType === 'epos')
+        .flatMap(n => Object.values(n.data?.params ?? {}))
+        .filter(v => typeof v === 'string');
+    for (const node of nodes) {
+        if (node.data?.nodeType !== 'ask_question' || !node.data?.alert) continue;
+        const v = String(node.data.variable || 'answer').trim();
+        const used = eposTexts.some(text => text.replace(/\s+/g, '').includes(`{{${v}}}`) || text.replace(/\s+/g, '').includes(`{{context.${v}}}`));
+        if (!used) {
+            warnings.push({
+                id: `alert-unsent-${node.id}`,
+                nodeId: node.id,
+                type: 'alert_not_sent',
+                message: `This question is marked as an alert, but no E-POS step sends {{${v}}}. Add an E-POS step with an alert question and use {{${v}}} as its message.`,
+            });
+        }
+    }
+
     // 2. Collect all declared/produced variables
     const producedVars = new Set(['contact', 'whatsapp', 'customer', 'message', 'context']);
     for (const node of nodes) {
@@ -2185,7 +2211,8 @@ function AutomationBuilderInner({ automation: initial }) {
         return () => { live = false; };
     }, []);
     const flowVars = useMemo(() => collectFlowVariables(nodes), [nodes]);
-    const eposCtx = useMemo(() => ({ ...epos, flowVars }), [epos, flowVars]);
+    const alertVars = useMemo(() => (nodes ?? []).filter(n => n.data?.nodeType === 'ask_question' && n.data?.alert).map(n => String(n.data.variable || 'answer').trim()), [nodes]);
+    const eposCtx = useMemo(() => ({ ...epos, flowVars, alertVars }), [epos, flowVars, alertVars]);
 
     const webhookUrl = automation.trigger_token
         ? `${window.location.origin}/webhooks/automation/${automation.trigger_token}`

@@ -33,6 +33,7 @@
         "data": {
           "question": "Please send your order request in these 6 lines (copy, fill in and send):\n\n👤 *Name:* \n📍 *Delivery Address:* \n📞 *Phone Number:* \n🧁 *Items Requested:* \n🔢 *Quantity:* \n⏰ *Preferred Delivery/Pick-up Time:* \n\nاپنی درخواست ان 6 لائنوں میں بھر کر بھیجیں۔",
           "variable": "answer",
+          "alert": true,
           "nodeType": "ask_question",
           "configured": true
         }
