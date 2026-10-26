@@ -198,6 +198,8 @@ class IntegrationApiTest extends TestCase
         $text = fn (mixed $max) => ['name' => 'message', 'type' => 'text', 'from' => 'chat_answer', 'max_length' => $max];
         $this->fakeManifest([
             $this->capability('alert.push', ['kind' => 'action', 'method' => 'POST', 'params' => [$text(1000)]]),
+            $this->capability('str.max', ['params' => [$text('1500')]]),
+            $this->capability('float.max', ['params' => [$text(800.0)]]),
             $this->capability('bad.max', ['params' => [$text(0)]]),
             $this->capability('bad.max2', ['params' => [$text('lots')]]),
         ]);
@@ -207,6 +209,8 @@ class IntegrationApiTest extends TestCase
 
         $row = ExternalIntegration::first();
         $this->assertSame(1000, $row->manifest['capabilities'][0]['params'][0]['max_length']);
+        $this->assertSame(1500, $row->manifest['capabilities'][1]['params'][0]['max_length']);
+        $this->assertSame(800, $row->manifest['capabilities'][2]['params'][0]['max_length']);
         $this->assertEqualsCanonicalizing(['bad.max', 'bad.max2'], collect($row->manifest_issues)->pluck('key')->all());
     }
 

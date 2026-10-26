@@ -157,7 +157,8 @@ class ManifestFetcher
                 return "param {$p['name']}: choice needs choices";
             }
             // Long chat text (an order, an alert). Without it a text value stops at 200 characters.
-            if (isset($p['max_length']) && (! is_int($p['max_length']) || $p['max_length'] < 1)) {
+            // "1500" and 1500.0 are accepted too (other systems often send numbers as text); cast in clean().
+            if (isset($p['max_length']) && (! is_numeric($p['max_length']) || (int) $p['max_length'] < 1 || (float) $p['max_length'] != (int) $p['max_length'])) {
                 return "param {$p['name']}: max_length must be a whole number of 1 or more";
             }
         }
@@ -176,7 +177,14 @@ class ManifestFetcher
      */
     private function clean(array $c): array
     {
-        $params = array_map(fn ($p) => array_intersect_key($p, array_flip(['name', 'type', 'from', 'optional', 'required_if', 'default', 'choices', 'max_length'])), (array) ($c['params'] ?? []));
+        $params = array_map(function ($p) {
+            $p = array_intersect_key($p, array_flip(['name', 'type', 'from', 'optional', 'required_if', 'default', 'choices', 'max_length']));
+            if (isset($p['max_length'])) {
+                $p['max_length'] = (int) $p['max_length'];
+            }
+
+            return $p;
+        }, (array) ($c['params'] ?? []));
 
         return array_intersect_key($c, array_flip(['key', 'kind', 'group', 'label', 'description', 'method', 'path', 'outputs', 'summary_template']))
             + ['params' => $params];
