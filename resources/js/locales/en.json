@@ -3503,6 +3503,7 @@
         "alert_answer_hint": "Add an E-POS step with an alert question and pick this answer as its message. The flow check warns if none uses it.",
         "alert_badge": "Alert → E-POS",
         "alert_answer_option": "alert",
+        "epos_answer_fields": "E-POS answers",
         "node_set_variable": "Set variable",
         "field_variable_name": "Variable name *",
         "field_variable_value": "Value",

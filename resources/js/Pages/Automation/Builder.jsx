@@ -19,7 +19,7 @@ import { Link } from '@inertiajs/react';
 import { useTranslation } from 'react-i18next';
 import axios from 'axios';
 import { EposContext, EposFields, eposExitKeys, resolveEpos } from './EposNode';
-import { pickLabel } from '@/lib/epos';
+import { outputVariables, pickLabel } from '@/lib/epos';
 import { buildExport, downloadText, fileSafeName, flowToMarkdown } from '@/lib/automationFile';
 import {
     ReactFlow,
@@ -1109,8 +1109,9 @@ function ConditionFields({ d, set }) {
     const { t } = useTranslation();
     const noValue = d.operator === 'exists' || d.operator === 'not_exists';
     const flowVars = useFlowVars();
+    const { eposFields = [] } = useContext(EposContext);
     // Keep the current value selectable even if it isn't in either list.
-    const known = new Set([...CONDITION_FIELDS.map(f => f.value), ...flowVars.map(v => 'context.' + v)]);
+    const known = new Set([...CONDITION_FIELDS.map(f => f.value), ...flowVars.map(v => 'context.' + v), ...eposFields.map(f => f.value)]);
     return (
         <>
             <Field label={t('automation.field_check_field_required')}>
@@ -1119,6 +1120,11 @@ function ConditionFields({ d, set }) {
                     {flowVars.length > 0 && (
                         <optgroup label={t('automation.flow_variables')}>
                             {flowVars.map(v => <option key={v} value={'context.' + v}>{'{{' + v + '}}'}</option>)}
+                        </optgroup>
+                    )}
+                    {eposFields.length > 0 && (
+                        <optgroup label={t('automation.epos_answer_fields')}>
+                            {eposFields.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
                         </optgroup>
                     )}
                     <optgroup label={t('automation.standard_fields')}>
@@ -2212,7 +2218,19 @@ function AutomationBuilderInner({ automation: initial }) {
     }, []);
     const flowVars = useMemo(() => collectFlowVariables(nodes), [nodes]);
     const alertVars = useMemo(() => (nodes ?? []).filter(n => n.data?.nodeType === 'ask_question' && n.data?.alert).map(n => String(n.data.variable || 'answer').trim()), [nodes]);
-    const eposCtx = useMemo(() => ({ ...epos, flowVars, alertVars }), [epos, flowVars, alertVars]);
+    // Fields of each E-POS answer, for the Condition's field list: {{epos.reason}}, {{epos.name}} …
+    const eposFields = useMemo(() => {
+        const out = new Map();
+        for (const n of nodes ?? []) {
+            if (n.data?.nodeType !== 'epos') continue;
+            const v = String(n.data.result_var ?? '').trim() || 'epos';
+            const cap = resolveEpos(n.data, epos.integrations).capability;
+            const tokens = [...outputVariables(cap, v).map(o => o.token), `{{${v}.reason}}`, `{{${v}_status}}`];
+            for (const token of tokens) out.set('context.' + token.slice(2, -2), token);
+        }
+        return [...out].map(([value, label]) => ({ value, label }));
+    }, [nodes, epos]);
+    const eposCtx = useMemo(() => ({ ...epos, flowVars, alertVars, eposFields }), [epos, flowVars, alertVars, eposFields]);
 
     const webhookUrl = automation.trigger_token
         ? `${window.location.origin}/webhooks/automation/${automation.trigger_token}`
