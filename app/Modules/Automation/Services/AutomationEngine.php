@@ -431,6 +431,11 @@ class AutomationEngine
                     return $ok('Would call '.strtoupper($data['method'] ?? 'POST').' '.$this->snippet($render($data['url']), 50), ['context_update' => $seed]);
                 })(),
             'epos' => $ok('Would ask E-POS "'.($data['capability'] ?? '?').'" about this customer (not called in test).', ['context_update' => [(($data['result_var'] ?? '') ?: 'epos') => '{"found":true}']]),
+            'set_variable' => (function () use ($data, $contact, $context, $err, $ok): array {
+                $r = $this->resolveSetVariable($data, $contact, $context);
+
+                return $r['error'] ? $err($r['error']) : $ok($r['message'], ['context_update' => [$r['name'] => $r['value']]]);
+            })(),
             'run_subflow' => $ok('Would run sub-flow '.($data['subflow_name'] ?? ($data['automation_uuid'] ?? '?')).'.'),
             'ai_reply' => $ok('Would generate an AI reply'.(! empty($data['chatbot_id']) ? ' via chatbot #'.$data['chatbot_id'] : '').' and send it.', ['context_update' => ['last_ai_reply' => '[AI generated reply]']]),
             'add_tag' => ($data['tag'] ?? '') === '' ? $skip('No tag name.') : $ok('Would add tag "'.$data['tag'].'".'),
@@ -481,6 +486,7 @@ class AutomationEngine
                 'update_contact' => $this->executeUpdateContact($data, $run, $context),
                 'webhook' => $this->executeWebhook($data, $run, $context),
                 'epos' => $this->executeEpos($data, $run, $context),
+                'set_variable' => $this->executeSetVariable($data, $run, $context),
                 'condition' => $this->executeCondition($data, $run, $context),
                 'send_whatsapp' => $this->executeSendWhatsapp($data, $run, $context),
                 'send_sms' => $this->executeSendSms($data, $run, $context),
@@ -1135,6 +1141,45 @@ class AutomationEngine
         ];
     }
 
+    /**
+     * Set variable node: saves "Value" under the variable name, or "Fallback" when Value renders empty
+     * (a missing variable renders empty). Leave Fallback blank to just create a variable.
+     */
+    private function executeSetVariable(array $data, AutomationRun $run, array $context): array
+    {
+        $r = $this->resolveSetVariable($data, $run->contact_id ? Contact::find($run->contact_id) : null, $context);
+        if ($r['error']) {
+            return ['status' => 'error', 'message' => $r['error']];
+        }
+
+        return ['status' => 'ok', 'message' => $r['message'], 'context_update' => [$r['name'] => $r['value']]];
+    }
+
+    /** @return array{error: ?string, name: string, value: string, message: string} */
+    private function resolveSetVariable(array $data, ?Contact $contact, array $context): array
+    {
+        $name = preg_replace('/\s+/', '_', trim((string) ($data['variable'] ?? '')));
+        // A leading underscore is for the engine's own run keys (_awaiting_reply …).
+        if (! preg_match('/^[a-zA-Z]\w*$/', $name)) {
+            return ['error' => 'Variable name is required: letters, numbers and _, starting with a letter.', 'name' => '', 'value' => '', 'message' => ''];
+        }
+
+        $contact ??= new Contact;
+        $value = $this->renderTokens((string) ($data['value'] ?? ''), $contact, $context);
+        $usedFallback = false;
+        if ($value === '' && trim((string) ($data['fallback'] ?? '')) !== '') {
+            $value = $this->renderTokens((string) $data['fallback'], $contact, $context);
+            $usedFallback = true;
+        }
+
+        return [
+            'error' => null,
+            'name' => $name,
+            'value' => $value,
+            'message' => "Set {{{$name}}} = \"".$this->snippet($value, 60).'"'.($usedFallback ? ' (fallback used)' : '').'.',
+        ];
+    }
+
     /** Decode a JSON-string (or already-array) config field into an array, token-rendered. */
     private function decodeJsonField(mixed $v, ?Contact $contact, array $context): array
     {
@@ -1167,6 +1212,10 @@ class AutomationEngine
         $field = $data['field'] ?? null;
         $operator = $data['operator'] ?? 'equals';
         $value = $data['value'] ?? null;
+        // The compare value may be another variable: "{{whatsapp.name}}" compares against the real name.
+        if (is_string($value) && str_contains($value, '{{')) {
+            $value = $this->renderTokens($value, $contact ?? new Contact, $context);
+        }
 
         // Tag membership is a boolean check, not a value comparison.
         if ($field === 'contact.tag') {

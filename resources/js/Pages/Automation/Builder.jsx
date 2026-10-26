@@ -7,7 +7,7 @@ import {
     Tag, Scissors, UserCog, Megaphone, Bot, Webhook,
     Plus, Trash2, Settings, UserRound, Link2, MessageCircle, FileText,
     ShoppingBag, PackageCheck, XCircle, ShoppingCart, UserPlus,
-    Image, Layers, MousePointerClick, List, HelpCircle, Workflow, Sparkles,
+    Image, Layers, MousePointerClick, List, HelpCircle, Workflow, Variable, Sparkles,
     UserCheck, ExternalLink, MapPin, BarChart3, CalendarClock, Video,
     ClipboardList, ClipboardCheck, Store, Sheet, LayoutTemplate, AlertTriangle, GripVertical,
     FlaskConical, Loader2, CheckCircle2, MinusCircle, AlertCircle, ChevronDown, SmilePlus,
@@ -79,6 +79,7 @@ const NODE_DEFS = {
     condition:           { labelKey: 'automation.node_condition',           color: '#8b5cf6', bg: '#f5f3ff', icon: GitBranch,         category: 'logic',        qr: true },
     wait:                { labelKey: 'automation.node_wait',                color: '#f59e0b', bg: '#fffbeb', icon: Clock,             category: 'logic',        qr: true },
     webhook:             { labelKey: 'automation.node_webhook',             color: '#64748b', bg: '#f8fafc', icon: Webhook,           category: 'logic',        qr: true },
+    set_variable:        { labelKey: 'automation.node_set_variable',        color: '#0f766e', bg: '#f0fdfa', icon: Variable,          category: 'logic',        qr: true },
     run_subflow:         { labelKey: 'automation.node_run_subflow',         color: '#475569', bg: '#f8fafc', icon: Workflow,          category: 'logic',        qr: true },
     // ── AI ────────────────────────────────────────────────────────────────
     ai_reply:            { labelKey: 'automation.node_ai_reply',            color: '#7c3aed', bg: '#faf5ff', icon: Sparkles,          category: 'ai',           qr: true },
@@ -170,7 +171,7 @@ const useFlowVars = () => useContext(FlowVarsContext);
  */
 function collectFlowVariables(nodes) {
     const vars = new Set();
-    const TEXT_KEYS = ['body', 'question', 'value', 'caption', 'prompt', 'summary', 'description', 'title', 'url', 'payload'];
+    const TEXT_KEYS = ['body', 'question', 'value', 'caption', 'prompt', 'summary', 'description', 'title', 'url', 'payload', 'fallback'];
 
     for (const n of nodes ?? []) {
         const d = n.data ?? {};
@@ -184,6 +185,7 @@ function collectFlowVariables(nodes) {
             const rv = String(d.result_var).trim();
             if (rv) vars.add(rv);
         }
+        if (nt === 'set_variable' && d.variable) vars.add(String(d.variable).trim().replace(/\s+/g, '_'));
         if (nt === 'epos') vars.add(String(d.result_var ?? '').trim() || 'epos');
 
         for (const k of TEXT_KEYS) {
@@ -400,6 +402,7 @@ function summarizeConfig(data, t) {
         case 'quick_replies': return clip(data.body, 30);
         case 'list_message': return clip(data.body, 30);
         case 'ask_question': return data.question ? `${clip(data.question, 28)} → {{${data.variable || 'answer'}}}` : '';
+        case 'set_variable': return data.variable ? `{{${data.variable}}} = ${clip(data.value || data.fallback, 22)}` : '';
         case 'run_subflow': return data.subflow_name ?? data.automation_uuid ?? '';
         case 'assign_agent': return data.agent_name ?? (data.user_id ? `#${data.user_id}` : t('automation.assign_unassigned'));
         case 'cta_button': return data.display_text ? `${data.display_text} · ${clip(data.url, 22)}` : clip(data.url, 28);
@@ -437,6 +440,7 @@ const FIELD_COMPONENTS = {
     wait: WaitFields,
     condition: ConditionFields,
     webhook: WebhookFields,
+    set_variable: SetVariableFields,
     run_subflow: SubflowFields,
     ai_reply: AIReplyFields,
     add_tag: TagFields,
@@ -1185,6 +1189,24 @@ function CampaignFields({ d, set }) {
                 <input type="number" className={inputCls} value={d.campaign_id ?? ''} onChange={e => set('campaign_id', e.target.value)} placeholder="123" />
             )}
         </Field>
+    );
+}
+
+function SetVariableFields({ d, set }) {
+    const { t } = useTranslation();
+    return (
+        <>
+            <Field label={t('automation.field_variable_name')}>
+                <input className={inputCls} value={d.variable ?? ''} onChange={e => set('variable', e.target.value.replace(/\s/g, '_'))} placeholder="customer_name" />
+            </Field>
+            <Field label={t('automation.field_variable_value')}>
+                <textarea className={textareaCls} rows={2} value={d.value ?? ''} onChange={e => set('value', e.target.value)} placeholder="{{epos.name}}" dir="auto" />
+            </Field>
+            <Field label={t('automation.field_variable_fallback')}>
+                <textarea className={textareaCls} rows={2} value={d.fallback ?? ''} onChange={e => set('fallback', e.target.value)} placeholder="{{whatsapp.name}}" dir="auto" />
+            </Field>
+            <p style={{ fontSize: 11, color: '#64748b' }}>{t('automation.set_variable_hint', { token: `{{${d.variable || 'customer_name'}}}`, example_value: '{{epos.name}}', example_fallback: '{{whatsapp.name}}' })}</p>
+        </>
     );
 }
 
@@ -1958,7 +1980,7 @@ function runFlowLint(nodes, edges, automation) {
     }
 
     // 3. Check for unknown variables in text fields
-    const TEXT_KEYS = ['body', 'question', 'value', 'caption', 'prompt', 'summary', 'description', 'title', 'url', 'payload'];
+    const TEXT_KEYS = ['body', 'question', 'value', 'caption', 'prompt', 'summary', 'description', 'title', 'url', 'payload', 'fallback'];
     const BUILTIN_PREFIXES = ['contact', 'whatsapp', 'customer', 'message', 'context'];
 
     for (const node of nodes) {
