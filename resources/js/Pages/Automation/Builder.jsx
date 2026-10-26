@@ -827,7 +827,7 @@ function templateBodyVarCount(components) {
     return matches.reduce((max, m) => Math.max(max, parseInt(m.replace(/[^\d]/g, ''), 10) || 0), 0);
 }
 
-function TemplateFields({ d, set }) {
+function TemplateFields({ d, set, setMany }) {
     const { t } = useTranslation();
     const { templates = [] } = useResources();
     const tpl = templates.find(x => x.name === d.template_name && x.language === d.language)
@@ -839,9 +839,8 @@ function TemplateFields({ d, set }) {
 
     const onPick = (val) => {
         const [name, language] = val.split('||');
-        set('template_name', name);
-        set('language', language || 'en');
-        set('variables', []); // reset on template change so indices match the new body
+        // variables reset on template change so indices match the new body
+        setMany({ template_name: name, language: language || 'en', variables: [] });
     };
     const setVar = (i, val) => {
         const next = Array.from({ length: varCount }, (_, idx) => vars[idx] ?? '');
@@ -1189,13 +1188,10 @@ function CampaignFields({ d, set }) {
     );
 }
 
-function SubflowFields({ d, set }) {
+function SubflowFields({ d, setMany }) {
     const { t } = useTranslation();
     const { subflows = [] } = useResources();
-    const pick = (uuid) => {
-        set('automation_uuid', uuid);
-        set('subflow_name', subflows.find(s => s.uuid === uuid)?.name ?? '');
-    };
+    const pick = (uuid) => setMany({ automation_uuid: uuid, subflow_name: subflows.find(s => s.uuid === uuid)?.name ?? '' });
     return (
         <Field label={t('automation.field_subflow_required')}>
             {subflows.length ? (
@@ -1263,13 +1259,10 @@ function RunChatbotFields({ d, set }) {
     );
 }
 
-function AssignAgentFields({ d, set }) {
+function AssignAgentFields({ d, setMany }) {
     const { t } = useTranslation();
     const { agents = [] } = useResources();
-    const pick = (id) => {
-        set('user_id', id);
-        set('agent_name', agents.find(a => String(a.id) === String(id))?.name ?? '');
-    };
+    const pick = (id) => setMany({ user_id: id, agent_name: agents.find(a => String(a.id) === String(id))?.name ?? '' });
     return (
         <Field label={t('automation.field_assign_to')}>
             <select className={selectCls} value={d.user_id ?? ''} onChange={e => pick(e.target.value)}>
