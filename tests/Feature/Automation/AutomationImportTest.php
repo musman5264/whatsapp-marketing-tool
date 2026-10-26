@@ -49,6 +49,16 @@ class AutomationImportTest extends TestCase
         return $this->actingAs($this->user)->post('/app/automations/import', ['payload' => $payload]);
     }
 
+    public function test_the_bundled_order_alert_example_imports(): void
+    {
+        $this->import((string) file_get_contents(base_path('app/logic/examples/epos-order-alert.flow.json')));
+
+        $a = Automation::where('workspace_id', $this->workspace->id)->sole();
+        $this->assertSame('Order request to the shop (EPOS alert) (imported)', $a->name);
+        $this->assertCount(11, $a->nodes);
+        $this->assertCount(10, $a->edges);
+    }
+
     public function test_a_valid_file_becomes_a_new_draft_in_the_importers_workspace(): void
     {
         $res = $this->import($this->file(['automation' => ['workspace_id' => 999999, 'status' => 'active', 'trigger_token' => 'stolen']]));

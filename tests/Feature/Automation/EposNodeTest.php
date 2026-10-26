@@ -295,6 +295,29 @@ class EposNodeTest extends TestCase
         Http::assertNothingSent();
     }
 
+    public function test_a_message_over_its_max_length_is_not_sent_and_the_reason_is_invalid(): void
+    {
+        $this->useAlertCapability(1500);
+        $this->fakeEpos(['*' => $this->eposJson(['found' => true, 'ok' => true])]);
+
+        $this->runFlow(['capability' => 'alert.push', 'params' => ['message' => '{{answer}}']], 'SENT', 'WHY {{epos.reason}}', ['answer' => str_repeat('a', 1501)]);
+
+        $this->assertSame('WHY invalid', $this->reply());
+        Http::assertNothingSent();
+    }
+
+    public function test_a_chat_without_a_verified_number_gives_the_reason_no_phone(): void
+    {
+        $this->useAlertCapability(1500);
+        $this->contact->update(['phone_e164' => null]);
+        $this->fakeEpos(['*' => $this->eposJson(['found' => true, 'ok' => true])]);
+
+        $this->runFlow(['capability' => 'alert.push', 'params' => ['message' => '{{answer}}']], 'SENT', 'WHY {{epos.reason}}', ['answer' => 'hello']);
+
+        $this->assertSame('WHY no_phone', $this->reply());
+        Http::assertNothingSent();
+    }
+
     public function test_each_pass_through_the_same_action_node_gets_its_own_idempotency_key(): void
     {
         $this->fakeEpos(['*' => $this->eposJson(['found' => true, 'ok' => false, 'reason' => 'rate_limited'])]);

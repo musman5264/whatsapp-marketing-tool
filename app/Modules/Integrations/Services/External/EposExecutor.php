@@ -82,9 +82,9 @@ class EposExecutor
             return $this->noData('E-POS is unreachable; not calling it until the next retry.');
         }
 
-        $values = $this->bind($capability['params'] ?? [], $phone, $author, $error);
+        $values = $this->bind($capability['params'] ?? [], $phone, $author, $error, $reason);
         if ($values === null) {
-            return $this->noData($error);
+            return $this->noData($error, $reason);
         }
 
         $personSpecific = $this->carriesPhone($capability['params'] ?? []);
@@ -166,15 +166,17 @@ class EposExecutor
      *
      * @param  array<int, array<string, mixed>>  $params
      * @param  array<string, mixed>  $author
+     * @param  string|null  $reason  set with $error: 'no_phone' (no verified number) or 'invalid' (a value is missing or wrong); the flow can reply to the customer by it, as for EPOS's own refusals
      * @return array<string, string>|null null (with $error set) when a required value is missing or invalid
      */
-    private function bind(array $params, ?string $phone, array $author, ?string &$error = null): ?array
+    private function bind(array $params, ?string $phone, array $author, ?string &$error = null, ?string &$reason = null): ?array
     {
         $raw = [];
         foreach ($params as $p) {
             $raw[$p['name']] = $this->isCustomerPhone($p) ? $phone : ($author[$p['name']] ?? $p['default'] ?? null);
             if ($this->isCustomerPhone($p) && $phone === null) {
                 $error = 'This chat has no verified WhatsApp number.';
+                $reason = 'no_phone';
 
                 return null;
             }
@@ -189,6 +191,7 @@ class EposExecutor
                 $required = empty($p['optional']) || (is_array($requiredIf) && $requiredIf !== [] && trim((string) ($raw[array_key_first($requiredIf)] ?? '')) === (string) reset($requiredIf));
                 if ($required) {
                     $error = "Missing value for {$name}.";
+                    $reason = 'invalid';
 
                     return null;
                 }
@@ -197,6 +200,7 @@ class EposExecutor
             }
             if (! $this->validValue($p, $value)) {
                 $error = "Invalid value for {$name}.";
+                $reason = 'invalid';
 
                 return null;
             }
@@ -237,8 +241,8 @@ class EposExecutor
     }
 
     /** @return array{outcome: string, body: array<string, mixed>, message: string} */
-    private function noData(string $message): array
+    private function noData(string $message, string $reason = 'no_data'): array
     {
-        return ['outcome' => 'no_data', 'body' => ['found' => false, 'ok' => false, 'reason' => 'no_data'], 'message' => $message];
+        return ['outcome' => 'no_data', 'body' => ['found' => false, 'ok' => false, 'reason' => $reason], 'message' => $message];
     }
 }

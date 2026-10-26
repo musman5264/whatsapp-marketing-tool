@@ -1,0 +1,230 @@
+{
+  "format": "whatsmine.automation",
+  "version": 1,
+  "exported_at": "2026-10-26T00:00:00.000Z",
+  "automation": {
+    "name": "Order request to the shop (EPOS alert)",
+    "trigger_type": "message.received",
+    "trigger_config": {
+      "keywords": [
+        "order request"
+      ],
+      "match_mode": "equals"
+    },
+    "nodes": [
+      {
+        "id": "trigger-1",
+        "type": "trigger",
+        "position": {
+          "x": 0,
+          "y": 0
+        },
+        "data": {
+          "triggerType": "message.received"
+        }
+      },
+      {
+        "id": "ask",
+        "type": "ask_question",
+        "position": {
+          "x": 0,
+          "y": 120
+        },
+        "data": {
+          "question": "Please send your order request in these 6 lines (copy, fill in and send):\n\n👤 *Name:* \n📍 *Delivery Address:* \n📞 *Phone Number:* \n🧁 *Items Requested:* \n🔢 *Quantity:* \n⏰ *Preferred Delivery/Pick-up Time:* \n\nاپنی درخواست ان 6 لائنوں میں بھر کر بھیجیں۔",
+          "variable": "answer",
+          "nodeType": "ask_question",
+          "configured": true
+        }
+      },
+      {
+        "id": "alert",
+        "type": "epos",
+        "position": {
+          "x": 0,
+          "y": 280
+        },
+        "data": {
+          "capability": "alert.push",
+          "result_var": "epos",
+          "params": {
+            "message": "{{answer}}",
+            "title": "New order request"
+          },
+          "nodeType": "epos",
+          "configured": true
+        }
+      },
+      {
+        "id": "ok",
+        "type": "send_whatsapp",
+        "position": {
+          "x": -260,
+          "y": 460
+        },
+        "data": {
+          "body": "Your request has been received. The shop will contact you soon. Reference: {{epos.alert_id}}.\n\nآپ کی درخواست موصول ہو گئی ہے۔ دکان جلد آپ سے رابطہ کرے گی۔ حوالہ: {{epos.alert_id}}۔",
+          "nodeType": "send_whatsapp",
+          "configured": true
+        }
+      },
+      {
+        "id": "c1",
+        "type": "condition",
+        "position": {
+          "x": 260,
+          "y": 460
+        },
+        "data": {
+          "field": "context.epos.reason",
+          "operator": "equals",
+          "value": "disabled",
+          "nodeType": "condition",
+          "configured": true
+        }
+      },
+      {
+        "id": "m_disabled",
+        "type": "send_whatsapp",
+        "position": {
+          "x": 0,
+          "y": 620
+        },
+        "data": {
+          "body": "Sorry, the shop is not accepting requests through WhatsApp right now. Please contact the shop.\n\nمعذرت، دکان اس وقت واٹس ایپ کے ذریعے درخواستیں قبول نہیں کر رہی۔ براہ کرم دکان سے رابطہ کریں۔",
+          "nodeType": "send_whatsapp",
+          "configured": true
+        }
+      },
+      {
+        "id": "c2",
+        "type": "condition",
+        "position": {
+          "x": 520,
+          "y": 620
+        },
+        "data": {
+          "field": "context.epos.reason",
+          "operator": "equals",
+          "value": "rate_limited",
+          "nodeType": "condition",
+          "configured": true
+        }
+      },
+      {
+        "id": "m_rate",
+        "type": "send_whatsapp",
+        "position": {
+          "x": 260,
+          "y": 780
+        },
+        "data": {
+          "body": "The shop is not available right now. Please try again later.\n\nدکان ابھی دستیاب نہیں ہے۔ براہ کرم بعد میں دوبارہ کوشش کریں۔",
+          "nodeType": "send_whatsapp",
+          "configured": true
+        }
+      },
+      {
+        "id": "c3",
+        "type": "condition",
+        "position": {
+          "x": 780,
+          "y": 780
+        },
+        "data": {
+          "field": "context.epos.reason",
+          "operator": "equals",
+          "value": "invalid",
+          "nodeType": "condition",
+          "configured": true
+        }
+      },
+      {
+        "id": "m_invalid",
+        "type": "send_whatsapp",
+        "position": {
+          "x": 520,
+          "y": 940
+        },
+        "data": {
+          "body": "Your message is too long or empty. Please send it again, in fewer than 1500 characters.\n\nآپ کا پیغام بہت لمبا ہے یا خالی ہے۔ براہ کرم 1500 حروف سے کم میں دوبارہ بھیجیں۔",
+          "nodeType": "send_whatsapp",
+          "configured": true
+        }
+      },
+      {
+        "id": "m_other",
+        "type": "send_whatsapp",
+        "position": {
+          "x": 1040,
+          "y": 940
+        },
+        "data": {
+          "body": "Sorry, we could not send your request to the shop right now. Please contact the shop directly.\n\nمعذرت، ہم اس وقت آپ کی درخواست دکان تک نہیں پہنچا سکے۔ براہ کرم دکان سے براہ راست رابطہ کریں۔",
+          "nodeType": "send_whatsapp",
+          "configured": true
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "e1",
+        "source": "trigger-1",
+        "target": "ask"
+      },
+      {
+        "id": "e2",
+        "source": "ask",
+        "target": "alert"
+      },
+      {
+        "id": "e3",
+        "source": "alert",
+        "target": "ok",
+        "sourceHandle": "true"
+      },
+      {
+        "id": "e4",
+        "source": "alert",
+        "target": "c1",
+        "sourceHandle": "false"
+      },
+      {
+        "id": "e5",
+        "source": "c1",
+        "target": "m_disabled",
+        "sourceHandle": "true"
+      },
+      {
+        "id": "e6",
+        "source": "c1",
+        "target": "c2",
+        "sourceHandle": "false"
+      },
+      {
+        "id": "e7",
+        "source": "c2",
+        "target": "m_rate",
+        "sourceHandle": "true"
+      },
+      {
+        "id": "e8",
+        "source": "c2",
+        "target": "c3",
+        "sourceHandle": "false"
+      },
+      {
+        "id": "e9",
+        "source": "c3",
+        "target": "m_invalid",
+        "sourceHandle": "true"
+      },
+      {
+        "id": "e10",
+        "source": "c3",
+        "target": "m_other",
+        "sourceHandle": "false"
+      }
+    ]
+  }
+}
