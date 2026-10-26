@@ -25,11 +25,14 @@ _Last updated: 2026-10-14_
 | T-0037 | Outbound webhook 401 from the client endpoint; retries never run (release then fail) | PLAN-000 / phase-01 | none | medium | pending: needs the receiver's response body; retry fix is test-first |
 | T-0044 | Alibaba-style product cards on a QR number (photo + caption per product, then a poll) | PLAN-000 / phase-01 | T-0042 | medium | pending: design approval |
 | T-0039 | Inbound messages from LID senders were dropped when WAHA could not map the number (fixed in code, test first) | PLAN-000 / phase-01 | none (user checks) | high | blocked: needs the live log grep and one test message from a LID chat |
+| T-0059 | Update my profile flow file (contact.profile_update) | PLAN-000 / phase-01 | T-0058 | high | blocked: needs the EPOS guide (reasons, sample texts, labels) |
 | T-0050 | EPOS: inbox panel with ledger PDF button | PLAN-003 / phase-01 | T-0048 (done) | medium | pending: ready to start |
 
 ## Completed (most recent first)
 | ID | Task | Plan / Phase | Completed |
 |----|------|--------------|-----------|
+| T-0058 | Alert to EPOS: manifest max_length (long text), a new Idempotency-Key per pass, EPOS-ALERT-SPEC.md for the EPOS developers (tests green; live and real-EPOS check pending) | PLAN-000 / phase-01 | 2026-10-26 |
+| T-0057 | Builder text boxes resizable, Ask Question and WhatsApp message taller (lint + build ok; browser check pending) | PLAN-000 / phase-01 | 2026-10-26 |
 | T-0056 | Builder pickers (Run Sub-flow, Assign Agent, WhatsApp template) saved only the last field; now one update (lint + build ok; browser and live check pending) | PLAN-000 / phase-01 | 2026-10-26 |
 | T-0055 | E-POS node said "not linked" for an imported flow whose saved integration id was stale; now uses the only linked E-POS (tests green; live check pending) | PLAN-000 / phase-01 | 2026-10-26 |
 | T-0054 | Registering the same webhook URL again created duplicate endpoints; now one per URL (tests green; live check pending) | PLAN-000 / phase-01 | 2026-10-24 |
@@ -76,5 +79,5 @@ _Last updated: 2026-10-14_
 | PLAN-002-private-media | Chat media off the public disk; signed webhook media | phase-01-private-media | 4 / 5 |
 | PLAN-003-epos-integration | Manifest-driven EPOS link: API, executor, builder node, inbox panel | phase-01-integrations-api | 3 / 4 |
 
-Next task ID: T-0057   (T-0006 and T-0007 are also in tasks/working from another session; IDs are never reused)
+Next task ID: T-0060   (T-0006 and T-0007 are also in tasks/working from another session; IDs are never reused)
 Next plan ID: PLAN-004

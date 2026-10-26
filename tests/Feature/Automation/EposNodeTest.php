@@ -249,6 +249,71 @@ class EposNodeTest extends TestCase
         $this->assertStringContainsString('not linked', (string) $run->logs()->where('node_id', 'n1')->value('message'));
     }
 
+    /** Manifest with one action whose chat text may be long (an order, an alert). */
+    private function useAlertCapability(?int $maxLength): void
+    {
+        $this->integration->manifest = ['business' => [], 'capabilities' => [
+            ['key' => 'alert.push', 'kind' => 'action', 'label' => ['en' => 'Alert'], 'method' => 'POST', 'path' => '/api/whatsapp/v1/alerts', 'params' => [
+                ['name' => 'phone', 'type' => 'phone', 'from' => 'sender_phone'],
+                ['name' => 'message', 'type' => 'text', 'from' => 'chat_answer'] + ($maxLength ? ['max_length' => $maxLength] : []),
+            ]],
+        ]];
+        $this->integration->save();
+    }
+
+    public function test_a_text_param_longer_than_200_is_sent_when_the_manifest_allows_it(): void
+    {
+        $this->useAlertCapability(600);
+        $this->fakeEpos(['*' => $this->eposJson(['found' => true, 'ok' => true])]);
+        $order = "Name: Ali\n".rtrim(str_repeat('Cake x2, ', 50), ', ');
+
+        $this->runFlow(['capability' => 'alert.push', 'params' => ['message' => '{{answer}}']], 'SENT', 'NO', ['answer' => $order]);
+
+        $this->assertSame('SENT', $this->reply());
+        Http::assertSent(fn ($r) => $r['message'] === $order);
+    }
+
+    public function test_a_text_param_without_max_length_stays_at_200(): void
+    {
+        $this->useAlertCapability(null);
+        $this->fakeEpos(['*' => $this->eposJson(['found' => true, 'ok' => true])]);
+
+        $this->runFlow(['capability' => 'alert.push', 'params' => ['message' => '{{answer}}']], 'SENT', 'NO', ['answer' => str_repeat('a', 201)]);
+
+        $this->assertSame('NO', $this->reply());
+        Http::assertNothingSent();
+    }
+
+    public function test_max_length_never_goes_past_2000(): void
+    {
+        $this->useAlertCapability(50000);
+        $this->fakeEpos(['*' => $this->eposJson(['found' => true, 'ok' => true])]);
+
+        $this->runFlow(['capability' => 'alert.push', 'params' => ['message' => '{{answer}}']], 'SENT', 'NO', ['answer' => str_repeat('a', 2001)]);
+
+        $this->assertSame('NO', $this->reply());
+        Http::assertNothingSent();
+    }
+
+    public function test_each_pass_through_the_same_action_node_gets_its_own_idempotency_key(): void
+    {
+        $this->fakeEpos(['*' => $this->eposJson(['found' => true, 'ok' => false, 'reason' => 'rate_limited'])]);
+        $run = $this->runFlow(['capability' => 'contact.ledger_pdf', 'params' => ['period' => 'last_month']]);
+
+        // The customer is asked again (Ask Question) and the run comes back to the same E-POS step.
+        $run->update(['status' => 'waiting', 'resume_node_id' => 'n1']);
+        (new ExecuteAutomationRunJob($run->id))->handle(app(AutomationEngine::class));
+
+        $keys = [];
+        Http::assertSent(function ($r) use (&$keys) {
+            $keys[] = $r->header('Idempotency-Key')[0] ?? null;
+
+            return true;
+        });
+        $this->assertCount(2, $keys);
+        $this->assertNotSame($keys[0], $keys[1]);
+    }
+
     public function test_an_id_that_is_not_in_this_workspace_uses_the_only_linked_epos(): void
     {
         $this->fakeEpos(['*' => $this->eposJson(['found' => true, 'name' => 'Ali Khan'])]);

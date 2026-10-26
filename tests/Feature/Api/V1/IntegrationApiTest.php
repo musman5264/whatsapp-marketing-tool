@@ -193,6 +193,23 @@ class IntegrationApiTest extends TestCase
         $this->assertEqualsCanonicalizing(['bad.kind', 'bad.path', 'bad.param'], $issues);
     }
 
+    public function test_text_param_keeps_a_valid_max_length_and_a_bad_one_skips_the_capability(): void
+    {
+        $text = fn (mixed $max) => ['name' => 'message', 'type' => 'text', 'from' => 'chat_answer', 'max_length' => $max];
+        $this->fakeManifest([
+            $this->capability('alert.push', ['kind' => 'action', 'method' => 'POST', 'params' => [$text(1000)]]),
+            $this->capability('bad.max', ['params' => [$text(0)]]),
+            $this->capability('bad.max2', ['params' => [$text('lots')]]),
+        ]);
+        [$token] = $this->token();
+
+        $this->withToken($token)->postJson('/api/v1/integrations', $this->body())->assertStatus(201);
+
+        $row = ExternalIntegration::first();
+        $this->assertSame(1000, $row->manifest['capabilities'][0]['params'][0]['max_length']);
+        $this->assertEqualsCanonicalizing(['bad.max', 'bad.max2'], collect($row->manifest_issues)->pluck('key')->all());
+    }
+
     public function test_put_rotates_key_and_refetches_manifest(): void
     {
         $this->fakeManifest([$this->capability()]);

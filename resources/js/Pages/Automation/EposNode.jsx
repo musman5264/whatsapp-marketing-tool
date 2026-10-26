@@ -92,14 +92,18 @@ function Param({ param, value, onChange, flowVars, lang }) {
     return (
         <div>
             {title}
-            <input
-                id={id}
-                className={inputCls}
-                type={param.type === 'number' ? 'number' : param.type === 'date' ? 'date' : 'text'}
-                value={value ?? ''}
-                onChange={(e) => onChange(e.target.value)}
-                dir="auto"
-            />
+            {param.type === 'text' && param.max_length > 200 ? (
+                <textarea id={id} className={`${inputCls} resize-y`} rows={4} value={value ?? ''} onChange={(e) => onChange(e.target.value)} dir="auto" />
+            ) : (
+                <input
+                    id={id}
+                    className={inputCls}
+                    type={param.type === 'number' ? 'number' : param.type === 'date' ? 'date' : 'text'}
+                    value={value ?? ''}
+                    onChange={(e) => onChange(e.target.value)}
+                    dir="auto"
+                />
+            )}
             {answers.length > 0 && (
                 <select className={`${inputCls} mt-1`} value="" aria-label={t('automation.epos_from_chat')} onChange={(e) => e.target.value && onChange(e.target.value)}>
                     <option value="">{t('automation.epos_from_chat')}…</option>

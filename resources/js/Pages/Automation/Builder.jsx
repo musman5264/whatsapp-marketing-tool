@@ -610,7 +610,7 @@ function TokenBar() {
 }
 
 const inputCls = "w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition";
-const textareaCls = "w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition resize-none";
+const textareaCls = "w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition resize-y min-h-[4.5rem]";
 const selectCls = "w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition";
 const labelCls = "block text-xs font-semibold text-gray-600 mb-1";
 
@@ -783,7 +783,7 @@ function WhatsAppFields({ d, set }) {
     return (
         <>
             <Field label={t('automation.field_message_body_required')}>
-                <textarea className={textareaCls} rows={4} value={d.body ?? ''} onChange={e => set('body', e.target.value)} placeholder={t('automation.placeholder_whatsapp_body', { token: '{{contact.name}}' })} />
+                <textarea className={textareaCls} rows={8} value={d.body ?? ''} onChange={e => set('body', e.target.value)} placeholder={t('automation.placeholder_whatsapp_body', { token: '{{contact.name}}' })} />
             </Field>
             <ChannelSelect d={d} set={set} />
         </>
@@ -1061,7 +1061,7 @@ function AskQuestionFields({ d, set }) {
     return (
         <>
             <Field label={t('automation.field_question_required')}>
-                <textarea className={textareaCls} rows={3} value={d.question ?? ''} onChange={e => set('question', e.target.value)} placeholder={t('automation.placeholder_question')} />
+                <textarea className={textareaCls} rows={8} value={d.question ?? ''} onChange={e => set('question', e.target.value)} placeholder={t('automation.placeholder_question')} />
             </Field>
             <Field label={t('automation.field_save_to_var_required')}>
                 <input className={inputCls} value={d.variable ?? 'answer'} onChange={e => set('variable', e.target.value)} placeholder="answer" />

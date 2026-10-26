@@ -20,6 +20,11 @@ class EposExecutor
 
     public const CACHE_SECONDS = 60;
 
+    /** Longest text value a manifest may ask for with max_length; 200 when it does not say. */
+    public const MAX_TEXT = 2000;
+
+    public const DEFAULT_TEXT = 200;
+
     public function __construct(
         private readonly SafeHttp $http,
         private readonly IntegrationHealth $health,
@@ -227,7 +232,7 @@ class EposExecutor
             'date' => (bool) preg_match('/^(\d{4})-(\d{2})-(\d{2})$/', $value, $m) && checkdate((int) $m[2], (int) $m[3], (int) $m[1]),
             'choice' => in_array($value, array_map(fn ($c) => (string) ($c['value'] ?? ''), $p['choices'] ?? []), true),
             'phone' => true, // always the customer's own number, set by bind()
-            default => mb_strlen($value) <= 200,
+            default => mb_strlen($value) <= min((int) ($p['max_length'] ?? self::DEFAULT_TEXT), self::MAX_TEXT),
         };
     }
 

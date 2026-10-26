@@ -1117,7 +1117,7 @@ class AutomationEngine
         if ($integration && $contact) {
             $params = array_map(fn ($v) => is_string($v) ? $this->renderTokens($v, $contact, $context) : $v, (array) ($data['params'] ?? []));
             $phone = preg_match('/^\+[1-9]\d{6,14}$/', (string) $contact->phone_e164) ? (string) $contact->phone_e164 : null;
-            $result = app(EposExecutor::class)->execute($integration, (string) ($data['capability'] ?? ''), $phone, $params, $run->id.':'.$run->current_node_id);
+            $result = app(EposExecutor::class)->execute($integration, (string) ($data['capability'] ?? ''), $phone, $params, $run->id.':'.$run->current_node_id.':'.$run->logs()->where('node_id', $run->current_node_id)->count());
         } else {
             $result = ['outcome' => 'no_data', 'message' => 'E-POS is not linked.', 'body' => ['found' => false, 'ok' => false, 'reason' => 'no_data']];
         }
