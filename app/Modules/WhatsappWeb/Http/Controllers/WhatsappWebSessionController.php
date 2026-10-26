@@ -177,12 +177,12 @@ class WhatsappWebSessionController extends Controller
         $this->provisioner->markActive($session, $me['phone_e164'] ?? null, $me['push_name'] ?? null);
     }
 
-    private function currentSession(Request $request): ?WhatsappWebSession
+    protected function currentSession(Request $request): ?WhatsappWebSession
     {
         return WhatsappWebSession::where('session_name', WhatsappWebSession::sessionNameFor($this->workspaceId($request)))->first();
     }
 
-    private function workspaceId(Request $request): int
+    protected function workspaceId(Request $request): int
     {
         return (int) ($request->user()->current_workspace_id ?? $request->user()->workspace_id);
     }

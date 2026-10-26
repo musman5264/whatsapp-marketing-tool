@@ -31,6 +31,9 @@ final class ApiAbilities
     // Linked systems (EPOS registers itself, rotates its key, unlinks)
     public const INTEGRATIONS_WRITE = 'integrations:write';
 
+    // Show the QR code of the workspace's WhatsApp number inside the linked system (EPOS)
+    public const WHATSAPP_CONNECT = 'whatsapp:connect';
+
     // AI / Knowledge Bases
     public const AI_READ = 'ai:read';
 
@@ -57,6 +60,7 @@ final class ApiAbilities
             self::CONVERSATIONS_READ,
             self::WEBHOOKS_WRITE,
             self::INTEGRATIONS_WRITE,
+            self::WHATSAPP_CONNECT,
             self::AI_READ,
             self::AI_WRITE,
             self::AUTOMATIONS_WRITE,
@@ -77,6 +81,7 @@ final class ApiAbilities
             self::CONVERSATIONS_READ => 'Read inbox conversations and message threads',
             self::WEBHOOKS_WRITE => 'Register and remove outbound webhook endpoints',
             self::INTEGRATIONS_WRITE => 'Link, update and unlink external systems (EPOS)',
+            self::WHATSAPP_CONNECT => 'Reconnect the WhatsApp number (read its QR code)',
             self::AI_READ => 'Read AI chatbots and knowledge bases',
             self::AI_WRITE => 'Invoke chatbots and manage knowledge base documents',
             self::AUTOMATIONS_WRITE => 'Trigger automations for a contact',

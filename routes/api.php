@@ -9,6 +9,7 @@ use App\Http\Controllers\Api\V1\CampaignApiController;
 use App\Http\Controllers\Api\V1\ContactApiController;
 use App\Http\Controllers\Api\V1\ConversationApiController;
 use App\Http\Controllers\Api\V1\IntegrationApiController;
+use App\Http\Controllers\Api\V1\WhatsappWebConnectApiController;
 use App\Http\Controllers\Api\V1\MeController;
 use App\Http\Controllers\Api\V1\MessageApiController;
 use App\Http\Controllers\Api\V1\MobileAuthController;
@@ -159,6 +160,12 @@ Route::prefix('v1')->middleware(['auth:sanctum', 'throttle:api', 'demo', LogApiR
         Route::put('/{id}', [IntegrationApiController::class, 'update']);
         Route::delete('/{id}', [IntegrationApiController::class, 'destroy']);
         Route::post('/{id}/check', [IntegrationApiController::class, 'check']);
+    });
+
+    // ─── WhatsApp number: the linked system (EPOS) shows the QR to reconnect (whatsapp:connect) ─
+    Route::middleware('api.ability:whatsapp:connect')->prefix('whatsapp-web')->group(function () {
+        Route::get('/qr', [WhatsappWebConnectApiController::class, 'qr'])->middleware('throttle:60,1');
+        Route::post('/connect', [WhatsappWebConnectApiController::class, 'connect'])->middleware('throttle:10,1');
     });
 
     // ─── AI — Chatbots (ai:read / ai:write) ───────────────────────────────────

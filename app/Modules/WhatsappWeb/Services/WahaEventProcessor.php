@@ -9,6 +9,7 @@ use App\Modules\Shared\Models\Contact;
 use App\Modules\Shared\Models\Conversation;
 use App\Modules\Shared\Models\Message;
 use App\Modules\Whatsapp\Services\WhatsappDriver;
+use App\Modules\WhatsappWeb\Jobs\NotifyEposReconnectJob;
 use App\Modules\WhatsappWeb\Jobs\SyncWhatsappWebHistoryJob;
 use App\Modules\WhatsappWeb\Models\WhatsappWebSession;
 use App\Services\WebhookIdempotencyService;
@@ -216,7 +217,13 @@ class WahaEventProcessor
                     ->delay(now()->addSeconds(20));
             }
         } else {
+            $wasActive = $session->status === 'active';
             $this->provisioner->syncStatus($session, $status);
+
+            // Only the drop from a working number alerts EPOS (not a first pairing, not the QR refresh after the drop).
+            if ($wasActive && in_array($status, ['scan_qr', 'failed', 'disconnected'], true)) {
+                NotifyEposReconnectJob::dispatch($session->id, $status)->onQueue('whatsapp');
+            }
         }
     }
 
