@@ -3,7 +3,7 @@
 ## Webhook
 - Events are `WahaAdapter::WEBHOOK_EVENTS`: `message.any`, `session.status`, `message.ack`, `message.reaction`, `poll.vote`, `call.*`, `label.upsert|deleted|chat.added|chat.deleted`.
 - Existing sessions are updated with `PUT /api/sessions/{s}` + start (`WahaAdapter::resubscribe`, `php artisan whatsapp-web:resubscribe`, or **Sync now** in Inbox → Setup). The number is not unlinked.
-- Entry: `WhatsappWebWebhookController` → dedup → `WahaEventProcessor::process()`.
+- Entry: `WhatsappWebWebhookController` → dedup → `WahaEventProcessor::process()`. `session.status` events are NOT deduped (no id, they repeat legitimately); a status-only dedup key once froze the session at its first-seen status and silenced every later EPOS reconnect alert.
 
 ## Messages
 - `fromMe=false` → inbound via `InboundNormalizer::normalize` → `WhatsappDriver::ingestNormalizedInbound`.

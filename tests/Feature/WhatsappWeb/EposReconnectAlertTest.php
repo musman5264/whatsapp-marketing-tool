@@ -71,6 +71,23 @@ class EposReconnectAlertTest extends TestCase
     }
 
     #[Test]
+    public function every_drop_through_the_webhook_alerts_not_only_the_first_of_each_status(): void
+    {
+        Bus::fake([NotifyEposReconnectJob::class]); // the webhook's afterResponse closure must still run
+        $this->session->update(['webhook_token' => 'tok-'.str_repeat('a', 44)]);
+        $url = '/webhooks/whatsapp-web/'.$this->session->webhook_token;
+        $post = fn (string $status) => $this->postJson($url, ['event' => 'session.status', 'session' => $this->session->session_name, 'payload' => ['status' => $status]])->assertOk();
+
+        foreach ([1, 2] as $round) {
+            $post('WORKING');
+            $this->assertSame('active', $this->session->fresh()->status, "round {$round}: WORKING was ignored");
+            $post('FAILED');
+        }
+
+        Bus::assertDispatchedTimes(NotifyEposReconnectJob::class, 2);
+    }
+
+    #[Test]
     public function job_posts_the_alert_to_epos_through_its_manifest_action(): void
     {
         $this->link([[

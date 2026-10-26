@@ -108,10 +108,8 @@ class WhatsappWebWebhookController extends Controller
             return $event.':'.$id.$suffix;
         }
 
-        if ($event === 'session.status') {
-            return $event.':'.($p['status'] ?? '').':'.($payload['session'] ?? '');
-        }
-
+        // session.status has no id and repeats legitimately (WORKING, FAILED, WORKING, FAILED...), so a
+        // status-only key dropped every later change for 30 days. Handling it twice is harmless.
         return null; // fail-open: let the job decide
     }
 

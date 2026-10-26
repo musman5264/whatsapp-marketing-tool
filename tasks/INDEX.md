@@ -31,6 +31,7 @@ _Last updated: 2026-10-14_
 ## Completed (most recent first)
 | ID | Task | Plan / Phase | Completed |
 |----|------|--------------|-----------|
+| T-0063 | Session status webhook events deduped for 30 days: later drops/reconnects ignored, so EPOS reconnect alert never fired (tests green; live check pending) | PLAN-000 / phase-01 | 2026-10-26 |
 | T-0062 | Mark an Ask Question as an alert: badge, picker lists it first, flow check warns if no E-POS step sends it (lint + build ok; browser and live check pending) | PLAN-000 / phase-01 | 2026-10-26 |
 | T-0061 | Order alert flow file from the EPOS guide (alert.push) and reasons no_phone / invalid for local problems (tests green; real-EPOS and live check pending) | PLAN-000 / phase-01 | 2026-10-26 |
 | T-0060 | Set variable step (value + optional fallback) and variables in Condition values; no new tests by request (lint + build ok; live check pending) | PLAN-000 / phase-01 | 2026-10-26 |
