@@ -59,7 +59,7 @@ Result 2026-10-24 on private DB `wm3_test_t0047`: `OK (31 tests, 98 assertions)`
 ## The `epos` flow node (slice 2)
 Node type `epos` in `AutomationEngine::executeEpos()`; the work is in `.../External/EposExecutor.php`. Tests: `tests/Feature/Automation/EposNodeTest.php`.
 
-Saved node data: `integration_id` (optional when the workspace has exactly one EPOS link), `capability` (manifest key), `params` (`{name: value}`, `{{tokens}}` allowed), `result_var` (default `epos`). No URL, header or key exists on the node.
+Saved node data: `integration_id` (optional when the workspace has exactly one EPOS link; an id that is not in this workspace, e.g. from an imported flow, is ignored and the only link is used, as the builder shows. With two or more links and an unknown id the node says "E-POS is not linked."), `capability` (manifest key), `params` (`{name: value}`, `{{tokens}}` allowed), `result_var` (default `epos`). No URL, header or key exists on the node.
 
 What happens when it runs:
 1. Capability not in the cached manifest, or no link: "no data" (run log says "no longer available" / "not linked"), no call.

@@ -1110,9 +1110,9 @@ class AutomationEngine
         $contact = $run->contact_id ? Contact::find($run->contact_id) : null;
 
         $query = ExternalIntegration::where('workspace_id', $run->automation->workspace_id)->where('type', 'epos');
-        $integration = ! empty($data['integration_id'])
-            ? $query->find($data['integration_id'])
-            : ((clone $query)->count() === 1 ? $query->first() : null);
+        // A saved id that is not in this workspace (imported flow) falls back to the only link, as the builder shows.
+        $integration = (! empty($data['integration_id']) ? (clone $query)->find($data['integration_id']) : null)
+            ?? ((clone $query)->count() === 1 ? $query->first() : null);
 
         if ($integration && $contact) {
             $params = array_map(fn ($v) => is_string($v) ? $this->renderTokens($v, $contact, $context) : $v, (array) ($data['params'] ?? []));

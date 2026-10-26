@@ -249,6 +249,28 @@ class EposNodeTest extends TestCase
         $this->assertStringContainsString('not linked', (string) $run->logs()->where('node_id', 'n1')->value('message'));
     }
 
+    public function test_an_id_that_is_not_in_this_workspace_uses_the_only_linked_epos(): void
+    {
+        $this->fakeEpos(['*' => $this->eposJson(['found' => true, 'name' => 'Ali Khan'])]);
+
+        // An imported automation carries the id from wherever it was exported.
+        $run = $this->runFlow(['capability' => 'contact.profile', 'integration_id' => $this->integration->id + 999], '{{epos.name}}', 'NO');
+
+        $this->assertSame('Ali Khan', $this->reply());
+        $this->assertStringNotContainsString('not linked', (string) $run->logs()->where('node_id', 'n1')->value('message'));
+    }
+
+    public function test_an_id_that_is_not_in_this_workspace_with_two_links_is_not_guessed(): void
+    {
+        $this->makeIntegration(['base_url' => 'https://epos2.example.com']);
+        $this->fakeEpos(['*' => $this->eposJson(['found' => true])]);
+
+        $this->runFlow(['capability' => 'contact.profile', 'integration_id' => $this->integration->id + 999], 'YES', 'NO');
+
+        $this->assertSame('NO', $this->reply());
+        Http::assertNothingSent();
+    }
+
     public function test_unreachable_integration_makes_no_call_at_all(): void
     {
         $this->integration->forceFill(['status' => 'unreachable', 'next_retry_at' => now()->addMinutes(5)])->save();

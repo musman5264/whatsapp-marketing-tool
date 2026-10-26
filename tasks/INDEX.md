@@ -30,6 +30,7 @@ _Last updated: 2026-10-14_
 ## Completed (most recent first)
 | ID | Task | Plan / Phase | Completed |
 |----|------|--------------|-----------|
+| T-0055 | E-POS node said "not linked" for an imported flow whose saved integration id was stale; now uses the only linked E-POS (tests green; live check pending) | PLAN-000 / phase-01 | 2026-10-26 |
 | T-0054 | Registering the same webhook URL again created duplicate endpoints; now one per URL (tests green; live check pending) | PLAN-000 / phase-01 | 2026-10-24 |
 | T-0053 | Import / Export button in the automation builder: JSON, Markdown, import as a new draft (tests green; live check pending) | PLAN-000 / phase-01 | 2026-10-24 |
 | T-0052 | Ask Question with nothing after it repeated the menu on every reply (fixed, tests green; live check pending) | PLAN-000 / phase-01 | 2026-10-24 |
@@ -74,5 +75,5 @@ _Last updated: 2026-10-14_
 | PLAN-002-private-media | Chat media off the public disk; signed webhook media | phase-01-private-media | 4 / 5 |
 | PLAN-003-epos-integration | Manifest-driven EPOS link: API, executor, builder node, inbox panel | phase-01-integrations-api | 3 / 4 |
 
-Next task ID: T-0055   (T-0006 and T-0007 are also in tasks/working from another session; IDs are never reused)
+Next task ID: T-0056   (T-0006 and T-0007 are also in tasks/working from another session; IDs are never reused)
 Next plan ID: PLAN-004
