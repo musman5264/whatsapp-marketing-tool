@@ -10,6 +10,7 @@ use App\Modules\Shared\Models\Conversation;
 use App\Modules\Shared\Models\Message;
 use App\Modules\Whatsapp\Services\WhatsappDriver;
 use App\Modules\WhatsappWeb\Jobs\FetchWahaAvatarJob;
+use App\Modules\WhatsappWeb\Jobs\SendProfilePhotoToEposJob;
 use App\Modules\WhatsappWeb\Jobs\NotifyEposReconnectJob;
 use App\Modules\WhatsappWeb\Jobs\SyncWhatsappWebHistoryJob;
 use App\Modules\WhatsappWeb\Models\WhatsappWebSession;
@@ -94,6 +95,25 @@ class WahaEventProcessor
         $message = $this->driver->ingestNormalizedInbound($value, $msg);
         $this->media->storeInbound($message);
         $this->queueAvatar($message, $session);
+        $this->queuePhotoForEpos($message, $session);
+    }
+
+    /**
+     * Tell EPOS the customer's profile photo, at most once a day per contact and not again for 30 days after it
+     * was saved, and only when the workspace's EPOS offers the action. Never allowed to break an inbound message.
+     */
+    private function queuePhotoForEpos(Message $message, WhatsappWebSession $session): void
+    {
+        try {
+            $contact = $message->conversation?->contact;
+            if ($contact && ! Cache::has(SendProfilePhotoToEposJob::sentKey($contact->id))
+                && SendProfilePhotoToEposJob::integrationFor((int) $contact->workspace_id)
+                && Cache::add('epos-photo:'.$contact->id, 1, now()->addDay())) {
+                SendProfilePhotoToEposJob::dispatch($contact->id, $session->id)->onQueue('whatsapp');
+            }
+        } catch (\Throwable $e) {
+            Log::info('whatsapp_web.epos_photo.queue_failed', ['error' => $e->getMessage()]);
+        }
     }
 
     /**

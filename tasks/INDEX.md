@@ -32,6 +32,7 @@ _Last updated: 2026-10-29_
 ## Completed (most recent first)
 | ID | Task | Plan / Phase | Completed |
 |----|------|--------------|-----------|
+| T-0070 | WhatsApp profile photo sent to EPOS (contact.photo_update): job on first message, 30-day refresh, nothing when hidden (tests green; real-EPOS, WAHA and live check pending) | PLAN-003 / phase-01 | 2026-10-29 |
 | T-0069 | Delivery riders answer an order on WhatsApp (delivery.rider_reply): EPOS asked first, reply sent, normal flow stopped (tests green; real-EPOS and live check pending) | PLAN-003 / phase-01 | 2026-10-29 |
 | T-0067 | Inbox times: device timezone while the saved one is the default UTC, 12h/24h (AM/PM) setting in Settings (built, no tests by request; migration, browser and live check pending) | PLAN-000 / phase-01 | 2026-10-29 |
 | T-0066 | WhatsApp profile photos from WAHA in the inbox when the contact has no saved photo (built, no tests by request; browser and live check pending) | PLAN-000 / phase-01 | 2026-10-29 |
@@ -88,5 +89,5 @@ _Last updated: 2026-10-29_
 | PLAN-002-private-media | Chat media off the public disk; signed webhook media | phase-01-private-media | 4 / 5 |
 | PLAN-003-epos-integration | Manifest-driven EPOS link: API, executor, builder node, inbox panel | phase-01-integrations-api | 3 / 4 |
 
-Next task ID: T-0070   (T-0006 and T-0007 are also in tasks/working from another session; IDs are never reused)
+Next task ID: T-0071   (T-0006 and T-0007 are also in tasks/working from another session; IDs are never reused)
 Next plan ID: PLAN-004

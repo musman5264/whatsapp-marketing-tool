@@ -3,3 +3,4 @@
 - [x] T-0048 Executor + epos node (slice 2)
 - [x] T-0049 Builder node + status page (slice 3)
 - [ ] T-0050 Inbox panel (slice 4)
+- [x] T-0070 Profile photo to EPOS (contact.photo_update)
