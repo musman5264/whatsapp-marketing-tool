@@ -60,10 +60,10 @@ class WhatsappWebHealth
     }
 
     /** Called by the event processor for every message the account itself sent (phone, WAHA dashboard, API). */
-    public static function recordOwnMessage(string $sessionName, string $outcome): void
+    public static function recordOwnMessage(string $sessionName, string $outcome, ?string $detail = null): void
     {
         try {
-            Cache::put('whatsapp_web:last_own:'.$sessionName, ['at' => now()->toIso8601String(), 'outcome' => $outcome], now()->addDays(7));
+            Cache::put('whatsapp_web:last_own:'.$sessionName, ['at' => now()->toIso8601String(), 'outcome' => $outcome, 'detail' => $detail], now()->addDays(7));
         } catch (Throwable) {
             // diagnostics must never break message handling
         }
@@ -183,7 +183,7 @@ class WhatsappWebHealth
         };
 
         return $this->check('last_own', $label, ($last['outcome'] ?? '') === 'unusable_chat' ? 'warn' : 'ok',
-            Carbon::parse($last['at'])->diffForHumans().': '.$what.'.', '');
+            Carbon::parse($last['at'])->diffForHumans().': '.$what.(empty($last['detail']) ? '' : ' ('.$last['detail'].')').'.', '');
     }
 
     /** @return array<string,mixed> */

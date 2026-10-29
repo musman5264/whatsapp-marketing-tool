@@ -119,6 +119,29 @@ class OwnMessageSkipLogTest extends TestCase
     }
 
     #[Test]
+    public function a_message_with_no_to_is_stored_in_the_chat_the_engine_names_in_its_own_fields(): void
+    {
+        $this->process($this->phoneSent(['id' => 'true_noto_1', 'to' => null, 'from' => '15551234567@c.us', 'body' => 'Typed on the phone']
+            + ['_data' => ['key' => ['remoteJid' => '15551234567@c.us', 'fromMe' => true]]]));
+
+        $this->assertDatabaseHas('contacts', ['phone_e164' => '+15551234567']);
+        $this->assertSame(1, Message::where('direction', 'out')->where('body', 'Typed on the phone')->count());
+    }
+
+    #[Test]
+    public function a_message_whose_to_is_our_own_number_goes_to_the_chat_in_the_engines_chat_field_not_to_ourselves(): void
+    {
+        $this->session->update(['phone_e164' => '+15550000000']);
+
+        $this->process($this->phoneSent(['id' => 'true_own_1', 'to' => '15550000000@c.us', 'body' => 'Sent from the dashboard']
+            + ['_data' => ['key' => ['remoteJid' => '15551234567@c.us']]]));
+
+        $this->assertDatabaseHas('contacts', ['phone_e164' => '+15551234567']);
+        $this->assertDatabaseMissing('contacts', ['phone_e164' => '+15550000000']);
+        $this->assertSame(1, Message::where('body', 'Sent from the dashboard')->count());
+    }
+
+    #[Test]
     public function a_group_message_from_the_phone_says_so(): void
     {
         Log::spy();

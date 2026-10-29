@@ -96,7 +96,7 @@ class InboundNormalizer
     private function parse(array $p, WhatsappWebSession $session, bool $fromMe): ?array
     {
         // The chat we are talking to: the sender for inbound, the recipient for fromMe.
-        $chatJid = self::idOf($fromMe ? ($p['to'] ?? '') : ($p['from'] ?? ''));
+        $chatJid = $fromMe ? $this->ownMessageChatJid($p, $session) : self::idOf($p['from'] ?? '');
         if ($chatJid === '') {
             return null;
         }
@@ -185,6 +185,49 @@ class InboundNormalizer
         ];
 
         return [$value, $msg];
+    }
+
+    /**
+     * The chat a message we sent ourselves went to. WAHA's `to` is the obvious field, but the WAHA docs do not
+     * say what `from` / `to` hold for a message sent from the phone or the WAHA dashboard (their one example has
+     * both the same), and a live check found messages with no usable `to`. So the engine's own chat fields are
+     * tried too: NOWEB `_data.key.remoteJid`, GOWS `_data.Info.Chat`. An id that is our own number is skipped
+     * (it is the sender), unless nothing else exists (a message to ourselves).
+     *
+     * @param  array<string,mixed>  $p
+     */
+    private function ownMessageChatJid(array $p, WhatsappWebSession $session): string
+    {
+        $found = [];
+        $this->collectByKey($p['_data'] ?? null, ['remoteJid', 'Chat'], $found);
+        $candidates = array_values(array_filter(
+            array_map(fn ($v) => self::idOf($v), [$p['to'] ?? '', ...$found]),
+            fn ($jid) => $jid !== '',
+        ));
+
+        // `from` is normally our own number, so it only counts when our number is known and it is a different one.
+        $own = preg_replace('/\D+/', '', (string) $session->phone_e164);
+        $from = self::idOf($p['from'] ?? '');
+        $fromDigits = preg_replace('/\D+/', '', explode('@', $from)[0]);
+        foreach ($candidates as $jid) {
+            if ($own === '' || preg_replace('/\D+/', '', explode('@', $jid)[0]) !== $own) {
+                return $jid;
+            }
+        }
+        if ($own !== '' && $from !== '' && $fromDigits !== $own) {
+            return $from;
+        }
+
+        return $candidates[0] ?? '';
+    }
+
+    /**
+     * @param  array<string,mixed>  $p
+     * @return list<string> dotted key paths of a payload (no values), to log its shape
+     */
+    public function payloadShape(array $p): array
+    {
+        return $this->keyPaths($p);
     }
 
     /**

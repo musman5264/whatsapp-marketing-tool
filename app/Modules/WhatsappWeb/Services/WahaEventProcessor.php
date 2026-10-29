@@ -181,7 +181,7 @@ class WahaEventProcessor
             return $jid === '' ? 'none' : (str_contains($jid, '@') ? substr($jid, strpos($jid, '@') + 1) : 'other');
         };
 
-        WhatsappWebHealth::recordOwnMessage($session->session_name, $reason);
+        WhatsappWebHealth::recordOwnMessage($session->session_name, $reason, 'from='.$kind($p['from'] ?? null).' to='.$kind($p['to'] ?? null));
         Log::info('whatsapp_web.own_message.skipped', [
             'reason' => $reason,
             'session' => $session->session_name,
@@ -189,6 +189,7 @@ class WahaEventProcessor
             'from_kind' => $kind($p['from'] ?? null),
             'to_kind' => $kind($p['to'] ?? null),
             'type' => $p['type'] ?? null,
+            'payload_keys' => $this->normalizer->payloadShape($p),
         ]);
     }
 
