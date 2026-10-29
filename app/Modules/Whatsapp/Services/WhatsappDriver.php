@@ -6,6 +6,7 @@ use App\Events\MessageReceived;
 use App\Events\MessageSent;
 use App\Events\MessageStatusUpdated;
 use App\Modules\Broadcasting\Models\CampaignRecipient;
+use App\Modules\Integrations\Services\External\RiderReplyHandler;
 use App\Modules\Shared\Contracts\ChannelDriverInterface;
 use App\Modules\Shared\Models\ChannelAccount;
 use App\Modules\Shared\Models\Contact;
@@ -690,16 +691,24 @@ class WhatsappDriver implements ChannelDriverInterface
             return $message;
         }
 
+        // A delivery rider's answer goes to EPOS first. When EPOS handles it the normal flow (automations, AI,
+        // webhooks, notifications, unread badge) does not run.
+        $answeredByEpos = ! $historical && app(RiderReplyHandler::class)->handle($message, $conversation, $contact);
+
         $conversation->update([
-            'last_message_at' => $message->sent_at,
+            'last_message_at' => $answeredByEpos ? $this->laterOf($conversation->last_message_at, $message->sent_at) : $message->sent_at,
             'status' => 'open',
-            'unread_count' => $conversation->unread_count + 1,
+            'unread_count' => $conversation->unread_count + ($answeredByEpos ? 0 : 1),
             'last_inbound_at' => $message->sent_at,
             // If contact replies after we responded, reset first_response_at for next cycle
             'first_response_at' => $conversation->first_response_at && $conversation->last_inbound_at
                 ? ($message->sent_at > $conversation->first_response_at ? null : $conversation->first_response_at)
                 : $conversation->first_response_at,
         ]);
+
+        if ($answeredByEpos) {
+            return $message;
+        }
 
         // Fire typed event for automations / AI
         MessageReceived::dispatch($message);
