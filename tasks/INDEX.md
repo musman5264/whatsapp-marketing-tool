@@ -1,5 +1,5 @@
 # Task Board
-_Last updated: 2026-10-14_
+_Last updated: 2026-10-29_
 
 ## Working
 | ID | Task | Plan / Phase | Priority | Updated |
@@ -26,11 +26,15 @@ _Last updated: 2026-10-14_
 | T-0044 | Alibaba-style product cards on a QR number (photo + caption per product, then a poll) | PLAN-000 / phase-01 | T-0042 | medium | pending: design approval |
 | T-0039 | Inbound messages from LID senders were dropped when WAHA could not map the number (fixed in code, test first) | PLAN-000 / phase-01 | none (user checks) | high | blocked: needs the live log grep and one test message from a LID chat |
 | T-0059 | Update my profile flow file (contact.profile_update) | PLAN-000 / phase-01 | T-0058 | high | blocked: needs the EPOS guide (reasons, sample texts, labels) |
+| T-0068 | Phone-sent messages not in the inbox: skip reasons now logged (root cause not found) | PLAN-000 / phase-01 | none (user checks) | high | blocked: needs your resubscribe + one phone message + the log line |
 | T-0050 | EPOS: inbox panel with ledger PDF button | PLAN-003 / phase-01 | T-0048 (done) | medium | pending: ready to start |
 
 ## Completed (most recent first)
 | ID | Task | Plan / Phase | Completed |
 |----|------|--------------|-----------|
+| T-0067 | Inbox times: device timezone while the saved one is the default UTC, 12h/24h (AM/PM) setting in Settings (built, no tests by request; migration, browser and live check pending) | PLAN-000 / phase-01 | 2026-10-29 |
+| T-0066 | WhatsApp profile photos from WAHA in the inbox when the contact has no saved photo (built, no tests by request; browser and live check pending) | PLAN-000 / phase-01 | 2026-10-29 |
+| T-0065 | EPOS alert.push `kind` order/complaint: enum kept and checked, dropdown, complaint example flow (tests green; real-EPOS and live check pending) | PLAN-000 / phase-01 | 2026-10-29 |
 | T-0063 | Session status webhook events deduped for 30 days: later drops/reconnects ignored, so EPOS reconnect alert never fired (tests green; live check pending) | PLAN-000 / phase-01 | 2026-10-26 |
 | T-0062 | Mark an Ask Question as an alert: badge, picker lists it first, flow check warns if no E-POS step sends it (lint + build ok; browser and live check pending) | PLAN-000 / phase-01 | 2026-10-26 |
 | T-0061 | Order alert flow file from the EPOS guide (alert.push) and reasons no_phone / invalid for local problems (tests green; real-EPOS and live check pending) | PLAN-000 / phase-01 | 2026-10-26 |
@@ -83,5 +87,5 @@ _Last updated: 2026-10-14_
 | PLAN-002-private-media | Chat media off the public disk; signed webhook media | phase-01-private-media | 4 / 5 |
 | PLAN-003-epos-integration | Manifest-driven EPOS link: API, executor, builder node, inbox panel | phase-01-integrations-api | 3 / 4 |
 
-Next task ID: T-0063   (T-0006 and T-0007 are also in tasks/working from another session; IDs are never reused)
+Next task ID: T-0069   (T-0006 and T-0007 are also in tasks/working from another session; IDs are never reused)
 Next plan ID: PLAN-004
