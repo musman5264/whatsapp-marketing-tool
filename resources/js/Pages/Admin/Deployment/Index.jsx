@@ -74,7 +74,7 @@ function ResultBlock({ result }) {
 
 /** Mirrors CommandAllowlist (the server side). Commands that match run without the deploy key. */
 const NO_KEY_EXACT = ['git status', 'git log', 'git log --oneline -20', 'git branch', 'composer install --no-dev', 'composer install --no-dev --optimize-autoloader'];
-const NO_KEY_ARTISAN = ['optimize:clear', 'migrate', 'migrate:status', 'config:clear', 'cache:clear', 'queue:restart', 'storage:link', 'whatsapp-web:status', 'about', 'reverb:launch', 'queue:failed'];
+const NO_KEY_ARTISAN = ['optimize:clear', 'migrate', 'migrate:status', 'config:clear', 'cache:clear', 'queue:restart', 'storage:link', 'whatsapp-web:status', 'whatsapp-web:resubscribe', 'about', 'reverb:launch', 'queue:failed'];
 
 /** True when the server will ask for the deploy key before it runs this command. */
 const needsDeployKey = (command) => {
@@ -361,6 +361,7 @@ export default function DeploymentIndex({ settings, localGit, lastDeploy, histor
                         <option>php artisan queue:restart</option>
                         <option>php artisan queue:failed</option>
                         <option>php artisan whatsapp-web:status</option>
+                        <option>php artisan whatsapp-web:resubscribe</option>
                         <option>php artisan reverb:launch</option>
                         <option>php artisan storage:link</option>
                         <option>git status</option>

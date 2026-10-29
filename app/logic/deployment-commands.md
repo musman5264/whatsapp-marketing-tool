@@ -7,7 +7,7 @@ The **Run** box on the Deployment page (Admin → Deployment → Advanced) sends
 A command runs **without the second key** only if it passes `CommandAllowlist::allows()` (`app/Modules/Deployment/Services/CommandAllowlist.php`):
 - The text (trimmed) contains only letters, digits, space and `_ . : = / -`. Shell characters, quotes and newlines are refused outright, so nothing can be chained onto an allowed command.
 - and either it equals an entry in `CommandAllowlist::EXACT` (`git status`, `git log`, `git log --oneline -20`, `git branch`, `composer install --no-dev`, `composer install --no-dev --optimize-autoloader`),
-- or it is `php artisan <name>` where `<name>` is in `CommandAllowlist::ARTISAN` (`optimize:clear`, `migrate`, `migrate:status`, `config:clear`, `cache:clear`, `queue:restart`, `storage:link`, `whatsapp-web:status`, `about`, `reverb:launch`, `queue:failed`), optionally followed by plain arguments.
+- or it is `php artisan <name>` where `<name>` is in `CommandAllowlist::ARTISAN` (`optimize:clear`, `migrate`, `migrate:status`, `config:clear`, `cache:clear`, `queue:restart`, `storage:link`, `whatsapp-web:status`, `whatsapp-web:resubscribe`, `about`, `reverb:launch`, `queue:failed`), optionally followed by plain arguments.
 
 `public/deploy.php` applies the same rule with `$allowedExact` and `$allowedArtisan`. The two lists must match. `CommandAllowlistTest` reads the script and fails if they drift.
 
@@ -23,7 +23,7 @@ Run from the **Run** box (Admin → Deployment → Advanced) or from the cPanel 
 | `php artisan config:clear` | no key | Clears cached config | After any `.env` change |
 | `php artisan queue:restart` | no key | Workers finish their current job and restart | After a deploy, so workers load new code |
 | `php artisan whatsapp-web:status` | no key | WhatsApp Web session status | Quick health check |
-| `php artisan whatsapp-web:resubscribe` | second key | Re-registers the WAHA webhook. Briefly restarts the session; the number stays linked | After a change to the webhook events (CLAUDE.md) |
+| `php artisan whatsapp-web:resubscribe` | no key | Re-registers the WAHA webhook. Briefly restarts the session; the number stays linked | After a change to the webhook events (CLAUDE.md) |
 | `php artisan whatsapp-web:sync` | second key | Imports recent chats and messages now (inline) | When messages are missing; add `--queue` to run it in the background |
 | `php artisan whatsapp-web:lid-resolve --session=<name>` | second key | Dry run: asks WAHA (`/lids/{lid}`, `/contacts`) for the real number of every contact of the session and lists those stored under a LID that now map | After a deploy of the LID lookup, to repair old ID-only contacts |
 | `php artisan whatsapp-web:lid-resolve --session=<name> --apply` | second key | Records every mapping found and moves the messages (runs `lid-map --apply` for each) | Only after the dry run |

@@ -45,7 +45,6 @@ class CommandAllowlistTest extends TestCase
             'queue flush' => ['php artisan queue:flush'],
             'media fix links apply' => ['php artisan media:fix-links --apply'],
             'media make private apply' => ['php artisan media:make-private --apply'],
-            'whatsapp web resubscribe' => ['php artisan whatsapp-web:resubscribe'],
             'whatsapp web sync' => ['php artisan whatsapp-web:sync'],
             'tinker runs arbitrary php' => ['php artisan tinker --execute="echo 1;"'],
         ];
@@ -62,6 +61,8 @@ class CommandAllowlistTest extends TestCase
             ['php artisan storage:link'],
             ['php artisan reverb:launch'],
             ['php artisan queue:failed'],
+            ['php artisan whatsapp-web:resubscribe'],
+            ['php artisan whatsapp-web:resubscribe --workspace=12'],
             ['git status'],
             ['git log --oneline -20'],
             ['composer install --no-dev --optimize-autoloader'],
