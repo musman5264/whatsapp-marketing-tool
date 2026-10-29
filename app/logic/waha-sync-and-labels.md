@@ -54,3 +54,19 @@
 - `WhatsappWebHealth` (`app/Modules/WhatsappWeb/Services/WhatsappWebHealth.php`): read-only checks for engine status, webhook URL + event list registered in WAHA (`GET /api/sessions/{s}` → `config.webhooks`), last webhook received (cache key `whatsapp_web:last_webhook:{session}`, written by `WhatsappWebWebhookController`), latest stored in/out messages, realtime (config + one test broadcast on channel `whatsapp-health-check`), queue (`queue.default` vs the `queue:work redis` workers in `docker/supervisor/whatsmine.conf`) and scheduler heartbeat.
 - Entry points: `php artisan whatsapp-web:diagnose [--workspace=]`, `GET /app/whatsapp-web/health`, button **Run check** in Inbox → Setup.
 - The webhook token is masked in all output. Tests: `tests/Feature/WhatsappWeb/WhatsappWebHealthTest.php`.
+
+## WhatsApp profile pictures in the inbox (T-0066)
+Written 2026-10-29. Built and linted; **not tested (tests skipped by request) and not run against a real WAHA or the live site: unverified.**
+- The inbox lists drew only an initial letter. They now use `components/ContactAvatar.jsx` (`conv.contact.avatar_url`, initials when there is no photo or the link fails to load).
+- After a WhatsApp Web message is stored (inbound or phone-sent), `WahaEventProcessor::queueAvatar()` queues `FetchWahaAvatarJob` (queue `whatsapp`) when the contact has no `avatar`, at most once a day per contact (`Cache::add('waha-avatar:<contact id>')`; WAHA warns that frequent requests hit `rate-overlimit`).
+- The job calls `EngineAdapter::profilePictureUrl()` = WAHA `GET /api/contacts/profile-picture?contactId=<digits>@c.us&session=` (response `{profilePictureURL}`; endpoint read from https://waha.devlike.pro/docs/how-to/contacts/ on 2026-10-29), then `ContactService::downloadAndStoreAvatar()` keeps a local copy (the WhatsApp link expires). Only `https://` links are used.
+- Soft-fail: no picture, hidden picture, lookup error → initials stay, one `whatsapp_web.avatar.lookup_failed` info line. A saved photo (`avatar` set) is never replaced. LID-only contacts (stored under LID digits) get no picture because the id sent is `<digits>@c.us`.
+- Old contacts get a picture the next time they send or receive a message; there is no bulk backfill.
+
+## Phone-sent messages that are not stored: why (T-0068)
+Written 2026-10-29. **Root cause not found; this only makes it visible.**
+- `WahaEventProcessor::handleOwnMessage()` returns without storing in four places. Each now writes one info line `whatsapp_web.own_message.skipped` with `reason`: `sent_by_api` (our own send), `unusable_chat` (group/broadcast/no usable `to`), `already_stored`, `echo_of_recent_send`. It also logs `source`, `type` and the kind of `from` / `to` (`c.us`, `lid`, `g.us`, `none`), never the digits.
+- Why `to_kind` matters: the WAHA docs show one example where `from` and `to` are the same id and do not say what they hold for a message sent from the phone. The code treats `to` as the customer. If the live engine sends something else, every phone message ends as `unusable_chat`.
+- Not seen at all (no line): the session was never resubscribed to `message.any` (`php artisan whatsapp-web:resubscribe`), or the webhook never arrives (health check on the WhatsApp Web page).
+- Group chats are skipped by design.
+- To settle it live: run `whatsapp-web:resubscribe`, send one message from the phone to a customer, then `grep "own_message.skipped\|process_failed" storage/logs/laravel.log | tail`.

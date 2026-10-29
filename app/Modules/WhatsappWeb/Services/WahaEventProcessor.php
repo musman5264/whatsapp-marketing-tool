@@ -9,10 +9,12 @@ use App\Modules\Shared\Models\Contact;
 use App\Modules\Shared\Models\Conversation;
 use App\Modules\Shared\Models\Message;
 use App\Modules\Whatsapp\Services\WhatsappDriver;
+use App\Modules\WhatsappWeb\Jobs\FetchWahaAvatarJob;
 use App\Modules\WhatsappWeb\Jobs\NotifyEposReconnectJob;
 use App\Modules\WhatsappWeb\Jobs\SyncWhatsappWebHistoryJob;
 use App\Modules\WhatsappWeb\Models\WhatsappWebSession;
 use App\Services\WebhookIdempotencyService;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -91,6 +93,7 @@ class WahaEventProcessor
         [$value, $msg] = $normalized;
         $message = $this->driver->ingestNormalizedInbound($value, $msg);
         $this->media->storeInbound($message);
+        $this->queueAvatar($message, $session);
     }
 
     /**
@@ -109,29 +112,77 @@ class WahaEventProcessor
         // WhatsApp client. Absent on some engines.
         $source = strtolower((string) ($p['source'] ?? $payload['source'] ?? ''));
         if ($source === 'api') {
+            $this->ownMessageSkipped('sent_by_api', $p, $session);
+
             return;
         }
 
         $normalized = $this->normalizer->normalizeFromMe($payload, $session);
         if ($normalized === null) {
-            return; // group / broadcast / unparseable
+            $this->ownMessageSkipped('unusable_chat', $p, $session); // group / broadcast / unparseable
+
+            return;
         }
 
         [$value, $msg] = $normalized;
         $providerId = (string) $msg['id'];
 
         if ($this->findOwnMessage($providerId) !== null) {
-            return; // already stored (e.g. redelivered webhook)
+            $this->ownMessageSkipped('already_stored', $p, $session); // e.g. redelivered webhook
+
+            return;
         }
 
         // Unknown source: only treat as an echo of our own send when we stored the
         // same text to this contact in the last 20 seconds.
         if ($source === '' && $this->recentOwnSendMatches($msg, (string) ($p['body'] ?? ''), $session)) {
+            $this->ownMessageSkipped('echo_of_recent_send', $p, $session);
+
             return;
         }
 
         $status = InboundNormalizer::statusFromAck($p['ack'] ?? null) ?? 'sent';
-        $this->driver->ingestNormalizedOutbound($value, $msg, $status);
+        $this->queueAvatar($this->driver->ingestNormalizedOutbound($value, $msg, $status), $session);
+    }
+
+    /**
+     * Ask WAHA for the contact's profile picture, at most once a day per contact (WAHA warns about
+     * rate limits), and only while they have no photo. Never allowed to break an inbound message.
+     */
+    private function queueAvatar(Message $message, WhatsappWebSession $session): void
+    {
+        try {
+            $contact = $message->conversation?->contact;
+            if ($contact && ! $contact->avatar && Cache::add('waha-avatar:'.$contact->id, 1, now()->addDay())) {
+                FetchWahaAvatarJob::dispatch($contact->id, $session->id)->onQueue('whatsapp');
+            }
+        } catch (\Throwable $e) {
+            Log::info('whatsapp_web.avatar.queue_failed', ['error' => $e->getMessage()]);
+        }
+    }
+
+    /**
+     * Why a phone-sent message was not stored. The WAHA docs do not say what `from` / `to` hold for a
+     * message sent from the phone, so the log shows the kind of each id (c.us, lid, g.us, none), never the digits.
+     *
+     * @param  array<string,mixed>  $p
+     */
+    private function ownMessageSkipped(string $reason, array $p, WhatsappWebSession $session): void
+    {
+        $kind = function (mixed $jid): string {
+            $jid = InboundNormalizer::idOf($jid);
+
+            return $jid === '' ? 'none' : (str_contains($jid, '@') ? substr($jid, strpos($jid, '@') + 1) : 'other');
+        };
+
+        Log::info('whatsapp_web.own_message.skipped', [
+            'reason' => $reason,
+            'session' => $session->session_name,
+            'source' => $p['source'] ?? null,
+            'from_kind' => $kind($p['from'] ?? null),
+            'to_kind' => $kind($p['to'] ?? null),
+            'type' => $p['type'] ?? null,
+        ]);
     }
 
     /**

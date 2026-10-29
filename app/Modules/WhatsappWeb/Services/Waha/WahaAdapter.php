@@ -251,6 +251,15 @@ class WahaAdapter implements EngineAdapter
         ];
     }
 
+    /** WAHA: GET /api/contacts/profile-picture?contactId=&session= -> {profilePictureURL} (checked against the WAHA docs 2026-10-29). */
+    public function profilePictureUrl(string $session, string $contactId): ?string
+    {
+        $resp = $this->client->get('/api/contacts/profile-picture', ['session' => $session, 'contactId' => $contactId]);
+        $url = $resp->successful() ? (string) ($resp->json('profilePictureURL') ?? '') : '';
+
+        return str_starts_with($url, 'https://') ? $url : null;
+    }
+
     public function logout(string $session): void
     {
         try {

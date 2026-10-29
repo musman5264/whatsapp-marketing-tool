@@ -68,6 +68,9 @@ interface EngineAdapter
      */
     public function resolveContact(string $session, string $contactId): ?array;
 
+    /** The contact's WhatsApp profile picture link, or null (no picture, hidden, or the engine refused). Throws on engine failure. */
+    public function profilePictureUrl(string $session, string $contactId): ?string;
+
     /** Unlink the device and delete the engine session. Best-effort. */
     public function logout(string $session): void;
 
