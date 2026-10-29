@@ -158,6 +158,7 @@ class WahaEventProcessor
         }
 
         $status = InboundNormalizer::statusFromAck($p['ack'] ?? null) ?? 'sent';
+        WhatsappWebHealth::recordOwnMessage($session->session_name, 'stored');
         $this->queueAvatar($this->driver->ingestNormalizedOutbound($value, $msg, $status), $session);
     }
 
@@ -191,6 +192,7 @@ class WahaEventProcessor
             return $jid === '' ? 'none' : (str_contains($jid, '@') ? substr($jid, strpos($jid, '@') + 1) : 'other');
         };
 
+        WhatsappWebHealth::recordOwnMessage($session->session_name, $reason);
         Log::info('whatsapp_web.own_message.skipped', [
             'reason' => $reason,
             'session' => $session->session_name,

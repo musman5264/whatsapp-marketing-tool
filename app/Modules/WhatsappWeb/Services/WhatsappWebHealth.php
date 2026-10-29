@@ -59,6 +59,16 @@ class WhatsappWebHealth
         }
     }
 
+    /** Called by the event processor for every message the account itself sent (phone, WAHA dashboard, API). */
+    public static function recordOwnMessage(string $sessionName, string $outcome): void
+    {
+        try {
+            Cache::put('whatsapp_web:last_own:'.$sessionName, ['at' => now()->toIso8601String(), 'outcome' => $outcome], now()->addDays(7));
+        } catch (Throwable) {
+            // diagnostics must never break message handling
+        }
+    }
+
     /** @return list<array<string,mixed>> */
     public function run(WhatsappWebSession $session): array
     {
@@ -68,6 +78,7 @@ class WhatsappWebHealth
             $engineCheck,
             $webhookCheck,
             $this->lastWebhook($session),
+            $this->lastOwnMessage($session),
             $this->lastMessages($session),
             $this->realtime(),
             $this->queue(),
@@ -148,6 +159,32 @@ class WhatsappWebHealth
 
         return $this->check('last_webhook', $label, 'ok',
             'Received "'.($last['event'] ?? '?').'" '.$at->diffForHumans().'.', '');
+    }
+
+    /** @return array<string,mixed> */
+    private function lastOwnMessage(WhatsappWebSession $session): array
+    {
+        $label = 'Last message sent from the phone or WAHA';
+        $last = Cache::get('whatsapp_web:last_own:'.$session->session_name);
+
+        if (! is_array($last) || empty($last['at'])) {
+            return $this->check('last_own', $label, 'warn',
+                'No message sent from the phone or the WAHA dashboard has reached this app since this version was deployed.',
+                'Send one from the phone and run the check again. If it stays empty, WAHA is not delivering message.any with fromMe: use "Sync now" in Inbox → Setup or run php artisan whatsapp-web:resubscribe, then check the webhook line above.');
+        }
+
+        $what = match ($last['outcome'] ?? '') {
+            'stored' => 'saved to the inbox',
+            'api_send_recheck' => 'sent through the WAHA API, being checked again before it is saved',
+            'sent_by_api' => 'sent by this app (already in the inbox)',
+            'already_stored' => 'already in the inbox',
+            'echo_of_recent_send' => 'ignored as an echo of a message this app just sent',
+            'unusable_chat' => 'NOT saved: group chat or no usable recipient id (see own_message.skipped in the log)',
+            default => (string) ($last['outcome'] ?? '?'),
+        };
+
+        return $this->check('last_own', $label, ($last['outcome'] ?? '') === 'unusable_chat' ? 'warn' : 'ok',
+            Carbon::parse($last['at'])->diffForHumans().': '.$what.'.', '');
     }
 
     /** @return array<string,mixed> */
