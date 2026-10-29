@@ -57,15 +57,16 @@ class EposOrderAlertFlowTest extends TestCase
                 ['name' => 'phone', 'type' => 'phone', 'from' => 'sender_phone'],
                 ['name' => 'message', 'type' => 'text', 'from' => 'chat_answer', 'max_length' => 1500],
                 ['name' => 'title', 'type' => 'text', 'from' => 'fixed', 'optional' => true],
+                ['name' => 'kind', 'type' => 'text', 'from' => 'fixed', 'optional' => true, 'enum' => ['order', 'complaint']],
             ],
         ]]];
         $i->save();
     }
 
     /** The customer has just sent their 6 lines: run the flow from the E-POS step. */
-    private function runWith(string $answer): void
+    private function runWith(string $answer, string $flow = 'epos-order-alert'): void
     {
-        $file = json_decode((string) file_get_contents(base_path('app/logic/examples/epos-order-alert.flow.json')), true)['automation'];
+        $file = json_decode((string) file_get_contents(base_path("app/logic/examples/{$flow}.flow.json")), true)['automation'];
         $automation = Automation::create(['workspace_id' => $this->workspace->id, 'name' => 'Order', 'status' => 'active', 'trigger_type' => 'message.received', 'trigger_config' => $file['trigger_config'], 'nodes' => $file['nodes'], 'edges' => $file['edges']]);
         $run = AutomationRun::create(['automation_id' => $automation->id, 'contact_id' => $this->contact->id, 'status' => 'pending', 'context' => ['answer' => $answer], 'resume_node_id' => 'alert', 'started_at' => now()]);
         (new ExecuteAutomationRunJob($run->id))->handle(app(AutomationEngine::class));
@@ -132,7 +133,60 @@ class EposOrderAlertFlowTest extends TestCase
             && $r->url() === 'https://epos.example.com/api/whatsapp/v1/alerts'
             && $r['phone'] === '+923001112233'
             && $r['title'] === 'New order request'
+            && $r['kind'] === 'order'
             && $r['message'] === "Name: Ali\nQuantity: 2"
             && $r->hasHeader('Idempotency-Key'));
+    }
+
+    private function lastReply(): string
+    {
+        return (string) Message::where('direction', 'out')->latest('id')->value('body');
+    }
+
+    public function test_the_complaint_flow_posts_kind_complaint_and_gives_a_caring_reply_with_the_reference(): void
+    {
+        $this->fake(Http::response(['found' => true, 'ok' => true, 'alert_id' => 'AL-1043', 'kind' => 'complaint']));
+
+        $this->runWith('My cake was 2 hours late and cold', 'epos-complaint-alert');
+
+        Http::assertSentCount(1);
+        Http::assertSent(fn ($r) => $r['kind'] === 'complaint'
+            && $r['title'] === 'Complaint'
+            && $r['message'] === 'My cake was 2 hours late and cold'
+            && $r['phone'] === '+923001112233'
+            && $r->hasHeader('Idempotency-Key'));
+        $this->assertStringContainsString('We are sorry', $this->lastReply());
+        $this->assertStringContainsString('Reference: AL-1043.', $this->lastReply());
+    }
+
+    public function test_the_complaint_reply_is_the_same_when_the_shop_has_complaints_switched_off(): void
+    {
+        $this->fake(Http::response(['found' => true, 'ok' => true, 'alert_id' => 'AL-1044', 'kind' => 'order']));
+
+        $this->runWith('Wrong item, refund please', 'epos-complaint-alert');
+
+        $this->assertStringContainsString('Reference: AL-1044.', $this->lastReply());
+    }
+
+    #[DataProvider('complaintRefusals')]
+    public function test_a_refused_complaint_is_never_called_received(array $epos, int $status): void
+    {
+        $this->fake(Http::response($epos, $status));
+
+        $this->runWith('Cold food', 'epos-complaint-alert');
+
+        $this->assertStringNotContainsString('has been received', $this->lastReply());
+        $this->assertStringContainsString('contact the shop', $this->lastReply());
+    }
+
+    public static function complaintRefusals(): array
+    {
+        return [
+            'disabled' => [['found' => true, 'ok' => false, 'reason' => 'disabled'], 200],
+            'rate limited' => [['found' => true, 'ok' => false, 'reason' => 'rate_limited'], 200],
+            'invalid' => [['found' => true, 'ok' => false, 'reason' => 'invalid'], 200],
+            'no phone' => [['found' => false, 'reason' => 'no_phone'], 200],
+            'server error' => [['error' => 'boom'], 500],
+        ];
     }
 }

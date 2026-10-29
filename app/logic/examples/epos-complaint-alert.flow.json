@@ -1,0 +1,114 @@
+{
+  "format": "whatsmine.automation",
+  "version": 1,
+  "exported_at": "2026-10-29T00:00:00.000Z",
+  "automation": {
+    "name": "Complaint to the shop (EPOS alert)",
+    "trigger_type": "message.received",
+    "trigger_config": {
+      "keywords": [
+        "complaint",
+        "shikayat",
+        "شکایت"
+      ],
+      "match_mode": "equals"
+    },
+    "nodes": [
+      {
+        "id": "trigger-1",
+        "type": "trigger",
+        "position": {
+          "x": 0,
+          "y": 0
+        },
+        "data": {
+          "triggerType": "message.received"
+        }
+      },
+      {
+        "id": "ask",
+        "type": "ask_question",
+        "position": {
+          "x": 0,
+          "y": 120
+        },
+        "data": {
+          "question": "We are sorry to hear that. Please tell us what went wrong in one message. If you have an order number, write it too.\n\nہمیں افسوس ہے۔ براہ کرم ایک پیغام میں بتائیں کہ کیا مسئلہ ہوا۔ اگر آرڈر نمبر ہے تو وہ بھی لکھیں۔",
+          "variable": "answer",
+          "alert": true,
+          "nodeType": "ask_question",
+          "configured": true
+        }
+      },
+      {
+        "id": "alert",
+        "type": "epos",
+        "position": {
+          "x": 0,
+          "y": 280
+        },
+        "data": {
+          "capability": "alert.push",
+          "result_var": "epos",
+          "params": {
+            "message": "{{answer}}",
+            "title": "Complaint",
+            "kind": "complaint"
+          },
+          "nodeType": "epos",
+          "configured": true
+        }
+      },
+      {
+        "id": "ok",
+        "type": "send_whatsapp",
+        "position": {
+          "x": -260,
+          "y": 460
+        },
+        "data": {
+          "body": "We are sorry about this. Your complaint has been received and the shop will contact you soon. Reference: {{epos.alert_id}}.\n\nاس پر ہمیں افسوس ہے۔ آپ کی شکایت موصول ہو گئی ہے اور دکان جلد آپ سے رابطہ کرے گی۔ حوالہ: {{epos.alert_id}}۔",
+          "nodeType": "send_whatsapp",
+          "configured": true
+        }
+      },
+      {
+        "id": "fail",
+        "type": "send_whatsapp",
+        "position": {
+          "x": 260,
+          "y": 460
+        },
+        "data": {
+          "body": "Sorry, we could not pass your complaint to the shop right now. Please contact the shop directly.\n\nمعذرت، ہم اس وقت آپ کی شکایت دکان تک نہیں پہنچا سکے۔ براہ کرم دکان سے براہ راست رابطہ کریں۔",
+          "nodeType": "send_whatsapp",
+          "configured": true
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "e1",
+        "source": "trigger-1",
+        "target": "ask"
+      },
+      {
+        "id": "e2",
+        "source": "ask",
+        "target": "alert"
+      },
+      {
+        "id": "e3",
+        "source": "alert",
+        "target": "ok",
+        "sourceHandle": "true"
+      },
+      {
+        "id": "e4",
+        "source": "alert",
+        "target": "fail",
+        "sourceHandle": "false"
+      }
+    ]
+  }
+}

@@ -161,6 +161,10 @@ class ManifestFetcher
             if (isset($p['max_length']) && (! is_numeric($p['max_length']) || (int) $p['max_length'] < 1 || (float) $p['max_length'] != (int) $p['max_length'])) {
                 return "param {$p['name']}: max_length must be a whole number of 1 or more";
             }
+            // The only values a text param accepts (alert.push `kind`: order / complaint).
+            if (isset($p['enum']) && (! is_array($p['enum']) || $p['enum'] === [] || array_filter($p['enum'], fn ($v) => ! is_string($v) || $v === ''))) {
+                return "param {$p['name']}: enum must be a list of non-empty text values";
+            }
         }
         foreach ((array) ($c['outputs'] ?? []) as $o) {
             if (! is_array($o) || ! is_string($o['path'] ?? null) || $o['path'] === '' || ! in_array($o['type'] ?? null, self::OUTPUT_TYPES, true)) {
@@ -178,7 +182,10 @@ class ManifestFetcher
     private function clean(array $c): array
     {
         $params = array_map(function ($p) {
-            $p = array_intersect_key($p, array_flip(['name', 'type', 'from', 'optional', 'required_if', 'default', 'choices', 'max_length']));
+            $p = array_intersect_key($p, array_flip(['name', 'type', 'from', 'optional', 'required_if', 'default', 'choices', 'max_length', 'enum']));
+            if (isset($p['enum'])) {
+                $p['enum'] = array_values($p['enum']);
+            }
             if (isset($p['max_length'])) {
                 $p['max_length'] = (int) $p['max_length'];
             }

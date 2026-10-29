@@ -73,14 +73,16 @@ function Param({ param, value, onChange, flowVars, lang }) {
             .map((v) => ({ value: `{{${v}}}`, label: `{{${v}}}${alertVars.includes(v) ? ` — ${t('automation.alert_answer_option')}` : ''}` }))
         : [];
 
-    if (param.type === 'choice') {
+    // A `choice` lists labelled values; a text param with an `enum` (alert kind: order / complaint) lists the plain values.
+    if (param.type === 'choice' || param.enum?.length) {
+        const options = param.type === 'choice' ? (param.choices ?? []) : param.enum.map((v) => ({ value: v }));
         return (
             <div>
                 {title}
                 <select id={id} className={inputCls} value={value ?? ''} onChange={(e) => onChange(e.target.value)}>
                     <option value="">{t('automation.epos_pick_value')}</option>
                     <optgroup label={t('automation.epos_fixed_value')}>
-                        {(param.choices ?? []).map((c) => (
+                        {options.map((c) => (
                             <option key={c.value} value={c.value}>{pickLabel(c.label, lang) || c.value}</option>
                         ))}
                     </optgroup>

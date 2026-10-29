@@ -231,6 +231,10 @@ class EposExecutor
     /** @param array<string, mixed> $p */
     private function validValue(array $p, string $value): bool
     {
+        if (! empty($p['enum']) && ! in_array($value, $p['enum'], true)) {
+            return false;
+        }
+
         return match ($p['type'] ?? 'text') {
             'number' => is_numeric($value),
             'date' => (bool) preg_match('/^(\d{4})-(\d{2})-(\d{2})$/', $value, $m) && checkdate((int) $m[2], (int) $m[3], (int) $m[1]),

@@ -50,7 +50,8 @@
           "result_var": "epos",
           "params": {
             "message": "{{answer}}",
-            "title": "New order request"
+            "title": "New order request",
+            "kind": "order"
           },
           "nodeType": "epos",
           "configured": true

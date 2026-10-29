@@ -306,6 +306,52 @@ class EposNodeTest extends TestCase
         Http::assertNothingSent();
     }
 
+    /** The alert action as EPOS publishes it once it understands complaints: `kind` is a fixed text limited to an enum. */
+    private function useKindCapability(): void
+    {
+        $this->integration->manifest = ['business' => [], 'capabilities' => [
+            ['key' => 'alert.push', 'kind' => 'action', 'label' => ['en' => 'Alert'], 'method' => 'POST', 'path' => '/api/whatsapp/v1/alerts', 'params' => [
+                ['name' => 'phone', 'type' => 'phone', 'from' => 'sender_phone'],
+                ['name' => 'message', 'type' => 'text', 'from' => 'chat_answer', 'max_length' => 1500],
+                ['name' => 'kind', 'type' => 'text', 'from' => 'fixed', 'optional' => true, 'enum' => ['order', 'complaint']],
+            ]],
+        ]];
+        $this->integration->save();
+    }
+
+    public function test_a_kind_inside_the_enum_is_sent_and_the_saved_kind_is_readable(): void
+    {
+        $this->useKindCapability();
+        $this->fakeEpos(['*' => $this->eposJson(['found' => true, 'ok' => true, 'alert_id' => 'AL-1043', 'kind' => 'complaint'])]);
+
+        $this->runFlow(['capability' => 'alert.push', 'params' => ['message' => '{{answer}}', 'kind' => 'complaint']], 'SAVED {{epos.kind}} {{epos.alert_id}}', 'NO', ['answer' => 'late and cold']);
+
+        $this->assertSame('SAVED complaint AL-1043', $this->reply());
+        Http::assertSent(fn ($r) => $r['kind'] === 'complaint' && $r['message'] === 'late and cold');
+    }
+
+    public function test_a_kind_outside_the_enum_is_not_sent_and_the_reason_is_invalid(): void
+    {
+        $this->useKindCapability();
+        $this->fakeEpos(['*' => $this->eposJson(['found' => true, 'ok' => true])]);
+
+        $this->runFlow(['capability' => 'alert.push', 'params' => ['message' => '{{answer}}', 'kind' => 'spam']], 'SENT', 'WHY {{epos.reason}}', ['answer' => 'hello']);
+
+        $this->assertSame('WHY invalid', $this->reply());
+        Http::assertNothingSent();
+    }
+
+    public function test_a_blank_kind_is_left_out_so_epos_decides(): void
+    {
+        $this->useKindCapability();
+        $this->fakeEpos(['*' => $this->eposJson(['found' => true, 'ok' => true])]);
+
+        $this->runFlow(['capability' => 'alert.push', 'params' => ['message' => '{{answer}}', 'kind' => '{{unset_kind}}']], 'SENT', 'NO', ['answer' => 'hello']);
+
+        $this->assertSame('SENT', $this->reply());
+        Http::assertSent(fn ($r) => ! array_key_exists('kind', $r->data()));
+    }
+
     public function test_a_chat_without_a_verified_number_gives_the_reason_no_phone(): void
     {
         $this->useAlertCapability(1500);

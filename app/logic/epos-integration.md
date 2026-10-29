@@ -141,3 +141,13 @@ Code written and feature tested on 2026-10-26 (private test DB). **Not run again
 - Who may see the QR is enforced by EPOS (permission, server-side relay), rules in the spec Part 3. WhatsMine only checks the token scope.
 - Tests: `tests/Feature/WhatsappWeb/EposReconnectAlertTest.php` (4 tests: drop-only rule, alert body, no action published, ability check).
 - Gap: the token screen (`Tokens.jsx`) does not list `whatsapp:connect` (same as `integrations:write`); until it does, such a token is made by an admin outside the screen, or EPOS uses a full-access token.
+
+### Complaint or order: `kind` on alert.push (T-0065)
+Code written and tested on 2026-10-29 (private test DB). **Not run against a real EPOS or on the live site: unverified.** EPOS side of the contract: `TOOL-complaint-alert.md`.
+- **Manifest:** a param may carry `enum` (a non-empty list of non-empty text values). `ManifestFetcher` keeps it; a malformed enum skips the whole capability (listed in `manifest_issues`). `complaints_enabled` is not stored (nothing in the tool uses it).
+- **Run time:** `EposExecutor::validValue()` refuses a value outside the enum: no call, `{{epos.reason}}` = `invalid`, same as a bad `choice`. A blank optional `kind` is left out of the call, so EPOS runs its own keyword check. EPOS's answer `kind` is readable as `{{epos.kind}}` (the manifest lists it as an output).
+- **Builder:** `EposNode.jsx` shows a text param with an `enum` as a dropdown of its values (plus "from the chat" answers), the same control as a `choice`.
+- **Who decides complaint or order:** the tool has no intent classifier. The flow author decides: `kind` is a fixed value on the E-POS step. The complaint flow is entered by its own keyword (`complaint`, `shikayat`, `شکایت`, whole message), the order flow sets `kind: order`. If the author leaves `kind` blank, EPOS decides.
+- **Shop has complaints switched off:** EPOS still answers `ok: true` with `kind: order`; the complaint flow gives the same "received" reply (test `test_the_complaint_reply_is_the_same_when_the_shop_has_complaints_switched_off`).
+- **Example flow:** `app/logic/examples/epos-complaint-alert.flow.json` (Ask Question, E-POS step with `kind: complaint` and `title: Complaint`, "received" reply with `{{epos.alert_id}}` only from the Found exit, one "not saved, contact the shop" reply for every refusal and non-2xx). The order example now sets `kind: order`. The Urdu texts are the spec's samples and need a native check.
+- **Tests:** `EposNodeTest` (kind sent and readable, outside the enum not sent, blank left out), `IntegrationApiTest` (enum kept, malformed skipped), `EposOrderAlertFlowTest` (complaint flow, refusals never "received", order flow sends `kind: order`).

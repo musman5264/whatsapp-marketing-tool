@@ -214,6 +214,24 @@ class IntegrationApiTest extends TestCase
         $this->assertEqualsCanonicalizing(['bad.max', 'bad.max2'], collect($row->manifest_issues)->pluck('key')->all());
     }
 
+    public function test_text_param_keeps_its_enum_and_a_malformed_enum_skips_the_capability(): void
+    {
+        $kind = fn (mixed $enum) => ['name' => 'kind', 'type' => 'text', 'from' => 'fixed', 'optional' => true, 'enum' => $enum];
+        $this->fakeManifest([
+            $this->capability('alert.push', ['kind' => 'action', 'method' => 'POST', 'params' => [$kind(['order', 'complaint'])]]),
+            $this->capability('bad.enum', ['params' => [$kind('order')]]),
+            $this->capability('empty.enum', ['params' => [$kind([])]]),
+            $this->capability('nested.enum', ['params' => [$kind([['order']])]]),
+        ]);
+        [$token] = $this->token();
+
+        $this->withToken($token)->postJson('/api/v1/integrations', $this->body())->assertStatus(201);
+
+        $row = ExternalIntegration::first();
+        $this->assertSame(['order', 'complaint'], $row->manifest['capabilities'][0]['params'][0]['enum']);
+        $this->assertEqualsCanonicalizing(['bad.enum', 'empty.enum', 'nested.enum'], collect($row->manifest_issues)->pluck('key')->all());
+    }
+
     public function test_put_rotates_key_and_refetches_manifest(): void
     {
         $this->fakeManifest([$this->capability()]);
