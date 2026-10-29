@@ -432,7 +432,8 @@ class WahaEventProcessor
         $p = $payload['payload'] ?? [];
         $callId = (string) ($p['id'] ?? '');
         $fromJid = (string) ($p['from'] ?? ($p['peerJid'] ?? ''));
-        $phone = preg_replace('/\D+/', '', explode('@', $fromJid)[0] ?? '');
+        // A caller id is often a LID (a private id, not a phone number): turn it into the real number first.
+        [$phone, $callerName] = $this->normalizer->resolveChat($fromJid, $session, is_array($p) ? $p : []);
         if ($callId === '' || $phone === '') {
             return;
         }
@@ -445,6 +446,7 @@ class WahaEventProcessor
 
         $contact = Contact::firstOrCreate(
             ['workspace_id' => $session->workspace_id, 'phone_e164' => '+'.$phone],
+            $callerName ? ['first_name' => explode(' ', trim($callerName), 2)[0], 'last_name' => explode(' ', trim($callerName), 2)[1] ?? null] : [],
         );
         $account = ChannelAccount::where('workspace_id', $session->workspace_id)
             ->where('channel', 'whatsapp')

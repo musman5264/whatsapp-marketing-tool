@@ -102,6 +102,26 @@ class CallHandlingTest extends TestCase
     }
 
     #[Test]
+    public function a_call_from_a_lid_id_is_logged_under_the_real_phone_number_and_name(): void
+    {
+        Http::fake(['waha.test/api/contacts*' => Http::response(['id' => '923345266444@c.us', 'name' => 'Muhammad Usman'], 200)]);
+
+        $this->fireCall('call.rejected', ['id' => 'call_lid_1', 'from' => '228440888340633@lid']);
+
+        $this->assertDatabaseHas('contacts', ['phone_e164' => '+923345266444', 'first_name' => 'Muhammad']);
+        $this->assertDatabaseMissing('contacts', ['phone_e164' => '+228440888340633']);
+        $this->assertSame(1, Message::where('body', 'like', '%Call rejected%')->count());
+    }
+
+    #[Test]
+    public function a_call_in_a_group_makes_no_contact(): void
+    {
+        $this->fireCall('call.received', ['id' => 'call_grp_1', 'from' => '120363000000000000@g.us']);
+
+        $this->assertSame(0, Contact::count());
+    }
+
+    #[Test]
     public function call_received_logs_a_missed_call_line_and_does_not_reject_by_default(): void
     {
         Http::fake(['waha.test/*' => Http::response([], 200)]);

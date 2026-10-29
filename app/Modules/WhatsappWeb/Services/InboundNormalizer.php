@@ -222,6 +222,23 @@ class InboundNormalizer
     }
 
     /**
+     * Phone digits and name for a chat or caller id (`@c.us`, or a `@lid` turned into the real number). Used by
+     * the call handler, which used to take the digits of a LID as if they were a phone number. ['', null] for
+     * anything that is not a 1:1 chat (group, broadcast, status).
+     *
+     * @param  array<string,mixed>  $payload
+     * @return array{0: string, 1: ?string}
+     */
+    public function resolveChat(string $jid, WhatsappWebSession $session, array $payload = []): array
+    {
+        if ($jid === '' || str_contains($jid, '@g.us') || str_contains($jid, '@broadcast') || str_contains($jid, '@newsletter') || str_contains($jid, 'status@')) {
+            return ['', null];
+        }
+
+        return $this->resolveSender($jid, $session, $payload);
+    }
+
+    /**
      * @param  array<string,mixed>  $p
      * @return list<string> dotted key paths of a payload (no values), to log its shape
      */
