@@ -10,6 +10,7 @@ Tracked write-ups of what is **built and working now**. Update a file in place w
 | [api-message-send.md](api-message-send.md) | Public `POST /api/v1/messages/send`: async WhatsApp send that waits for the result (200 sent / 422 failed / 202 queued), status endpoint, message.sent / message.failed webhooks |
 | [api-contacts-upsert.md](api-contacts-upsert.md) | Public `POST /api/v1/contacts`: 201 new / 200 existing / restores deleted, no more 500 on repeated numbers |
 | [inbox-paging.md](inbox-paging.md) | Conversation list and chat paging (lazy older messages, cursor, scroll rules), reaction row, media box sizes |
+| [date-time-display.md](date-time-display.md) | Times shown to users: timezone fallback (device timezone while the saved one is the default UTC), 12h/24h setting, where the helpers live |
 | [deployment-commands.md](deployment-commands.md) | Deployment page Run box: exact-match command allowlist (app and `public/deploy.php`), second key, no built-in deploy key |
 | [private-media.md](private-media.md) | Chat media on the private disk: login route, signed links (WAHA 15 min), `media:make-private` dry run and `--apply`; `media:fix-links` repairs links saved with the integer conversation id |
 | [webhook-deliveries.md](webhook-deliveries.md) | Outbound webhooks: exact body and headers stored per attempt, `X-Webhook-Signature` format, Deliveries page details, double-encoding fix |

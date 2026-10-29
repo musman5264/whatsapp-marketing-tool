@@ -334,6 +334,7 @@ class HandleInertiaRequests extends Middleware
             'impersonation' => $impersonation,
             'theme' => $user?->theme ?? 'light',
             'timezone' => $user?->timezone ?? 'UTC',
+            'timeFormat' => $user?->time_format ?? '12h',
             'currentWorkspace' => $currentWorkspace,
             'workspaces' => $workspacesForSwitcher,
             'locale' => $locale,

@@ -10,7 +10,8 @@ import {
 import { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ChannelBrandIcon, CHANNEL_LABELS } from '@/Components/BrandIcons';
-import { formatTimeTz } from '@/Utils/datetime';
+import ContactAvatar from '@/Components/ContactAvatar';
+import { formatTimeTz, userTimezone } from '@/Utils/datetime';
 import { mergeById, fetchPage } from '@/Utils/inboxPaging';
 import useLoadWhenVisible from '@/hooks/useLoadWhenVisible';
 
@@ -68,9 +69,7 @@ function ConversationCard({ conv, isFlashing, isActive, userTz }) {
                     title={t('inbox.view_contact')}
                     className="relative shrink-0 group"
                 >
-                    <div className="h-9 w-9 rounded-full bg-brand-100 dark:bg-brand-900/30 flex items-center justify-center text-sm font-semibold text-brand-700 dark:text-brand-300 group-hover:ring-2 group-hover:ring-brand-400 transition">
-                        {name[0]?.toUpperCase() ?? '?'}
-                    </div>
+                    <ContactAvatar url={conv.contact?.avatar_url} name={name} className="group-hover:ring-2 group-hover:ring-brand-400 transition" />
                     <span className="absolute -bottom-0.5 -right-0.5 h-4 w-4 rounded-full bg-white dark:bg-neutral-900 flex items-center justify-center">
                         <ChannelBrandIcon channel={channel} className="h-3 w-3" />
                     </span>
@@ -219,7 +218,7 @@ export default function InboxIndex({ conversations: initialConversations, filter
     const { props } = usePage();
     const authUser = props.auth?.user;
     const workspaceId = props.currentWorkspace?.id ?? authUser?.workspace_id;
-    const userTz = props.timezone || 'Asia/Dhaka';
+    const userTz = userTimezone(props.timezone);
 
     const [conversations, setConversations] = useState(initialConversations);
     const [flashingIds, setFlashingIds]     = useState(new Set());

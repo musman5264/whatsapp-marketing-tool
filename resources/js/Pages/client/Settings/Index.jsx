@@ -20,6 +20,7 @@ export default function ClientSettingsIndex({
         display_currency: preferences.display_currency ?? 'USD',
         theme: preferences.theme ?? 'light',
         timezone: preferences.timezone ?? browserTz() ?? 'Asia/Dhaka',
+        time_format: preferences.time_format ?? '12h',
         client_name: client?.name ?? '',
         client_email: client?.email ?? '',
         client_phone: client?.phone ?? '',
@@ -110,7 +111,29 @@ export default function ClientSettingsIndex({
                                     onChange={tz => form.setData('timezone', tz)}
                                 />
                                 {form.errors.timezone && <p className="mt-1 text-xs text-red-500">{form.errors.timezone}</p>}
+                                <button
+                                    type="button"
+                                    onClick={() => form.setData('timezone', browserTz())}
+                                    className="mt-1 text-xs font-medium text-brand-600 hover:underline"
+                                >
+                                    {t('settings.use_device_timezone')} ({browserTz()})
+                                </button>
                                 <p className="mt-1 text-xs text-neutral-400">{t('settings.timezone_hint')}</p>
+                            </div>
+                            <div>
+                                <label htmlFor="time-format" className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">
+                                    {t('settings.time_format')}
+                                </label>
+                                <select
+                                    id="time-format"
+                                    value={form.data.time_format}
+                                    onChange={e => form.setData('time_format', e.target.value)}
+                                    className="w-full rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm"
+                                >
+                                    <option value="12h">{t('settings.time_format_12h')}</option>
+                                    <option value="24h">{t('settings.time_format_24h')}</option>
+                                </select>
+                                {form.errors.time_format && <p className="mt-1 text-xs text-red-500">{form.errors.time_format}</p>}
                             </div>
                         </div>
                     </div>

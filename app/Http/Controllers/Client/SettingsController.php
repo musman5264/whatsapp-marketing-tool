@@ -43,6 +43,7 @@ class SettingsController extends Controller
                 'display_currency' => $user->display_currency ?? 'USD',
                 'theme' => $user->theme ?? 'light',
                 'timezone' => $user->timezone ?? 'Asia/Dhaka',
+                'time_format' => $user->time_format ?? '12h',
             ],
             'supportedLocales' => $supportedLocales->map(fn ($l) => ['code' => $l->code, 'name' => $l->name]),
             'supportedCurrencies' => $supportedCurrencies->map(fn ($c) => ['code' => $c->code, 'name' => $c->code, 'symbol' => $c->symbol ?? $c->code]),
@@ -77,6 +78,7 @@ class SettingsController extends Controller
             'display_currency' => ['nullable', 'string', 'max:10', Rule::in($currencyCodes)],
             'theme' => ['nullable', 'string', 'in:light,dark'],
             'timezone' => ['nullable', 'string', 'max:64', 'timezone:all'],
+            'time_format' => ['nullable', 'string', 'in:12h,24h'],
             'client_name' => ['nullable', 'string', 'max:255'],
             'client_email' => ['nullable', 'email', 'max:255'],
             'client_phone' => ['nullable', 'string', 'max:64'],
@@ -95,6 +97,9 @@ class SettingsController extends Controller
         }
         if (array_key_exists('timezone', $validated) && $validated['timezone'] !== null) {
             $user->timezone = $validated['timezone'];
+        }
+        if (array_key_exists('time_format', $validated) && $validated['time_format'] !== null) {
+            $user->time_format = $validated['time_format'];
         }
         $user->save();
 

@@ -1,3 +1,4 @@
+import { setTimeFormat } from '@/Utils/datetime';
 import { Link, usePage, router } from '@inertiajs/react';
 import { useOneSignal, isOnInboxOrDashboard, showBrowserNotification } from '@/hooks/useOneSignal';
 import { useState, useEffect, useCallback } from 'react';
@@ -93,7 +94,8 @@ function ClientLayoutFooter() {
 export default function ClientLayout({ header, children, title }) {
     const { t } = useTranslation();
     const [sidebarOpen, setSidebarOpen] = useState(false);
-    const { auth, impersonation, current_workspace_usage, unreadNotificationsCount, branding, onesignal } = usePage().props;
+    const { auth, impersonation, current_workspace_usage, unreadNotificationsCount, branding, onesignal, timeFormat } = usePage().props;
+    setTimeFormat(timeFormat); // before any child formats a time in this render
     const logoUrl = branding?.logo_url;
     const [unreadCount, setUnreadCount] = useState(unreadNotificationsCount ?? 0);
     const clientNavGroups = useClientNav();

@@ -6,6 +6,8 @@
  *   formatDate('2026-01-15T12:00:00Z', 'America/New_York') // "Jan 15, 2026"
  */
 
+import { getHour12 } from '@/Utils/datetime';
+
 /**
  * Format a date value as a localized date string in the given timezone.
  * Falls back to UTC if timezone is not provided.
@@ -36,6 +38,7 @@ export function formatDateTime(value, timezone = 'UTC', locale = undefined) {
             day:    'numeric',
             hour:   '2-digit',
             minute: '2-digit',
+            hour12: getHour12(),
             timeZone: timezone,
         }).format(new Date(value));
     } catch {

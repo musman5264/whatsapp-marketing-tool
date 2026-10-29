@@ -7,6 +7,22 @@
  * chosen IANA timezone (e.g. "Asia/Dhaka") instead of the browser's.
  */
 
+// 12h (3:30 PM) or 24h (15:30), from the user's Settings. Set once per page render by ClientLayout.
+let hour12 = true;
+export function setTimeFormat(format) {
+    hour12 = format !== '24h';
+}
+export const getHour12 = () => hour12;
+
+/**
+ * The timezone to show times in. A user who never chose one is stored as the default 'UTC', which is
+ * wrong for almost everybody, so the device's own timezone is used instead.
+ * shortcut: someone who really wants UTC cannot pick it; add a "no preference" value if that comes up.
+ */
+export function userTimezone(saved) {
+    return saved && saved !== 'UTC' ? saved : browserTz();
+}
+
 const DATETIME_LOCAL_RE = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/;
 
 /**
@@ -130,6 +146,7 @@ export function formatInTz(utcStr, tz, options = {}) {
         day: 'numeric',
         hour: 'numeric',
         minute: '2-digit',
+        hour12,
         timeZoneName: 'short',
         ...options,
     }).format(d);
@@ -149,6 +166,7 @@ export function formatTimeTz(utcStr, tz) {
         timeZone: tz || 'UTC',
         hour: '2-digit',
         minute: '2-digit',
+        hour12,
     }).format(d);
 }
 

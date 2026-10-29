@@ -10,7 +10,8 @@ import {
     Volume2, VolumeX, ShoppingBag, History, Tag, ArrowRightLeft, UserMinus,
 } from 'lucide-react';
 import { ChannelBrandIcon, CHANNEL_LABELS } from '@/Components/BrandIcons';
-import { formatTimeTz, formatInTz } from '@/Utils/datetime';
+import ContactAvatar from '@/Components/ContactAvatar';
+import { formatTimeTz, formatInTz, userTimezone } from '@/Utils/datetime';
 import { playInboundSound, getSoundPrefs, setChannelSoundEnabled, SOUND_CHANNELS } from '@/Utils/notificationSound';
 import { useState, useEffect, useRef, useCallback, useLayoutEffect } from 'react';
 import { mergeById, mergeMessages, fetchPage } from '@/Utils/inboxPaging';
@@ -302,7 +303,7 @@ function galleryImageSrc(msg, conversationId) {
 
 function ImageGallery({ messages, conversationId }) {
     const { props: pageProps } = usePage();
-    const bubbleTz = pageProps.timezone || 'Asia/Dhaka';
+    const bubbleTz = userTimezone(pageProps.timezone);
     const [lightbox, setLightbox] = useState(null);
 
     const isOut = messages[0].direction === 'out';
@@ -724,7 +725,7 @@ const REACTION_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
 
 function MessageBubble({ msg, conversationId, onAppend }) {
     const { props: pageProps } = usePage();
-    const bubbleTz = pageProps.timezone || 'Asia/Dhaka';
+    const bubbleTz = userTimezone(pageProps.timezone);
     const isOut = msg.direction === 'out';
     const p     = msg.payload ?? {};
     const [reactOpen, setReactOpen] = useState(false);
@@ -952,9 +953,7 @@ function ConversationCard({ conv, isActive, userTz }) {
         >
             <div className="flex items-start gap-2.5">
                 <button onClick={handleContactClick} title={t('inbox.view_contact')} className="relative shrink-0 group">
-                    <div className="h-9 w-9 rounded-full bg-brand-100 dark:bg-brand-900/30 flex items-center justify-center text-sm font-semibold text-brand-700 dark:text-brand-300 group-hover:ring-2 group-hover:ring-brand-400 transition">
-                        {name[0]?.toUpperCase() ?? '?'}
-                    </div>
+                    <ContactAvatar url={conv.contact?.avatar_url} name={name} className="group-hover:ring-2 group-hover:ring-brand-400 transition" />
                     <span className="absolute -bottom-0.5 -right-0.5 h-4 w-4 rounded-full bg-white dark:bg-neutral-900 flex items-center justify-center">
                         <ChannelBrandIcon channel={channel} className="h-3 w-3" />
                     </span>
@@ -1607,7 +1606,7 @@ export default function InboxShow({
     const { props } = usePage();
     const flash = props.flash ?? {};
     const authUser = props.auth?.user;
-    const userTz = props.timezone || 'Asia/Dhaka';
+    const userTz = userTimezone(props.timezone);
     // Prefer the active workspace (user can switch between accessible workspaces);
     // fall back to the user's primary workspace if not present.
     const workspaceId = props.currentWorkspace?.id ?? authUser?.workspace_id;
