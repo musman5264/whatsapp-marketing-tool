@@ -175,7 +175,6 @@ class WhatsappWebHealth
 
         $what = match ($last['outcome'] ?? '') {
             'stored' => 'saved to the inbox',
-            'api_send_recheck' => 'sent through the WAHA API, being checked again before it is saved',
             'sent_by_api' => 'sent by this app (already in the inbox)',
             'already_stored' => 'already in the inbox',
             'echo_of_recent_send' => 'ignored as an echo of a message this app just sent',

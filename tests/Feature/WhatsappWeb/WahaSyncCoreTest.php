@@ -9,7 +9,6 @@ use App\Modules\Shared\Models\ChannelAccount;
 use App\Modules\Shared\Models\Contact;
 use App\Modules\Shared\Models\Conversation;
 use App\Modules\Shared\Models\Message;
-use App\Modules\WhatsappWeb\Jobs\ProcessWahaEventJob;
 use App\Modules\WhatsappWeb\Jobs\SyncWhatsappWebHistoryJob;
 use App\Modules\WhatsappWeb\Models\WhatsappWebSession;
 use App\Modules\WhatsappWeb\Services\Waha\WahaAdapter;
@@ -222,15 +221,11 @@ class WahaSyncCoreTest extends TestCase
     }
 
     #[Test]
-    public function an_unknown_api_sent_message_is_not_stored_at_once_but_checked_again_after_a_delay(): void
+    public function an_api_sent_message_nobody_recorded_is_stored_because_it_came_from_elsewhere(): void
     {
-        Queue::fake();
+        $this->processor()->process($this->phoneSent(['source' => 'api', 'body' => 'Typed in the WAHA dashboard']), $this->session);
 
-        $this->processor()->process($this->phoneSent(['source' => 'api', 'body' => 'From automation']), $this->session);
-
-        // Our own send path needs a moment to record its id, so the first look stores nothing.
-        $this->assertDatabaseMissing('messages', ['body' => 'From automation']);
-        Queue::assertPushedOn('whatsapp', ProcessWahaEventJob::class);
+        $this->assertDatabaseHas('messages', ['direction' => 'out', 'body' => 'Typed in the WAHA dashboard']);
     }
 
     #[Test]

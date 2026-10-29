@@ -4,13 +4,13 @@ namespace Tests\Feature\WhatsappWeb;
 
 use App\Modules\Integrations\Models\IntegrationConfig;
 use App\Modules\Shared\Models\ChannelAccount;
+use App\Modules\Shared\Models\Contact;
+use App\Modules\Shared\Models\Conversation;
 use App\Modules\Shared\Models\Message;
-use App\Modules\WhatsappWeb\Jobs\ProcessWahaEventJob;
 use App\Modules\WhatsappWeb\Models\WhatsappWebSession;
 use App\Modules\WhatsappWeb\Services\WahaEventProcessor;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Queue;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 use Tests\TestCase;
@@ -66,26 +66,31 @@ class OwnMessageSkipLogTest extends TestCase
     }
 
     #[Test]
-    public function an_api_message_we_do_not_know_is_looked_at_again_later_instead_of_dropped(): void
+    public function an_api_message_with_no_record_of_ours_is_stored_at_once_because_someone_else_sent_it(): void
     {
-        Queue::fake();
-        Log::spy();
+        $this->process($this->phoneSent(['source' => 'api', 'body' => 'Typed in the WAHA dashboard']));
 
-        $this->process($this->phoneSent(['source' => 'api']));
-
-        $this->assertSkippedBecause('api_send_recheck');
-        Queue::assertPushedOn('whatsapp', ProcessWahaEventJob::class);
-        $this->assertSame(0, Message::count());
+        $this->assertSame(1, Message::where('direction', 'out')->where('body', 'Typed in the WAHA dashboard')->count());
     }
 
     #[Test]
-    public function an_api_message_still_unknown_on_the_second_look_is_stored_because_someone_else_sent_it(): void
+    public function an_api_message_while_our_own_send_still_has_no_whatsapp_id_is_its_echo_and_not_stored_twice(): void
     {
-        $payload = $this->phoneSent(['source' => 'api', 'body' => 'Typed in the WAHA dashboard']) + ['recheck' => true];
+        $contact = Contact::create(['workspace_id' => $this->session->workspace_id, 'phone_e164' => '+15551234567', 'first_name' => 'Sam', 'opt_in_whatsapp' => true]);
+        $conversation = Conversation::create([
+            'workspace_id' => $this->session->workspace_id, 'contact_id' => $contact->id,
+            'channel_account_id' => ChannelAccount::first()->id, 'status' => 'open',
+        ]);
+        Message::create([
+            'conversation_id' => $conversation->id, 'direction' => 'out', 'channel' => 'whatsapp', 'type' => 'text',
+            'body' => 'Our automation reply', 'status' => 'pending', 'sent_by' => 'bot', 'sent_at' => now(),
+        ]);
+        Log::spy();
 
-        $this->process($payload);
+        $this->process($this->phoneSent(['source' => 'api', 'body' => 'Our automation reply']));
 
-        $this->assertSame(1, Message::where('direction', 'out')->where('body', 'Typed in the WAHA dashboard')->count());
+        $this->assertSkippedBecause('sent_by_api');
+        $this->assertSame(1, Message::count());
     }
 
     #[Test]

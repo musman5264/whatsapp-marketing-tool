@@ -11,7 +11,6 @@ use App\Modules\Shared\Models\Message;
 use App\Modules\Whatsapp\Services\WhatsappDriver;
 use App\Modules\WhatsappWeb\Jobs\FetchWahaAvatarJob;
 use App\Modules\WhatsappWeb\Jobs\NotifyEposReconnectJob;
-use App\Modules\WhatsappWeb\Jobs\ProcessWahaEventJob;
 use App\Modules\WhatsappWeb\Jobs\SyncWhatsappWebHistoryJob;
 use App\Modules\WhatsappWeb\Models\WhatsappWebSession;
 use App\Services\WebhookIdempotencyService;
@@ -28,9 +27,6 @@ use Illuminate\Support\Facades\Log;
  */
 class WahaEventProcessor
 {
-    /** How long an API-sent message we do not know waits before it is stored (our own send path needs a moment to record its id). */
-    public const API_RECHECK_SECONDS = 30;
-
     public function __construct(
         private readonly InboundNormalizer $normalizer,
         private readonly WhatsappDriver $driver,
@@ -112,26 +108,10 @@ class WahaEventProcessor
         $p = is_array($payload['payload'] ?? null) ? $payload['payload'] : [];
 
         // WAHA: source = 'api' when the message was sent through the WAHA API, 'app' when sent from a
-        // WhatsApp client. Absent on some engines. 'api' is usually this app (its send path stores the
-        // message and adds the WhatsApp id a moment after the send), but it is also the WAHA dashboard
-        // and any other API user. So an API message we do not know is looked at again after a delay and
-        // stored if it is still unknown: that is a message sent by someone else, not our own echo.
+        // WhatsApp client. Absent on some engines. 'api' is this app's own send, but it is also the WAHA
+        // dashboard and any other API user, so it cannot simply be skipped (replies typed in the WAHA
+        // dashboard never reached the inbox). Our own send is told apart below by its record.
         $source = strtolower((string) ($p['source'] ?? $payload['source'] ?? ''));
-        if ($source === 'api') {
-            if ($this->findOwnMessage(InboundNormalizer::idOf($p['id'] ?? '')) !== null) {
-                $this->ownMessageSkipped('sent_by_api', $p, $session);
-
-                return;
-            }
-            if (empty($payload['recheck'])) {
-                $this->ownMessageSkipped('api_send_recheck', $p, $session);
-                ProcessWahaEventJob::dispatch($payload + ['recheck' => true], $session->id, $session->session_name)
-                    ->delay(now()->addSeconds(self::API_RECHECK_SECONDS))
-                    ->onQueue('whatsapp');
-
-                return;
-            }
-        }
 
         $normalized = $this->normalizer->normalizeFromMe($payload, $session);
         if ($normalized === null) {
@@ -144,7 +124,16 @@ class WahaEventProcessor
         $providerId = (string) $msg['id'];
 
         if ($this->findOwnMessage($providerId) !== null) {
-            $this->ownMessageSkipped('already_stored', $p, $session); // e.g. redelivered webhook
+            // An API message already recorded is our own send; anything else is a redelivered webhook.
+            $this->ownMessageSkipped($source === 'api' ? 'sent_by_api' : 'already_stored', $p, $session);
+
+            return;
+        }
+
+        // Our send path saves the message first and adds the WhatsApp id after the send returns, so the
+        // webhook can arrive while our record still has no id. That record is this echo.
+        if ($source === 'api' && $this->pendingOwnSendExists($msg, $session)) {
+            $this->ownMessageSkipped('sent_by_api', $p, $session);
 
             return;
         }
@@ -201,6 +190,25 @@ class WahaEventProcessor
             'to_kind' => $kind($p['to'] ?? null),
             'type' => $p['type'] ?? null,
         ]);
+    }
+
+    /**
+     * Is there a message of ours to this contact that is still waiting for its WhatsApp id (saved in the
+     * last 2 minutes, not failed)? Then the webhook that just arrived is its echo.
+     *
+     * @param  array<string,mixed>  $msg
+     */
+    private function pendingOwnSendExists(array $msg, WhatsappWebSession $session): bool
+    {
+        return Message::query()
+            ->where('direction', 'out')
+            ->whereNull('provider_message_id')
+            ->where('status', '!=', 'failed')
+            ->where('created_at', '>=', now()->subMinutes(2))
+            ->whereHas('conversation', fn ($q) => $q
+                ->where('workspace_id', $session->workspace_id)
+                ->whereHas('contact', fn ($c) => $c->where('phone_e164', '+'.(string) ($msg['from'] ?? ''))))
+            ->exists();
     }
 
     /**
