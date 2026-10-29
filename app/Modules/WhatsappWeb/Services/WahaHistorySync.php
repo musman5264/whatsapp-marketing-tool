@@ -136,8 +136,10 @@ class WahaHistorySync
                 continue;
             }
 
-            // Our own API sends are stored by the send path; never re-create them.
-            if ($fromMe && strtolower((string) ($m['source'] ?? '')) === 'api') {
+            // A recent API send is probably ours and still being recorded by the send path (and the webhook
+            // looks at it again after a delay), so leave it. An older API message we do not have was sent
+            // by someone else (the WAHA dashboard, another API user): store it.
+            if ($fromMe && strtolower((string) ($m['source'] ?? '')) === 'api' && time() - (int) ($m['timestamp'] ?? 0) < 300) {
                 continue;
             }
 

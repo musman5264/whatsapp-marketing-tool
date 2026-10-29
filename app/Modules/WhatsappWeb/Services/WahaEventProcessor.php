@@ -11,6 +11,7 @@ use App\Modules\Shared\Models\Message;
 use App\Modules\Whatsapp\Services\WhatsappDriver;
 use App\Modules\WhatsappWeb\Jobs\FetchWahaAvatarJob;
 use App\Modules\WhatsappWeb\Jobs\NotifyEposReconnectJob;
+use App\Modules\WhatsappWeb\Jobs\ProcessWahaEventJob;
 use App\Modules\WhatsappWeb\Jobs\SyncWhatsappWebHistoryJob;
 use App\Modules\WhatsappWeb\Models\WhatsappWebSession;
 use App\Services\WebhookIdempotencyService;
@@ -27,6 +28,9 @@ use Illuminate\Support\Facades\Log;
  */
 class WahaEventProcessor
 {
+    /** How long an API-sent message we do not know waits before it is stored (our own send path needs a moment to record its id). */
+    public const API_RECHECK_SECONDS = 30;
+
     public function __construct(
         private readonly InboundNormalizer $normalizer,
         private readonly WhatsappDriver $driver,
@@ -107,14 +111,26 @@ class WahaEventProcessor
     {
         $p = is_array($payload['payload'] ?? null) ? $payload['payload'] : [];
 
-        // WAHA: source = 'api' when the message was sent through the WAHA API (i.e.
-        // by this app — the send path already stored it), 'app' when sent from a
-        // WhatsApp client. Absent on some engines.
+        // WAHA: source = 'api' when the message was sent through the WAHA API, 'app' when sent from a
+        // WhatsApp client. Absent on some engines. 'api' is usually this app (its send path stores the
+        // message and adds the WhatsApp id a moment after the send), but it is also the WAHA dashboard
+        // and any other API user. So an API message we do not know is looked at again after a delay and
+        // stored if it is still unknown: that is a message sent by someone else, not our own echo.
         $source = strtolower((string) ($p['source'] ?? $payload['source'] ?? ''));
         if ($source === 'api') {
-            $this->ownMessageSkipped('sent_by_api', $p, $session);
+            if ($this->findOwnMessage(InboundNormalizer::idOf($p['id'] ?? '')) !== null) {
+                $this->ownMessageSkipped('sent_by_api', $p, $session);
 
-            return;
+                return;
+            }
+            if (empty($payload['recheck'])) {
+                $this->ownMessageSkipped('api_send_recheck', $p, $session);
+                ProcessWahaEventJob::dispatch($payload + ['recheck' => true], $session->id, $session->session_name)
+                    ->delay(now()->addSeconds(self::API_RECHECK_SECONDS))
+                    ->onQueue('whatsapp');
+
+                return;
+            }
         }
 
         $normalized = $this->normalizer->normalizeFromMe($payload, $session);

@@ -5,10 +5,12 @@ namespace Tests\Feature\WhatsappWeb;
 use App\Modules\Integrations\Models\IntegrationConfig;
 use App\Modules\Shared\Models\ChannelAccount;
 use App\Modules\Shared\Models\Message;
+use App\Modules\WhatsappWeb\Jobs\ProcessWahaEventJob;
 use App\Modules\WhatsappWeb\Models\WhatsappWebSession;
 use App\Modules\WhatsappWeb\Services\WahaEventProcessor;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Queue;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 use Tests\TestCase;
@@ -64,14 +66,38 @@ class OwnMessageSkipLogTest extends TestCase
     }
 
     #[Test]
-    public function a_message_sent_through_our_api_says_it_was_skipped_because_it_was_ours(): void
+    public function an_api_message_we_do_not_know_is_looked_at_again_later_instead_of_dropped(): void
     {
+        Queue::fake();
         Log::spy();
 
         $this->process($this->phoneSent(['source' => 'api']));
 
-        $this->assertSkippedBecause('sent_by_api');
+        $this->assertSkippedBecause('api_send_recheck');
+        Queue::assertPushedOn('whatsapp', ProcessWahaEventJob::class);
         $this->assertSame(0, Message::count());
+    }
+
+    #[Test]
+    public function an_api_message_still_unknown_on_the_second_look_is_stored_because_someone_else_sent_it(): void
+    {
+        $payload = $this->phoneSent(['source' => 'api', 'body' => 'Typed in the WAHA dashboard']) + ['recheck' => true];
+
+        $this->process($payload);
+
+        $this->assertSame(1, Message::where('direction', 'out')->where('body', 'Typed in the WAHA dashboard')->count());
+    }
+
+    #[Test]
+    public function an_api_message_our_own_send_path_already_stored_is_not_stored_twice(): void
+    {
+        $this->process($this->phoneSent(['source' => 'app']));
+        Log::spy();
+
+        $this->process($this->phoneSent(['source' => 'api']) + ['recheck' => true]);
+
+        $this->assertSkippedBecause('sent_by_api');
+        $this->assertSame(1, Message::count());
     }
 
     #[Test]
