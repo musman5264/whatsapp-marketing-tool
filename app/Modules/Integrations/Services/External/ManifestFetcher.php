@@ -18,7 +18,7 @@ class ManifestFetcher
 
     private const PARAM_TYPES = ['text', 'number', 'date', 'choice', 'phone'];
 
-    private const PARAM_SOURCES = ['sender_phone', 'chat_answer', 'fixed'];
+    private const PARAM_SOURCES = ['sender_phone', 'chat_answer', 'fixed', 'incoming_message'];
 
     private const OUTPUT_TYPES = ['text', 'number', 'boolean', 'date', 'datetime'];
 

@@ -338,4 +338,30 @@ class RiderReplyTest extends TestCase
         $this->assertSame(0, AutomationRun::count());
         $this->assertSame('failed', Message::where('direction', 'out')->first()->status);
     }
+
+    public function test_the_manifest_entry_exactly_as_the_epos_spec_gives_it_is_accepted(): void
+    {
+        $entry = [
+            'key' => 'delivery.rider_reply', 'kind' => 'action', 'group' => 'Delivery',
+            'label' => ['en' => "Rider's answer for a delivery order", 'ur' => 'ڈیلیوری آرڈر پر رائیڈر کا جواب'],
+            'description' => ['en' => "Marks an order delivered, or on hold with a note, from the rider's WhatsApp message."],
+            'method' => 'POST', 'path' => '/api/whatsapp/v1/delivery-replies',
+            'params' => [
+                ['name' => 'phone', 'type' => 'phone', 'from' => 'sender_phone'],
+                ['name' => 'message', 'type' => 'text', 'from' => 'incoming_message', 'max_length' => 1500],
+            ],
+            'outputs' => [
+                ['path' => 'handled', 'type' => 'boolean'], ['path' => 'outcome', 'type' => 'text'],
+                ['path' => 'order', 'type' => 'text'], ['path' => 'reply', 'type' => 'text'],
+            ],
+        ];
+        $this->fakeEpos(Http::response(['manifest_version' => 'v2', 'business' => [], 'capabilities' => [$entry]]));
+
+        $manifest = app(\App\Modules\Integrations\Services\External\ManifestFetcher::class)->fetch('https://epos.example.com/api/whatsapp/v1/manifest', 'wak_live_secret');
+
+        $this->assertSame([], $manifest['issues']);
+        $this->assertSame(['delivery.rider_reply'], array_column($manifest['capabilities'], 'key'));
+        $this->assertSame('incoming_message', $manifest['capabilities'][0]['params'][1]['from']);
+        $this->assertSame(1500, (int) $manifest['capabilities'][0]['params'][1]['max_length']);
+    }
 }
