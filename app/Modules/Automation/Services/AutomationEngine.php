@@ -1115,7 +1115,7 @@ class AutomationEngine
         $var = preg_replace('/\s+/', '_', trim((string) ($data['result_var'] ?? ''))) ?: 'epos';
         $contact = $run->contact_id ? Contact::find($run->contact_id) : null;
 
-        $query = ExternalIntegration::where('workspace_id', $run->automation->workspace_id)->where('type', 'epos');
+        $query = ExternalIntegration::where('workspace_id', $run->automation->workspace_id)->whereIn('type', ExternalIntegration::TYPES); // E-POS and RentOyee share this step
         // A saved id that is not in this workspace (imported flow) falls back to the only link, as the builder shows.
         $integration = (! empty($data['integration_id']) ? (clone $query)->find($data['integration_id']) : null)
             ?? ((clone $query)->count() === 1 ? $query->first() : null);

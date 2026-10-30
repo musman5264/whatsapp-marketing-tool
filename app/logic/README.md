@@ -17,7 +17,7 @@ Tracked write-ups of what is **built and working now**. Update a file in place w
 | [automation-webhook-node.md](automation-webhook-node.md) | Automation "API Call" node (was Call Webhook): fields, what runs, response saved as variables, dotted paths, `{{#each}}` lists, poll options from a list, conditions on nested fields, QR-number caveats |
 | [automation-ask-question.md](automation-ask-question.md) | Ask Question node: waiting for a reply, which message resumes it, why an unconnected Ask Question used to repeat the menu on every message (fixed) |
 | [automation-import-export.md](automation-import-export.md) | Builder Import / Export button: JSON file (import again), Markdown description, secret header values redacted, import always makes a new draft in the current workspace |
-| [epos-integration.md](epos-integration.md) | EPOS link API (`/api/v1/integrations`), manifest cache and validation, health/backoff, SSRF-safe outbound client (slice 1; executor, builder node and inbox panel not built yet) |
+| [epos-integration.md](epos-integration.md) | EPOS link API (`/api/v1/integrations`), manifest cache and validation, health/backoff, SSRF-safe outbound client, the E-POS flow step, and (T-0071) RentOyee as a second system plus per-client on/off switches |
 
 The contract for the EPOS team is [EPOS-INTEGRATION-SPEC.md](../../EPOS-INTEGRATION-SPEC.md) (repo root).
 

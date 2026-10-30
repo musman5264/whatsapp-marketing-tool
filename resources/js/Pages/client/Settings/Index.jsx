@@ -12,6 +12,7 @@ export default function ClientSettingsIndex({
     supportedCurrencies = [],
     client = null,
     digestEnabled = true,
+    integrationSwitches = null,
 }) {
     const { t } = useTranslation();
     const { flash = {} } = usePage().props;
@@ -26,6 +27,7 @@ export default function ClientSettingsIndex({
         client_phone: client?.phone ?? '',
         client_address: client?.address ?? '',
         weekly_digest_enabled: digestEnabled,
+        integrations: integrationSwitches ?? {},
     });
 
     const handleSubmit = (e) => {
@@ -207,6 +209,28 @@ export default function ClientSettingsIndex({
                             </span>
                         </label>
                     </div>
+
+                    {integrationSwitches && (
+                        <div className="rounded-xl border border-neutral-200 dark:border-neutral-700 p-4 sm:p-5">
+                            <h3 className="text-sm font-semibold text-neutral-600 dark:text-neutral-300 uppercase tracking-wide mb-1">{t('settings.linked_systems')}</h3>
+                            <p className="text-xs text-neutral-500 dark:text-neutral-400 mb-3">{t('settings.linked_systems_hint')}</p>
+                            <div className="space-y-3">
+                                {Object.keys(integrationSwitches).map(type => (
+                                    <label key={type} className="flex items-center gap-3 cursor-pointer">
+                                        <input
+                                            type="checkbox"
+                                            checked={!!form.data.integrations[type]}
+                                            onChange={e => form.setData('integrations', { ...form.data.integrations, [type]: e.target.checked })}
+                                            className="h-4 w-4 rounded border-gray-300 text-indigo-600"
+                                        />
+                                        <span className="text-sm text-neutral-700 dark:text-neutral-300">
+                                            {t(`settings.linked_system_${type}`)}
+                                        </span>
+                                    </label>
+                                ))}
+                            </div>
+                        </div>
+                    )}
 
                     {(
                         <Button type="submit" variant="primary" disabled={form.processing}>

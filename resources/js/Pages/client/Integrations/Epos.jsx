@@ -17,7 +17,7 @@ function StatusBadge({ status }) {
             ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'
             : 'bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-300'}`}>
             <Icon className="h-3.5 w-3.5" aria-hidden="true" />
-            {ok ? t('epos_status.status_connected') : t('epos_status.status_unreachable')}
+            {ok ? t('epos_status.status_connected') : status === 'unlinked' ? t('epos_status.status_unlinked') : t('epos_status.status_unreachable')}
         </span>
     );
 }
@@ -146,6 +146,7 @@ function IntegrationCard({ item, tz }) {
 
             <div className="flex flex-wrap items-center gap-3 p-4">
                 <h2 id={`epos-${item.id}`} className="min-w-0 truncate text-base font-semibold text-neutral-900 dark:text-white" dir="auto">{item.name}</h2>
+                <span className="shrink-0 rounded-full bg-neutral-100 px-2 py-0.5 text-xs font-medium text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300">{t(`settings.linked_system_${item.type}`)}</span>
                 <StatusBadge status={item.status} />
                 <button
                     type="button"

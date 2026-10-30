@@ -47,6 +47,10 @@ class IntegrationApiController extends WorkspaceScopedController
         ]);
         $data['base_url'] = rtrim($data['base_url'], '/');
 
+        if ($off = $this->refuseWhenOff($this->workspaceId($request), $data['type'])) {
+            return $off;
+        }
+
         $integration = ExternalIntegration::firstOrNew([
             'workspace_id' => $this->workspaceId($request),
             'type' => $data['type'],
@@ -65,6 +69,9 @@ class IntegrationApiController extends WorkspaceScopedController
     public function update(Request $request, int $id): JsonResponse
     {
         $integration = $this->find($request, $id);
+        if ($off = $this->refuseWhenOff((int) $integration->workspace_id, $integration->type)) {
+            return $off;
+        }
         $data = $request->validate([
             'name' => ['sometimes', 'string', 'max:191'],
             'base_url' => ['sometimes', 'url', 'max:255'],
@@ -124,6 +131,14 @@ class IntegrationApiController extends WorkspaceScopedController
         $this->health->recordSuccess($integration);
 
         return null;
+    }
+
+    /** The client has not switched this system on (Settings page): linking is refused, nothing is stored. */
+    private function refuseWhenOff(int $workspaceId, string $type): ?JsonResponse
+    {
+        return ExternalIntegration::enabledFor($workspaceId, $type)
+            ? null
+            : response()->json(['error' => 'integration_disabled', 'detail' => "{$type} is switched off for this client. Switch it on in Settings first."], 403);
     }
 
     private function find(Request $request, int $id): ExternalIntegration

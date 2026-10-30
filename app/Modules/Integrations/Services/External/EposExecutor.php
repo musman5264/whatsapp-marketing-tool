@@ -37,14 +37,15 @@ class EposExecutor
     /**
      * @param  string|null  $phone  the chat contact's E.164 number, null when it is not a verified number
      * @param  array<string, mixed>  $authorParams  values the flow author mapped, keyed by manifest param name (tokens already rendered)
+     * @param  array{contents: string, filename: string}|null  $file  the file for the capability's `file` param (RentOyee CNIC photo); the call is then multipart/form-data
      * @return array{outcome: 'found'|'not_found'|'no_data', body: array<string, mixed>, message: string}
      */
-    public function execute(ExternalIntegration $integration, string $capabilityKey, ?string $phone, array $authorParams, string $idempotencySeed): array
+    public function execute(ExternalIntegration $integration, string $capabilityKey, ?string $phone, array $authorParams, string $idempotencySeed, ?array $file = null): array
     {
         $started = microtime(true);
         $status = 'skipped';
         $debug = null;
-        $result = $this->run($integration, $capabilityKey, $phone, $authorParams, $idempotencySeed, $status, $debug);
+        $result = $this->run($integration, $capabilityKey, $phone, $authorParams, $idempotencySeed, $status, $debug, $file);
         $ms = (int) round((microtime(true) - $started) * 1000);
 
         Log::info('external.call', [
@@ -70,8 +71,15 @@ class EposExecutor
      * @param  array{request?: string, response?: string}|null  $debug  filled only while the admin has debug recording on
      * @return array{outcome: string, body: array<string, mixed>, message: string}
      */
-    private function run(ExternalIntegration $integration, string $key, ?string $phone, array $author, string $idempotencySeed, string &$status, ?array &$debug): array
+    private function run(ExternalIntegration $integration, string $key, ?string $phone, array $author, string $idempotencySeed, string &$status, ?array &$debug, ?array $file = null): array
     {
+        if (! ExternalIntegration::enabledFor((int) $integration->workspace_id, $integration->type)) {
+            return $this->noData('This system is switched off for this client.', 'not_enabled');
+        }
+        if ($integration->status === ExternalIntegration::STATUS_UNLINKED) {
+            return $this->noData('The remote system refused the key (unlinked); not calling it.', 'unlinked');
+        }
+
         $capability = null;
         foreach ($integration->manifest['capabilities'] ?? [] as $candidate) {
             if (($candidate['key'] ?? null) === $key) {
@@ -85,9 +93,31 @@ class EposExecutor
             return $this->noData('E-POS is unreachable; not calling it until the next retry.');
         }
 
-        $values = $this->bind($capability['params'] ?? [], $phone, $author, $error, $reason);
+        $fileParam = null;
+        foreach ($capability['params'] ?? [] as $p) {
+            if (($p['type'] ?? '') === 'file') {
+                $fileParam = $p;
+            }
+        }
+        if ($fileParam && ($file === null || $file['contents'] === '' || strlen($file['contents']) > ((int) ($fileParam['max_mb'] ?? 5)) * 1048576)) {
+            return $this->noData('The photo is missing or too big.', 'invalid');
+        }
+
+        $values = $this->bind(array_values(array_filter($capability['params'] ?? [], fn ($p) => ($p['type'] ?? '') !== 'file')), $phone, $author, $error, $reason);
         if ($values === null) {
             return $this->noData($error, $reason);
+        }
+
+        // A {name} in the path (RentOyee: /bookings/{ref}) takes that param's value, URL-encoded; it is not sent again.
+        $path = (string) $capability['path'];
+        foreach ($values as $name => $value) {
+            if (str_contains($path, '{'.$name.'}')) {
+                $path = str_replace('{'.$name.'}', rawurlencode($value), $path);
+                unset($values[$name]);
+            }
+        }
+        if (str_contains($path, '{')) {
+            return $this->noData('A value for the address is missing.', 'invalid');
         }
 
         $personSpecific = $this->carriesPhone($capability['params'] ?? []);
@@ -107,18 +137,18 @@ class EposExecutor
         }
         RateLimiter::hit($limiter, 60);
 
-        $url = rtrim($integration->base_url, '/').$capability['path'];
+        $url = rtrim($integration->base_url, '/').$path;
         if ($integration->isDebugging()) {
             $isAction = $capability['kind'] === 'action';
             $debug = ['request' => ExternalCallLog::payload(
-                ($isAction ? 'POST ' : 'GET ').$capability['path'].(! $isAction && $values ? '?'.http_build_query($values) : '').($isAction ? '
+                ($isAction ? 'POST ' : 'GET ').$path.(! $isAction && $values ? '?'.http_build_query($values) : '').($isAction ? '
 '.json_encode($values, JSON_UNESCAPED_UNICODE) : '')
             )];
         }
         try {
             // shortcut: queries are not retried (spec says MAY); add one retry on a connection error if EPOS proves flaky.
             $response = $capability['kind'] === 'action'
-                ? $this->http->request('POST', $url, $integration->key, $values, SafeHttp::DEFAULT_MAX_BYTES, ['Idempotency-Key' => sha1($idempotencySeed.':'.$key)])
+                ? $this->http->request('POST', $url, $integration->key, $values, SafeHttp::DEFAULT_MAX_BYTES, ['Idempotency-Key' => sha1($idempotencySeed.':'.$key)], $fileParam ? ['name' => $fileParam['name'], 'contents' => $file['contents'], 'filename' => $file['filename']] : null)
                 : $this->http->request('GET', $url.($values ? '?'.http_build_query($values) : ''), $integration->key);
         } catch (ExternalCallException $e) {
             $status = $e->reason;
@@ -133,6 +163,14 @@ class EposExecutor
         }
 
         $status = (string) $response->status();
+        if ($response->status() === 401) {
+            $this->health->markUnlinked($integration);
+            if ($debug !== null) {
+                $debug['response'] = '401';
+            }
+
+            return $this->noData('The remote system refused the key (HTTP 401).', 'unlinked');
+        }
         if ($debug !== null) {
             $debug['response'] = ExternalCallLog::payload($response->status().' '.$response->body());
         }
@@ -191,6 +229,10 @@ class EposExecutor
             $value = trim((string) ($raw[$name] ?? ''));
             if ($value === '') {
                 $requiredIf = $p['required_if'] ?? null;
+                if (is_string($requiredIf) && str_contains($requiredIf, '=')) { // RentOyee: "period=custom"
+                    [$k, $v] = explode('=', $requiredIf, 2);
+                    $requiredIf = [trim($k) => trim($v)];
+                }
                 $required = empty($p['optional']) || (is_array($requiredIf) && $requiredIf !== [] && trim((string) ($raw[array_key_first($requiredIf)] ?? '')) === (string) reset($requiredIf));
                 if ($required) {
                     $error = "Missing value for {$name}.";
@@ -241,7 +283,7 @@ class EposExecutor
         return match ($p['type'] ?? 'text') {
             'number' => is_numeric($value),
             'date' => (bool) preg_match('/^(\d{4})-(\d{2})-(\d{2})$/', $value, $m) && checkdate((int) $m[2], (int) $m[3], (int) $m[1]),
-            'choice' => in_array($value, array_map(fn ($c) => (string) ($c['value'] ?? ''), $p['choices'] ?? []), true),
+            'choice' => in_array($value, array_map(fn ($c) => (string) (is_array($c) ? ($c['value'] ?? '') : $c), $p['choices'] ?? []), true),
             'phone' => true, // always the customer's own number, set by bind()
             default => mb_strlen($value) <= min((int) ($p['max_length'] ?? self::DEFAULT_TEXT), ($p['from'] ?? '') === 'profile_photo' ? self::MAX_PHOTO : self::MAX_TEXT),
         };

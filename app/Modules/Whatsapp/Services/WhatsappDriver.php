@@ -6,6 +6,7 @@ use App\Events\MessageReceived;
 use App\Events\MessageSent;
 use App\Events\MessageStatusUpdated;
 use App\Modules\Broadcasting\Models\CampaignRecipient;
+use App\Modules\Integrations\Services\External\ReplyContextHandler;
 use App\Modules\Integrations\Services\External\RiderReplyHandler;
 use App\Modules\Shared\Contracts\ChannelDriverInterface;
 use App\Modules\Shared\Models\ChannelAccount;
@@ -693,7 +694,10 @@ class WhatsappDriver implements ChannelDriverInterface
 
         // A delivery rider's answer goes to EPOS first. When EPOS handles it the normal flow (automations, AI,
         // webhooks, notifications, unread badge) does not run.
-        $answeredByEpos = ! $historical && app(RiderReplyHandler::class)->handle($message, $conversation, $contact);
+        // RentOyee's pending question for this contact is answered first, then the rider check.
+        $answeredByEpos = ! $historical
+            && (app(ReplyContextHandler::class)->handle($message, $conversation, $contact)
+                || app(RiderReplyHandler::class)->handle($message, $conversation, $contact));
 
         $conversation->update([
             'last_message_at' => $answeredByEpos ? $this->laterOf($conversation->last_message_at, $message->sent_at) : $message->sent_at,

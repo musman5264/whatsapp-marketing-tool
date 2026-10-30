@@ -65,6 +65,16 @@ function Param({ param, value, onChange, flowVars, lang }) {
         );
     }
 
+    // RentOyee: the pending question's id and the customer's photo come from the chat itself, not from the flow.
+    if (param.from === 'reply_context' || param.from === 'chat_attachment') {
+        return (
+            <div>
+                {title}
+                <input id={id} className={`${inputCls} bg-gray-50 text-gray-500`} value={t('automation.epos_auto_param')} readOnly disabled />
+            </div>
+        );
+    }
+
     const fromChat = param.from === 'chat_answer';
     // Answers marked as an alert come first: they are the ones meant for E-POS.
     const answers = fromChat
@@ -75,7 +85,11 @@ function Param({ param, value, onChange, flowVars, lang }) {
 
     // A `choice` lists labelled values; a text param with an `enum` (alert kind: order / complaint) lists the plain values.
     if (param.type === 'choice' || param.enum?.length) {
-        const options = param.type === 'choice' ? (param.choices ?? []) : param.enum.map((v) => ({ value: v }));
+        // RentOyee lists plain values and a separate choice_labels map ({en: {value: text}}).
+        const plain = (c) => (typeof c === 'string'
+            ? { value: c, label: param.choice_labels ? Object.fromEntries(Object.entries(param.choice_labels).map(([l, m]) => [l, m?.[c]])) : undefined }
+            : c);
+        const options = param.type === 'choice' ? (param.choices ?? []).map(plain) : param.enum.map((v) => ({ value: v }));
         return (
             <div>
                 {title}

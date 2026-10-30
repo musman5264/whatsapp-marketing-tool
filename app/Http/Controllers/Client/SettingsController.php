@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\ClientSetting;
 use App\Models\Currency;
 use App\Models\Locale;
+use App\Modules\Integrations\Models\ExternalIntegration;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -48,6 +49,10 @@ class SettingsController extends Controller
             'supportedLocales' => $supportedLocales->map(fn ($l) => ['code' => $l->code, 'name' => $l->name]),
             'supportedCurrencies' => $supportedCurrencies->map(fn ($c) => ['code' => $c->code, 'name' => $c->code, 'symbol' => $c->symbol ?? $c->code]),
             'client' => $client,
+            // On/off switches for the linked systems (client administrators only; anyone else sees none).
+            'integrationSwitches' => $user->client_id && $user->isClientAdministrator()
+                ? collect(ExternalIntegration::TYPES)->mapWithKeys(fn ($type) => [$type => ClientSetting::get($user->client_id, ExternalIntegration::switchKey($type), '0') === '1'])->all()
+                : null,
             'digestEnabled' => $user->client_id
                 ? ClientSetting::get($user->client_id, 'weekly_digest_enabled', '1') !== '0'
                 : true,
@@ -84,6 +89,8 @@ class SettingsController extends Controller
             'client_phone' => ['nullable', 'string', 'max:64'],
             'client_address' => ['nullable', 'string'],
             'weekly_digest_enabled' => ['nullable', 'boolean'],
+            'integrations' => ['nullable', 'array'],
+            'integrations.*' => ['boolean'],
         ]);
 
         if (array_key_exists('locale', $validated) && $validated['locale'] !== null) {
@@ -123,6 +130,15 @@ class SettingsController extends Controller
         // Digest preference
         if ($user->client_id && array_key_exists('weekly_digest_enabled', $validated)) {
             ClientSetting::set($user->client_id, 'weekly_digest_enabled', $validated['weekly_digest_enabled'] ? '1' : '0');
+        }
+
+        // E-POS / RentOyee switches: only a client administrator, only the known systems.
+        if ($user->client_id && $user->isClientAdministrator()) {
+            foreach (ExternalIntegration::TYPES as $type) {
+                if (array_key_exists($type, $validated['integrations'] ?? [])) {
+                    ClientSetting::set($user->client_id, ExternalIntegration::switchKey($type), $validated['integrations'][$type] ? '1' : '0');
+                }
+            }
         }
 
         return redirect()->route('client.settings.index')->with('success', __('Settings saved.'));

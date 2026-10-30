@@ -16,9 +16,9 @@ class ManifestFetcher
 
     public const STALE_AFTER_MINUTES = 10;
 
-    private const PARAM_TYPES = ['text', 'number', 'date', 'choice', 'phone'];
+    private const PARAM_TYPES = ['text', 'number', 'date', 'choice', 'phone', 'file'];
 
-    private const PARAM_SOURCES = ['sender_phone', 'chat_answer', 'fixed', 'incoming_message'];
+    private const PARAM_SOURCES = ['sender_phone', 'chat_answer', 'fixed', 'incoming_message', 'reply_context', 'chat_attachment'];
 
     private const OUTPUT_TYPES = ['text', 'number', 'boolean', 'date', 'datetime'];
 
@@ -80,6 +80,42 @@ class ManifestFetcher
             $this->record($integration, 'no_data', $e->reason, $this->ms($started), $e->getMessage());
 
             throw $e;
+        }
+    }
+
+    /**
+     * The 5-minute poll (RentOyee): GET /api/whatsapp/v1/ping, and read the manifest again only when the version it
+     * reports is not the cached one. A 401 marks the link unlinked. Never throws.
+     */
+    public function pollVersion(ExternalIntegration $integration): void
+    {
+        try {
+            $response = $this->http->request('GET', rtrim($integration->base_url, '/').'/api/whatsapp/v1/ping', $integration->key, null, 4096);
+        } catch (ExternalCallException) {
+            $this->health->recordFailure($integration);
+
+            return;
+        }
+        if ($response->status() === 401) {
+            $this->health->markUnlinked($integration);
+
+            return;
+        }
+        if (! $response->successful()) {
+            $this->health->recordFailure($integration);
+
+            return;
+        }
+
+        $integration->last_ping_at = now();
+        $this->health->recordSuccess($integration);
+        $version = $response->json('manifest_version');
+        if (is_string($version) && $version !== '' && $version !== $integration->manifest_version) {
+            try {
+                $this->refresh($integration);
+            } catch (ExternalCallException) {
+                // counted in health; the cached manifest stays usable
+            }
         }
     }
 
@@ -182,7 +218,7 @@ class ManifestFetcher
     private function clean(array $c): array
     {
         $params = array_map(function ($p) {
-            $p = array_intersect_key($p, array_flip(['name', 'type', 'from', 'optional', 'required_if', 'default', 'choices', 'max_length', 'enum']));
+            $p = array_intersect_key($p, array_flip(['name', 'type', 'from', 'optional', 'required_if', 'default', 'choices', 'choice_labels', 'max_length', 'enum', 'accept', 'max_mb']));
             if (isset($p['enum'])) {
                 $p['enum'] = array_values($p['enum']);
             }

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Modules\Broadcasting\Services\Sms\SmsDriverManager;
+use App\Modules\Integrations\Services\External\ReplyContextHandler;
 use App\Modules\Shared\Models\ChannelAccount;
 use App\Modules\Shared\Models\Contact;
 use App\Modules\Shared\Models\Conversation;
@@ -14,6 +15,8 @@ use App\Services\StorageManager;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Validation\ValidationException;
 
 class MessageApiController extends WorkspaceScopedController
@@ -56,6 +59,12 @@ class MessageApiController extends WorkspaceScopedController
             'template_vars' => ['nullable', 'array'],
             'channel_account_id' => ['nullable', 'integer'],
             'wait' => ['nullable', 'integer', 'between:0,'.self::MAX_WAIT_SECONDS],
+            // A question for the customer (RentOyee): their next message is the answer. Stored on the contact below.
+            'reply_context' => ['nullable', 'array'],
+            'reply_context.source' => ['required_with:reply_context', 'string', 'in:rentoyee'],
+            'reply_context.request_id' => ['required_with:reply_context', 'string', 'max:64'],
+            'reply_context.field' => ['nullable', 'string', 'max:64'],
+            'reply_context.expires_at' => ['required_with:reply_context', 'date', 'after:now'],
             'attachment' => [
                 'nullable', 'file', 'max:20480',
                 'mimes:jpg,jpeg,png,webp,gif,mp4,3gp,mov,mp3,aac,m4a,amr,ogg,opus,pdf,doc,docx,xls,xlsx,ppt,pptx,txt,csv',
@@ -88,6 +97,13 @@ class MessageApiController extends WorkspaceScopedController
         }
 
         $channel = $validated['channel'];
+
+        if (! empty($validated['reply_context'])) {
+            // The latest question wins; it lapses at expires_at (at most 30 days).
+            // shortcut: kept in the cache, so a cache flush forgets pending questions; move to a column if that bites.
+            $context = $validated['reply_context'];
+            Cache::put(ReplyContextHandler::key($contact->id), $context, Carbon::parse($context['expires_at'])->min(now()->addDays(30)));
+        }
 
         try {
             if ($channel === 'whatsapp') {

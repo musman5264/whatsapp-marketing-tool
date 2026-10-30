@@ -2,6 +2,8 @@
 
 namespace App\Modules\Integrations\Models;
 
+use App\Models\ClientSetting;
+use App\Models\Workspace;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
 
@@ -28,11 +30,31 @@ use Illuminate\Support\Carbon;
  */
 class ExternalIntegration extends Model
 {
-    public const TYPES = ['epos'];
+    public const TYPES = ['epos', 'rentoyee'];
 
     public const STATUS_CONNECTED = 'connected';
 
     public const STATUS_UNREACHABLE = 'unreachable';
+
+    /** The system answered 401: its key is no longer valid. Nothing is sent until a check or a new key works. */
+    public const STATUS_UNLINKED = 'unlinked';
+
+    /**
+     * Whether the client that owns the workspace has this system switched on (Settings page). Off unless
+     * set; the migration that added the switch set it for clients that already had an EPOS link.
+     * A workspace with no client is not gated.
+     */
+    public static function enabledFor(int $workspaceId, string $type): bool
+    {
+        $clientId = Workspace::whereKey($workspaceId)->value('client_id');
+
+        return ! $clientId || ClientSetting::get((int) $clientId, self::switchKey($type), '0') === '1';
+    }
+
+    public static function switchKey(string $type): string
+    {
+        return "integration_{$type}_enabled";
+    }
 
     protected $fillable = ['workspace_id', 'type', 'name', 'base_url', 'manifest_url', 'key'];
 

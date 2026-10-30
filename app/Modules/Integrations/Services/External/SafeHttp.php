@@ -22,10 +22,11 @@ class SafeHttp
     /**
      * @param  array<string, mixed>|null  $json
      * @param  array<string, string>  $headers
+     * @param  array{name: string, contents: string, filename: string}|null  $file  sent as multipart/form-data (POST) with $json as the other form fields
      *
      * @throws ExternalCallException
      */
-    public function request(string $method, string $url, string $key, ?array $json = null, int $maxBytes = self::DEFAULT_MAX_BYTES, array $headers = []): Response
+    public function request(string $method, string $url, string $key, ?array $json = null, int $maxBytes = self::DEFAULT_MAX_BYTES, array $headers = [], ?array $file = null): Response
     {
         ['host' => $host, 'port' => $port, 'ip' => $ip] = $this->assertSafe($url);
 
@@ -41,7 +42,11 @@ class SafeHttp
                 'X-Request-Id' => (string) Str::uuid(),
             ])->timeout(5)->connectTimeout(5)->withOptions($options);
 
-            $response = $json === null ? $request->send($method, $url) : $request->send($method, $url, ['json' => $json]);
+            if ($file !== null) {
+                $response = $request->attach($file['name'], $file['contents'], $file['filename'])->post($url, $json ?? []);
+            } else {
+                $response = $json === null ? $request->send($method, $url) : $request->send($method, $url, ['json' => $json]);
+            }
         } catch (ConnectionException|RequestException) {
             // The library message can carry the URL; the caller only needs to know it failed.
             throw new ExternalCallException('unreachable', 'The remote system could not be reached.');

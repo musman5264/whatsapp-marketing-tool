@@ -23,6 +23,12 @@ class IntegrationHealth
         ])->save();
     }
 
+    /** HTTP 401 from the remote system: its key is invalid. Stays so until a check, a poll or a new key succeeds. */
+    public function markUnlinked(ExternalIntegration $integration): void
+    {
+        $integration->forceFill(['status' => ExternalIntegration::STATUS_UNLINKED, 'next_retry_at' => null])->save();
+    }
+
     public function recordFailure(ExternalIntegration $integration): void
     {
         $failures = $integration->consecutive_failures + 1;
@@ -45,12 +51,19 @@ class IntegrationHealth
         }
 
         try {
-            $ok = $this->http->request('GET', $integration->base_url.'/api/whatsapp/v1/ping', $integration->key, null, 4096)->successful();
+            $response = $this->http->request('GET', $integration->base_url.'/api/whatsapp/v1/ping', $integration->key, null, 4096);
+            $ok = $response->successful();
         } catch (ExternalCallException) {
+            $response = null;
             $ok = false;
         }
 
         $integration->last_ping_at = now();
+        if ($response?->status() === 401) {
+            $this->markUnlinked($integration);
+
+            return false;
+        }
         $ok ? $this->recordSuccess($integration) : $this->recordFailure($integration);
 
         return $ok;

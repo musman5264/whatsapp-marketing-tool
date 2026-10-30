@@ -23,11 +23,12 @@ class EposIntegrationController extends Controller
     {
         $this->authoriseAdmin($request);
 
-        $rows = ExternalIntegration::where('workspace_id', $this->workspaceId($request))->where('type', 'epos')->orderBy('id')->get();
+        $rows = ExternalIntegration::where('workspace_id', $this->workspaceId($request))->whereIn('type', ExternalIntegration::TYPES)->orderBy('id')->get();
 
         return Inertia::render('client/Integrations/Epos', [
             'integrations' => $rows->map(fn (ExternalIntegration $i) => [
                 'id' => $i->id,
+                'type' => $i->type,
                 'name' => $i->name,
                 'host' => parse_url($i->base_url, PHP_URL_HOST),
                 'status' => $i->status,

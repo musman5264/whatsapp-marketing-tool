@@ -64,13 +64,17 @@ class AutomationController extends Controller
     public function epos(Request $request, ManifestFetcher $manifests): JsonResponse
     {
         $isAdmin = $request->user()->isClientAdministrator();
-        $rows = ExternalIntegration::where('workspace_id', $this->workspaceId($request))->where('type', 'epos')->orderBy('id')->get();
+        $workspaceId = $this->workspaceId($request);
+        // E-POS and RentOyee share this step; a system the client has switched off is not offered.
+        $rows = ExternalIntegration::where('workspace_id', $workspaceId)->whereIn('type', ExternalIntegration::TYPES)->orderBy('id')->get()
+            ->filter(fn (ExternalIntegration $i) => ExternalIntegration::enabledFor($workspaceId, $i->type));
 
         $integrations = $rows->map(function (ExternalIntegration $i) use ($manifests, $isAdmin) {
             $manifests->refreshIfStale($i);
 
             return [
                 'id' => $i->id,
+                'type' => $i->type,
                 'name' => $i->name,
                 'manifest_version' => $i->manifest_version,
                 'capabilities' => collect($i->manifest['capabilities'] ?? [])->map(fn ($c) => array_intersect_key($c, array_flip([
