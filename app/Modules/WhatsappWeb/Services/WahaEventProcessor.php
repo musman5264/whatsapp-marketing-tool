@@ -4,6 +4,7 @@ namespace App\Modules\WhatsappWeb\Services;
 
 use App\Events\CallReceived;
 use App\Modules\Automation\Services\AutomationEngine;
+use App\Modules\Integrations\Services\External\ReplyContextHandler;
 use App\Modules\Shared\Models\ChannelAccount;
 use App\Modules\Shared\Models\Contact;
 use App\Modules\Shared\Models\Conversation;
@@ -402,6 +403,12 @@ class WahaEventProcessor
             $data = $poll->payload ?? [];
             $data['votes'][$voter] = $selected;
             $poll->update(['payload' => $data]);
+        }
+
+        // A vote on RentOyee's consent poll is the customer's answer to its open question; automations never see it.
+        $voteId = (string) ($p['vote']['id'] ?? $key);
+        if ($poll && count($selected) === 1 && is_string($selected[0]) && app(ReplyContextHandler::class)->handleVote($poll, $selected[0], $voteId)) {
+            return;
         }
 
         $this->engine->applyPollVote($pollMessageId, $selected);

@@ -59,10 +59,30 @@ class ReplyContextHandler
         }
     }
 
-    private function apply(Message $message, Conversation $conversation, Contact $contact): bool
+    /**
+     * The customer voted on a poll we sent (RentOyee's sharing-consent poll): the chosen option's text is their text
+     * answer. $poll is our outgoing poll message; its conversation is the customer's chat.
+     *
+     * @return bool true when RentOyee dealt with the vote
+     */
+    public function handleVote(Message $poll, string $optionText, string $voteKey): bool
+    {
+        try {
+            $conversation = Conversation::find($poll->getAttribute('conversation_id'));
+            $contact = $conversation ? Contact::find($conversation->getAttribute('contact_id')) : null;
+
+            return $conversation && $contact && $this->apply($poll, $conversation, $contact, $optionText, $voteKey);
+        } catch (\Throwable $e) {
+            Log::warning('external.reply_context_vote_failed', ['message_id' => $poll->id, 'error' => $e->getMessage()]);
+
+            return false;
+        }
+    }
+
+    private function apply(Message $message, Conversation $conversation, Contact $contact, ?string $vote = null, ?string $voteKey = null): bool
     {
         $context = Cache::get(self::key($contact->id));
-        if ($message->getAttribute('direction') !== 'in' || ! is_array($context) || ($context['source'] ?? '') !== 'rentoyee' || empty($context['request_id'])) {
+        if (($vote === null && $message->getAttribute('direction') !== 'in') || ! is_array($context) || ($context['source'] ?? '') !== 'rentoyee' || empty($context['request_id'])) {
             return false;
         }
         $phone = preg_match('/^\+[1-9]\d{6,14}$/', (string) $contact->phone_e164) ? (string) $contact->phone_e164 : null;
@@ -74,7 +94,10 @@ class ReplyContextHandler
         $type = (string) $message->getAttribute('type');
         $params = ['request_id' => (string) $context['request_id']];
         $file = null;
-        if ($type === 'text') {
+        if ($vote !== null) {
+            $capability = self::TEXT_CAPABILITY;
+            $params['value'] = $vote;
+        } elseif ($type === 'text') {
             $capability = self::TEXT_CAPABILITY;
             $params['value'] = (string) $message->getAttribute('body');
         } elseif ($type === 'image' && ($file = $this->photo($message))) {
@@ -83,7 +106,7 @@ class ReplyContextHandler
             return false;
         }
 
-        $result = $this->executor->execute($integration, $capability, $phone, $params, 'replyctx:'.($message->getAttribute('provider_message_id') ?: 'm'.$message->id), $file);
+        $result = $this->executor->execute($integration, $capability, $phone, $params, $vote !== null ? 'replyvote:'.$voteKey : 'replyctx:'.($message->getAttribute('provider_message_id') ?: 'm'.$message->id), $file);
         if ($result['outcome'] === 'no_data') {
             return false;
         }
