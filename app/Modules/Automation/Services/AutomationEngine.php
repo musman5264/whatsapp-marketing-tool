@@ -430,7 +430,7 @@ class AutomationEngine
                     }
                     return $ok('Would call '.strtoupper($data['method'] ?? 'POST').' '.$this->snippet($render($data['url']), 50), ['context_update' => $seed]);
                 })(),
-            'epos' => $ok('Would ask E-POS "'.($data['capability'] ?? '?').'" about this customer (not called in test).', ['context_update' => [(($data['result_var'] ?? '') ?: 'epos') => '{"found":true}']]),
+            'epos', 'rentoyee' => $ok('Would ask '.($type === 'rentoyee' ? 'RentOyee' : 'E-POS').' "'.($data['capability'] ?? '?').'" about this customer (not called in test).', ['context_update' => [(($data['result_var'] ?? '') ?: $type) => '{"found":true}']]),
             'set_variable' => (function () use ($data, $contact, $context, $err, $ok): array {
                 $r = $this->resolveSetVariable($data, $contact, $context);
 
@@ -485,7 +485,7 @@ class AutomationEngine
                 'remove_tag' => $this->executeTagAction($data, $run, 'remove'),
                 'update_contact' => $this->executeUpdateContact($data, $run, $context),
                 'webhook' => $this->executeWebhook($data, $run, $context),
-                'epos' => $this->executeEpos($data, $run, $context),
+                'epos', 'rentoyee' => $this->executeEpos($data, $run, $context, $type),
                 'set_variable' => $this->executeSetVariable($data, $run, $context),
                 'condition' => $this->executeCondition($data, $run, $context),
                 'send_whatsapp' => $this->executeSendWhatsapp($data, $run, $context),
@@ -1106,26 +1106,29 @@ class AutomationEngine
     }
 
     /**
-     * E-POS node: asks the linked EPOS about the customer who is chatting. The customer's number is bound
+     * E-POS and RentOyee nodes (two steps, two different systems, the same machinery): asks the linked system about
+     * the customer who is chatting. The customer's number is bound
      * server-side (see EposExecutor); the node has no URL, header or key. Every problem is a "no data" exit,
      * never a failed run. Branch 'true' = found (or action done), 'false' = not found / no data / not sent.
      */
-    private function executeEpos(array $data, AutomationRun $run, array $context): array
+    private function executeEpos(array $data, AutomationRun $run, array $context, string $type = 'epos'): array
     {
-        $var = preg_replace('/\s+/', '_', trim((string) ($data['result_var'] ?? ''))) ?: 'epos';
+        $var = preg_replace('/\s+/', '_', trim((string) ($data['result_var'] ?? ''))) ?: $type;
         $contact = $run->contact_id ? Contact::find($run->contact_id) : null;
 
-        $query = ExternalIntegration::where('workspace_id', $run->automation->workspace_id)->whereIn('type', ExternalIntegration::TYPES); // E-POS and RentOyee share this step
-        // A saved id that is not in this workspace (imported flow) falls back to the only link, as the builder shows.
+        $query = ExternalIntegration::where('workspace_id', $run->automation->workspace_id)->whereIn('type', ExternalIntegration::TYPES);
+        // A saved id is looked up among both systems (flows made when RentOyee shared the E-POS step still work). A missing or
+        // foreign id (imported flow) falls back to the only link of THIS step's own system, as the builder shows.
+        $own = (clone $query)->where('type', $type);
         $integration = (! empty($data['integration_id']) ? (clone $query)->find($data['integration_id']) : null)
-            ?? ((clone $query)->count() === 1 ? $query->first() : null);
+            ?? ((clone $own)->count() === 1 ? $own->first() : null);
 
         if ($integration && $contact) {
             $params = array_map(fn ($v) => is_string($v) ? $this->renderTokens($v, $contact, $context) : $v, (array) ($data['params'] ?? []));
             $phone = preg_match('/^\+[1-9]\d{6,14}$/', (string) $contact->phone_e164) ? (string) $contact->phone_e164 : null;
             $result = app(EposExecutor::class)->execute($integration, (string) ($data['capability'] ?? ''), $phone, $params, $run->id.':'.$run->current_node_id.':'.$run->logs()->where('node_id', $run->current_node_id)->count());
         } else {
-            $result = ['outcome' => 'no_data', 'message' => 'E-POS is not linked.', 'body' => ['found' => false, 'ok' => false, 'reason' => 'no_data']];
+            $result = ['outcome' => 'no_data', 'message' => ($type === 'rentoyee' ? 'RentOyee' : 'E-POS').' is not linked.', 'body' => ['found' => false, 'ok' => false, 'reason' => 'no_data']];
         }
 
         return [

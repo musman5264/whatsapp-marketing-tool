@@ -32,6 +32,7 @@ _Last updated: 2026-10-29_
 ## Completed (most recent first)
 | ID | Task | Plan / Phase | Completed |
 |----|------|--------------|-----------|
+| T-0073 | RentOyee gets its own flow step, separate from E-POS (tests + build green; browser check at 360/1920px and live check pending) | PLAN-000 / phase-01 | 2026-11-02 |
 | T-0072 | A poll vote answers a RentOyee consent question (tests green; real RentOyee and live WAHA check pending) | PLAN-000 / phase-01 | 2026-11-02 |
 | T-0071 | RentOyee as a second linked system + per-client EPOS / RentOyee switches (built, tests/review skipped by request; migration, real-RentOyee and live check pending) | PLAN-003 / phase-01 | 2026-10-30 |
 | T-0070 | WhatsApp profile photo sent to EPOS (contact.photo_update): job on first message, 30-day refresh, nothing when hidden (tests green; real-EPOS, WAHA and live check pending) | PLAN-003 / phase-01 | 2026-10-29 |

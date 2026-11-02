@@ -63,8 +63,9 @@ function detailLines(data) {
 }
 
 function branchName(type, handle, t) {
-    if (handle === 'true') return type === 'epos' ? t.found : t.yes;
-    if (handle === 'false') return type === 'epos' ? t.noData : t.no;
+    const external = type === 'epos' || type === 'rentoyee';
+    if (handle === 'true') return external ? t.found : t.yes;
+    if (handle === 'false') return external ? t.noData : t.no;
     return t.next;
 }
 

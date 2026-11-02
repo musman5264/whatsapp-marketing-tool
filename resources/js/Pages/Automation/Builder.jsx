@@ -11,14 +11,14 @@ import {
     UserCheck, ExternalLink, MapPin, BarChart3, CalendarClock, Video,
     ClipboardList, ClipboardCheck, Store, Sheet, LayoutTemplate, AlertTriangle, Bell, GripVertical,
     FlaskConical, Loader2, CheckCircle2, MinusCircle, AlertCircle, ChevronDown, SmilePlus,
-    ArrowUpDown, Download, Upload,
+    ArrowUpDown, Download, Upload, KeyRound,
 } from 'lucide-react';
 import { ChannelBrandIcon } from '@/Components/BrandIcons';
 import MediaUpload from '@/Components/MediaUpload';
 import { Link } from '@inertiajs/react';
 import { useTranslation } from 'react-i18next';
 import axios from 'axios';
-import { EposContext, EposFields, eposExitKeys, resolveEpos } from './EposNode';
+import { EXTERNAL_SYSTEMS, EposContext, EposFields, eposExitKeys, resolveEpos } from './EposNode';
 import { outputVariables, pickLabel } from '@/lib/epos';
 import { buildExport, downloadText, fileSafeName, flowToMarkdown } from '@/lib/automationFile';
 import {
@@ -106,8 +106,9 @@ const NODE_DEFS = {
     google_sheets:       { labelKey: 'automation.node_google_sheets',       color: '#0f9d58', bg: '#f0fdf4', icon: Sheet,             category: 'integrations', qr: true },
     google_docs:         { labelKey: 'automation.node_google_docs',         color: '#4285f4', bg: '#eff6ff', icon: FileText,          category: 'integrations', qr: true },
     google_forms:        { labelKey: 'automation.node_google_forms',        color: '#7248b9', bg: '#f5f3ff', icon: ClipboardCheck,    category: 'integrations', qr: true },
-    // Shown in the palette only while the workspace has a linked E-POS.
+    // E-POS and RentOyee are two different systems with their own steps; each is shown in the palette only while the workspace has that system linked.
     epos:                { labelKey: 'automation.node_epos',                color: '#0f766e', bg: '#f0fdfa', icon: Store,             category: 'integrations', qr: true },
+    rentoyee:            { labelKey: 'automation.node_rentoyee',            color: '#c2410c', bg: '#fff7ed', icon: KeyRound,          category: 'integrations', qr: true },
 };
 
 /* Small green "(QR)" tag: this node sends as-is on a personal / QR-linked number. */
@@ -186,7 +187,7 @@ function collectFlowVariables(nodes) {
             if (rv) vars.add(rv);
         }
         if (nt === 'set_variable' && d.variable) vars.add(String(d.variable).trim().replace(/\s+/g, '_'));
-        if (nt === 'epos') vars.add(String(d.result_var ?? '').trim() || 'epos');
+        if (nt === 'epos' || nt === 'rentoyee') vars.add(String(d.result_var ?? '').trim() || nt);
 
         for (const k of TEXT_KEYS) {
             const v = d[k];
@@ -234,7 +235,7 @@ function BaseNode({ id, data, selected }) {
     const defLabel = def ? t(def.labelKey) : nodeType;
     const defColor = def?.color ?? '#6b7280';
     const eposCtx = useContext(EposContext);
-    const isEpos = nodeType === 'epos';
+    const isEpos = nodeType === 'epos' || nodeType === 'rentoyee';
     const epos = isEpos ? resolveEpos(data, eposCtx.integrations) : null;
     // Two exits: a condition is Yes / No; an E-POS step is Found / No data (Sent / Not sent for an action).
     const isCondition = nodeType === 'condition' || isEpos;
@@ -245,7 +246,8 @@ function BaseNode({ id, data, selected }) {
         ? (epos.capability ? pickLabel(epos.capability.label, i18n.language) : data.capability)
         : '';
     const summary = hasLabel ? label : (isEpos ? eposSummary : (configured ? summarizeConfig(data, t) : ''));
-    const eposGone = isEpos && eposCtx.loaded && !eposCtx.failed && (epos.gone || (data.capability && eposCtx.integrations.length === 0));
+    const ownLinks = isEpos ? eposCtx.integrations.filter(i => i.type === nodeType).length : 0;
+    const eposGone = isEpos && eposCtx.loaded && !eposCtx.failed && (epos.gone || (data.capability && ownLinks === 0));
 
     const actionBtnStyle = {
         display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -300,7 +302,7 @@ function BaseNode({ id, data, selected }) {
                     )}
                     {eposGone && (
                         <div role="status" style={{ display: 'flex', alignItems: 'center', gap: 3, marginTop: 2, fontSize: 10, fontWeight: 600, color: '#b45309' }}>
-                            <AlertTriangle size={10} aria-hidden="true" /> {eposCtx.integrations.length === 0 ? t('automation.epos_unlinked_badge') : t('automation.epos_gone_badge')}
+                            <AlertTriangle size={10} aria-hidden="true" /> {ownLinks === 0 ? t(`automation.${nodeType}_unlinked_badge`) : t('automation.epos_gone_badge')}
                         </div>
                     )}
                 </div>
@@ -468,6 +470,7 @@ const FIELD_COMPONENTS = {
     google_docs: GoogleDocsFields,
     google_forms: GoogleFormsFields,
     epos: EposFields,
+    rentoyee: EposFields,
 };
 
 function ConfigPanel({ node, onClose, onChange }) {
@@ -1972,7 +1975,7 @@ function runFlowLint(nodes, edges, automation) {
 
     // An answer marked "alert" has to be used by an E-POS step, or nobody is ever alerted.
     const eposTexts = nodes
-        .filter(n => n.data?.nodeType === 'epos')
+        .filter(n => n.data?.nodeType === 'epos' || n.data?.nodeType === 'rentoyee')
         .flatMap(n => Object.values(n.data?.params ?? {}))
         .filter(v => typeof v === 'string');
     for (const node of nodes) {
@@ -2222,8 +2225,8 @@ function AutomationBuilderInner({ automation: initial }) {
     const eposFields = useMemo(() => {
         const out = new Map();
         for (const n of nodes ?? []) {
-            if (n.data?.nodeType !== 'epos') continue;
-            const v = String(n.data.result_var ?? '').trim() || 'epos';
+            if (n.data?.nodeType !== 'epos' && n.data?.nodeType !== 'rentoyee') continue;
+            const v = String(n.data.result_var ?? '').trim() || n.data.nodeType;
             const cap = resolveEpos(n.data, epos.integrations).capability;
             const tokens = [...outputVariables(cap, v).map(o => o.token), `{{${v}.reason}}`, `{{${v}_status}}`];
             for (const token of tokens) out.set('context.' + token.slice(2, -2), token);
@@ -2422,7 +2425,7 @@ function AutomationBuilderInner({ automation: initial }) {
         cat,
         items: Object.entries(NODE_DEFS).filter(([type, def]) =>
             def.category === cat
-            && (type !== 'epos' || epos.integrations.length > 0)
+            && (!(type in EXTERNAL_SYSTEMS) || epos.integrations.some(i => i.type === type))
             && (q === '' || type.includes(q) || t(def.labelKey).toLowerCase().includes(q))
         ),
     })).filter(g => g.items.length > 0);

@@ -15,11 +15,19 @@ const inputCls = 'w-full rounded-lg border border-gray-200 bg-white px-3 py-2 te
 const labelCls = 'block text-xs font-semibold text-gray-600 mb-1';
 const noteCls = 'text-xs text-gray-500 leading-relaxed';
 
-const eposResultVar = (d) => ((d.result_var ?? '').trim() || 'epos');
+/** E-POS and RentOyee are different systems with their own step; the step's type is the system's integration type. */
+export const EXTERNAL_SYSTEMS = { epos: 'E-POS', rentoyee: 'RentOyee' };
+const systemOf = (d) => (d.nodeType in EXTERNAL_SYSTEMS ? d.nodeType : 'epos');
 
-/** The integration and capability a node points at, plus why they may be missing. */
+const eposResultVar = (d) => ((d.result_var ?? '').trim() || systemOf(d));
+
+/**
+ * The integration and capability a node points at, plus why they may be missing. A step only offers its own
+ * system's links; a saved id of the other system still resolves (flows made when both shared the E-POS step).
+ */
 export function resolveEpos(data, integrations) {
-    const integration = integrations.find((i) => i.id === data.integration_id) ?? (integrations.length === 1 ? integrations[0] : null);
+    const own = integrations.filter((i) => i.type === systemOf(data));
+    const integration = integrations.find((i) => i.id === data.integration_id) ?? (own.length === 1 ? own[0] : null);
     const capability = integration?.capabilities.find((c) => c.key === data.capability) ?? null;
     return { integration, capability, gone: Boolean(data.capability && integration && !capability) };
 }
@@ -162,12 +170,14 @@ function SuggestedReply({ text }) {
 /** Config panel body of the E-POS node. No URL, header or key anywhere. */
 export function EposFields({ d, set, setMany }) {
     const { t, i18n } = useTranslation();
-    const { loaded, failed, integrations, flowVars } = useContext(EposContext);
+    const { loaded, failed, integrations: all, flowVars } = useContext(EposContext);
     const lang = i18n.language;
+    const system = systemOf(d);
+    const integrations = all.filter((i) => i.type === system || i.id === d.integration_id);
 
-    if (!loaded) return <p className={noteCls} aria-live="polite">{t('automation.epos_loading')}</p>;
-    if (failed) return <Notice tone="red">{t('automation.epos_load_failed')}</Notice>;
-    if (integrations.length === 0) return <Notice>{t('automation.epos_not_linked')}</Notice>;
+    if (!loaded) return <p className={noteCls} aria-live="polite">{t(`automation.${system}_loading`)}</p>;
+    if (failed) return <Notice tone="red">{t(`automation.${system}_load_failed`)}</Notice>;
+    if (integrations.length === 0) return <Notice>{t(`automation.${system}_not_linked`)}</Notice>;
 
     const { integration, capability, gone } = resolveEpos(d, integrations);
     const rv = eposResultVar(d);
@@ -206,7 +216,7 @@ export function EposFields({ d, set, setMany }) {
                         id="epos-capability"
                         className={inputCls}
                         value={capability ? d.capability : ''}
-                        onChange={(e) => setMany({ integration_id: integration.id, capability: e.target.value, params: {}, result_var: d.result_var || 'epos' })}
+                        onChange={(e) => setMany({ integration_id: integration.id, capability: e.target.value, params: {}, result_var: d.result_var || system })}
                     >
                         <option value="">{t('automation.epos_question_placeholder')}</option>
                         {groups.map((g) => (
@@ -221,7 +231,7 @@ export function EposFields({ d, set, setMany }) {
                 </div>
             )}
 
-            {gone && <Notice>{t('automation.epos_gone')}</Notice>}
+            {gone && <Notice>{t(`automation.${system}_gone`)}</Notice>}
 
             {capability && (
                 <>
@@ -233,7 +243,7 @@ export function EposFields({ d, set, setMany }) {
 
                     <div>
                         <label className={labelCls} htmlFor="epos-result">{t('automation.epos_save_as')}</label>
-                        <input id="epos-result" className={inputCls} value={d.result_var ?? ''} placeholder="epos" onChange={(e) => set('result_var', e.target.value.replace(/\s/g, '_'))} />
+                        <input id="epos-result" className={inputCls} value={d.result_var ?? ''} placeholder={system} onChange={(e) => set('result_var', e.target.value.replace(/\s/g, '_'))} />
                     </div>
 
                     <p className={noteCls}>{t(capability.kind === 'action' ? 'automation.epos_exits_hint_action' : 'automation.epos_exits_hint_query')}</p>
