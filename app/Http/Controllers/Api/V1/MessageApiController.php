@@ -11,12 +11,14 @@ use App\Modules\Shared\Models\Message;
 use App\Modules\Whatsapp\Exceptions\WhatsappWindowClosedException;
 use App\Modules\Whatsapp\Jobs\SendQueuedWhatsappMessageJob;
 use App\Modules\Whatsapp\Services\CloudApiClient;
+use App\Modules\WhatsappWeb\Services\EngineManager;
 use App\Services\StorageManager;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
 
 class MessageApiController extends WorkspaceScopedController
@@ -44,7 +46,9 @@ class MessageApiController extends WorkspaceScopedController
     public function send(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'contact_id' => ['required', 'integer'],
+            'contact_id' => ['required_without:group_id', 'nullable', 'integer'],
+            // Post into a WhatsApp group instead of to one contact (ERP events): the id from GET /api/v1/groups.
+            'group_id' => ['nullable', 'string', 'regex:/^[A-Za-z0-9@._:+-]{1,190}$/'],
             'channel' => ['required', 'string', 'in:whatsapp,sms,email'],
             'type' => ['nullable', 'string', 'in:text,template,image,video,audio,document,poll'],
             'body' => ['nullable', 'required_if:type,poll', 'string'],
@@ -91,6 +95,10 @@ class MessageApiController extends WorkspaceScopedController
 
         $wsId = $this->workspaceId($request);
 
+        if (! empty($validated['group_id'])) {
+            return $this->sendToGroup($request, $wsId, $validated, $isMedia);
+        }
+
         $contact = Contact::where('workspace_id', $wsId)->find($validated['contact_id']);
         if (! $contact) {
             return response()->json(['error' => 'Contact not found.'], 404);
@@ -125,6 +133,48 @@ class MessageApiController extends WorkspaceScopedController
         }
 
         return response()->json(array_merge(['status' => 'sent'], $result));
+    }
+
+    /**
+     * Post text or media into a WhatsApp group. Sent right away (no queue, no inbox conversation, no message row),
+     * so the answer is final: 200 sent, or 422 with a plain reason. Groups need a WhatsApp Web (QR) number.
+     * shortcut: no message id / webhook / status poll for group posts (the caller treats `sent` as final); add a row if that is needed.
+     *
+     * @param  array<string, mixed>  $v
+     */
+    private function sendToGroup(Request $request, int $wsId, array $v, bool $isMedia): JsonResponse
+    {
+        if ($v['channel'] !== 'whatsapp' || ! empty($v['template_name']) || ($v['type'] ?? null) === 'poll') {
+            return response()->json(['error' => 'A group post can only be text or a file on the whatsapp channel.'], 422);
+        }
+        if (! $isMedia && trim((string) ($v['body'] ?? '')) === '') {
+            throw ValidationException::withMessages(['body' => 'A group text post needs a `body`.']);
+        }
+
+        $account = ChannelAccount::where('workspace_id', $wsId)
+            ->where('channel', 'whatsapp')->where('status', 'active')->where('provider', 'whatsapp_web')
+            ->when(! empty($v['channel_account_id']), fn ($q) => $q->whereKey($v['channel_account_id']))
+            ->orderBy('id')->first();
+        if (! $account || ! $account->phone_number_id) {
+            return response()->json(['error' => 'Groups can only be posted from a connected WhatsApp Web (QR) number; this workspace has none (a Cloud API number cannot post to groups).'], 422);
+        }
+
+        try {
+            $adapter = app(EngineManager::class)->adapter();
+            if ($isMedia) {
+                [$type, , $payload] = $this->buildMediaMessage($request, $wsId, true, $v);
+                $providerId = $adapter->sendMedia($account->phone_number_id, $v['group_id'], $type, (string) ($payload['link'] ?? ''), $payload['caption'] ?? null, $payload['filename'] ?? null);
+            } else {
+                $providerId = $adapter->sendText($account->phone_number_id, $v['group_id'], (string) $v['body']);
+            }
+        } catch (\Throwable $e) {
+            // The group id is not logged (privacy); WAHA's own words are passed on so the admin sees why.
+            Log::warning('api.group_message.failed', ['workspace_id' => $wsId, 'error' => mb_substr($e->getMessage(), 0, 300)]);
+
+            return response()->json(['error' => 'WhatsApp did not accept the group post (is the number still a member, and may it post there?): '.mb_substr($e->getMessage(), 0, 300)], 422);
+        }
+
+        return response()->json(['status' => 'sent', 'provider_message_id' => $providerId]);
     }
 
     /**

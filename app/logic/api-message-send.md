@@ -95,3 +95,9 @@ The test queue is `sync`, so the job runs inline and the first check already see
   are not checked on a running engine. `poll.vote.failed` (undecryptable vote) is not subscribed.
 - Behaviour against the live queue worker, live WAHA and the client's real HTTP timeout is not yet checked
   (needs a deploy and a test send).
+
+## WhatsApp groups (added 2026-11-04, for the ERP)
+- `GET /api/v1/groups` (ability `messages:write`) → `{"data":[{"id":"…@g.us","name":"…"}]}`, read live from WAHA `GET /api/{session}/groups` (`subject` = name). Needs an active `whatsapp_web` channel account; none → empty list; WAHA failure → `502`.
+- `POST /api/v1/messages/send` with `group_id` instead of `contact_id` (no `phone`, no contact lookup): text, or a file via `media_url` / `attachment`. Polls, templates and non-whatsapp channels are refused (`422`). The chat id is passed through to WAHA unchanged (`WahaAdapter::chatId`).
+- Sent **synchronously**: `200 {"status":"sent","provider_message_id":…}` or `422 {"error":…}` (no QR number, or WAHA's refusal text: not a member, admins-only…). No message row, no inbox conversation, no `message_id`, no `message.sent`/`message.failed` webhook and nothing to poll — the ERP treats `sent` as final. The group id is never logged.
+- Not verified against a live WAHA session: whether the engine lists groups / posts when only admins may post, and whether the group id survives a reconnect (questions (a)–(c) of the ERP guide). Cloud API numbers cannot post to groups.

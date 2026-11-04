@@ -117,6 +117,29 @@ class WahaAdapter implements EngineAdapter
         return is_array($rows) ? array_values(array_filter($rows, 'is_array')) : [];
     }
 
+    /**
+     * GET /api/{session}/groups — the groups this number is a member of (id like 123…@g.us, name = `subject`).
+     *
+     * @return list<array{id: string, name: string}>
+     */
+    public function listGroups(string $session): array
+    {
+        $resp = $this->client->get("/api/{$session}/groups", ['exclude' => 'participants']);
+        if (! $resp->successful()) {
+            throw new \RuntimeException("WAHA groups failed ({$resp->status()}): ".$resp->body());
+        }
+
+        $out = [];
+        foreach ((array) $resp->json() as $g) {
+            $id = is_array($g) ? (string) ($g['id']['_serialized'] ?? $g['id'] ?? '') : '';
+            if (str_ends_with($id, '@g.us')) {
+                $out[] = ['id' => $id, 'name' => (string) ($g['subject'] ?? $g['name'] ?? $id)];
+            }
+        }
+
+        return $out;
+    }
+
     /** @return list<array<string,mixed>> */
     public function chatMessages(string $session, string $chatId, int $limit): array
     {
@@ -395,6 +418,11 @@ class WahaAdapter implements EngineAdapter
 
     private function chatId(string $toE164): string
     {
+        // A WhatsApp group id (123…@g.us) is already a chat id; only phone numbers need the @c.us suffix.
+        if (str_ends_with($toE164, '@g.us')) {
+            return $toE164;
+        }
+
         return preg_replace('/\D+/', '', $toE164).'@c.us';
     }
 

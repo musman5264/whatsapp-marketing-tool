@@ -75,6 +75,10 @@ interface EngineAdapter
     public function logout(string $session): void;
 
     /** Send a plain-text message. Returns the engine message id. */
+    /** Groups the number is a member of. @return list<array{id: string, name: string}> */
+    public function listGroups(string $session): array;
+
+    /** $toE164 may also be a group id (…@g.us). */
     public function sendText(string $session, string $toE164, string $body): string;
 
     /**

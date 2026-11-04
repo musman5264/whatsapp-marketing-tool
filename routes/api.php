@@ -137,6 +137,8 @@ Route::prefix('v1')->middleware(['auth:sanctum', 'throttle:api', 'demo', LogApiR
         ->middleware(['api.ability:messages:write', 'throttle:60,1']);
     Route::get('/messages/{id}', [MessageApiController::class, 'show'])
         ->middleware('api.ability:messages:write');
+    Route::get('/groups', [\App\Http\Controllers\Api\V1\GroupApiController::class, 'index'])
+        ->middleware(['api.ability:messages:write', 'throttle:30,1']);
 
     // ─── Conversations (conversations:read) ───────────────────────────────────
     Route::get('/conversations', [ConversationApiController::class, 'index'])
