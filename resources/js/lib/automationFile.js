@@ -63,7 +63,7 @@ function detailLines(data) {
 }
 
 function branchName(type, handle, t) {
-    const external = type === 'epos' || type === 'rentoyee';
+    const external = ['epos', 'rentoyee', 'erp'].includes(type);
     if (handle === 'true') return external ? t.found : t.yes;
     if (handle === 'false') return external ? t.noData : t.no;
     return t.next;

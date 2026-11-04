@@ -30,7 +30,13 @@ use Illuminate\Support\Carbon;
  */
 class ExternalIntegration extends Model
 {
-    public const TYPES = ['epos', 'rentoyee'];
+    public const TYPES = ['epos', 'rentoyee', 'erp'];
+
+    /** Name shown to people (flow messages, logs). */
+    public static function label(string $type): string
+    {
+        return ['epos' => 'E-POS', 'rentoyee' => 'RentOyee', 'erp' => 'Designer ERP'][$type] ?? $type;
+    }
 
     public const STATUS_CONNECTED = 'connected';
 

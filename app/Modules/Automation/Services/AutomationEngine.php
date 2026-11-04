@@ -430,7 +430,7 @@ class AutomationEngine
                     }
                     return $ok('Would call '.strtoupper($data['method'] ?? 'POST').' '.$this->snippet($render($data['url']), 50), ['context_update' => $seed]);
                 })(),
-            'epos', 'rentoyee' => $ok('Would ask '.($type === 'rentoyee' ? 'RentOyee' : 'E-POS').' "'.($data['capability'] ?? '?').'" about this customer (not called in test).', ['context_update' => [(($data['result_var'] ?? '') ?: $type) => '{"found":true}']]),
+            'epos', 'rentoyee', 'erp' => $ok('Would ask '.ExternalIntegration::label($type).' "'.($data['capability'] ?? '?').'" about this customer (not called in test).', ['context_update' => [(($data['result_var'] ?? '') ?: $type) => '{"found":true}']]),
             'set_variable' => (function () use ($data, $contact, $context, $err, $ok): array {
                 $r = $this->resolveSetVariable($data, $contact, $context);
 
@@ -485,7 +485,7 @@ class AutomationEngine
                 'remove_tag' => $this->executeTagAction($data, $run, 'remove'),
                 'update_contact' => $this->executeUpdateContact($data, $run, $context),
                 'webhook' => $this->executeWebhook($data, $run, $context),
-                'epos', 'rentoyee' => $this->executeEpos($data, $run, $context, $type),
+                'epos', 'rentoyee', 'erp' => $this->executeEpos($data, $run, $context, $type),
                 'set_variable' => $this->executeSetVariable($data, $run, $context),
                 'condition' => $this->executeCondition($data, $run, $context),
                 'send_whatsapp' => $this->executeSendWhatsapp($data, $run, $context),
@@ -1128,7 +1128,7 @@ class AutomationEngine
             $phone = preg_match('/^\+[1-9]\d{6,14}$/', (string) $contact->phone_e164) ? (string) $contact->phone_e164 : null;
             $result = app(EposExecutor::class)->execute($integration, (string) ($data['capability'] ?? ''), $phone, $params, $run->id.':'.$run->current_node_id.':'.$run->logs()->where('node_id', $run->current_node_id)->count());
         } else {
-            $result = ['outcome' => 'no_data', 'message' => ($type === 'rentoyee' ? 'RentOyee' : 'E-POS').' is not linked.', 'body' => ['found' => false, 'ok' => false, 'reason' => 'no_data']];
+            $result = ['outcome' => 'no_data', 'message' => ExternalIntegration::label($type).' is not linked.', 'body' => ['found' => false, 'ok' => false, 'reason' => 'no_data']];
         }
 
         return [

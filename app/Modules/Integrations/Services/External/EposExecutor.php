@@ -184,7 +184,7 @@ class EposExecutor
         if ($integration->consecutive_failures > 0) {
             $this->health->recordSuccess($integration);
         }
-        $version = (string) $response->header('X-Epos-Manifest-Version');
+        $version = (string) ($response->header('X-Epos-Manifest-Version') ?: $response->header('X-Erp-Manifest-Version')); // the ERP names it X-Erp-…
         if ($version !== '' && $version !== $integration->manifest_version) {
             try {
                 $this->manifests->refresh($integration);

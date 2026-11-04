@@ -16,7 +16,7 @@ const labelCls = 'block text-xs font-semibold text-gray-600 mb-1';
 const noteCls = 'text-xs text-gray-500 leading-relaxed';
 
 /** E-POS and RentOyee are different systems with their own step; the step's type is the system's integration type. */
-export const EXTERNAL_SYSTEMS = { epos: 'E-POS', rentoyee: 'RentOyee' };
+export const EXTERNAL_SYSTEMS = { epos: 'E-POS', rentoyee: 'RentOyee', erp: 'Designer ERP' };
 const systemOf = (d) => (d.nodeType in EXTERNAL_SYSTEMS ? d.nodeType : 'epos');
 
 const eposResultVar = (d) => ((d.result_var ?? '').trim() || systemOf(d));

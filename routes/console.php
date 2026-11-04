@@ -24,10 +24,10 @@ Schedule::call(function () {
     Cache::put(CronSetupController::HEARTBEAT_KEY, now()->toIso8601String(), now()->addDay());
 })->everyMinute()->name('scheduler-heartbeat');
 
-// RentOyee: ping every linked system every 5 minutes; a changed manifest_version re-reads the question list
+// RentOyee and the Designer ERP: ping every linked system every 5 minutes; a changed manifest_version re-reads the question list
 // and a 401 marks the link unlinked. Switched-off clients are skipped.
 Schedule::call(function () {
-    \App\Modules\Integrations\Models\ExternalIntegration::where('type', 'rentoyee')->get()->each(function ($integration) {
+    \App\Modules\Integrations\Models\ExternalIntegration::whereIn('type', ['rentoyee', 'erp'])->get()->each(function ($integration) {
         if (\App\Modules\Integrations\Models\ExternalIntegration::enabledFor((int) $integration->workspace_id, $integration->type)) {
             app(\App\Modules\Integrations\Services\External\ManifestFetcher::class)->pollVersion($integration);
         }
