@@ -78,6 +78,25 @@ class DeployScriptTest extends TestCase
         $this->assertFalse($r['json']['git_initialized']);
     }
 
+    /** T-0074: a command whose output is not valid UTF-8 made json_encode return false, so the body was empty. */
+    #[Test]
+    public function command_output_with_invalid_utf8_still_returns_json(): void
+    {
+        file_put_contents(
+            $this->tmpDir.'/public/deploy.config.php',
+            "<?php return ['DEPLOY_KEY' => 'right-key', 'REPO_URL_SSH' => '', 'REPO_URL_HTTPS' => '', 'BRANCH' => 'main'];"
+        );
+
+        $r = $this->invoke([
+            'key' => 'right-key', 'key2' => 'right-key', 'action' => 'cmd',
+            'command' => '"'.PHP_BINARY.'" -r "echo \'ok \'.chr(195);"',
+        ]);
+
+        $this->assertIsArray($r['json'], 'body was: '.var_export($r['raw'], true));
+        $this->assertSame('cmd', $r['json']['action']);
+        $this->assertStringContainsString('ok', $r['json']['output']);
+    }
+
     #[Test]
     public function unknown_action_is_rejected(): void
     {

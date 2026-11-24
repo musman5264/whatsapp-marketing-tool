@@ -31,10 +31,15 @@ Run from the **Run** box (Admin → Deployment → Advanced) or from the cPanel 
 | `php artisan whatsapp-web:lid-map <lid> <phone> --session=<name> --apply` | second key | Records the mapping and moves the messages (writes live data) | Only after the dry run |
 | `php artisan queue:retry all` | second key | Re-runs **every** failed job. Outbound webhooks are sent again to the client endpoint | Only after the cause is fixed. Re-running a webhook that a receiver rejects just fails again |
 | `php artisan queue:retry <id>` | second key | Re-runs one failed job by its id (from `queue:failed`) | Same caution as above |
+| `php artisan queue:empty-all` | second key | Dry run: counts failed jobs and waiting jobs on every queue (`default, whatsapp, broadcast, automation, social, leads, ai`) of the default and the old `database` connection (`app/Modules/Deployment/Console/EmptyQueuesCommand.php`) | Before emptying |
+| `php artisan queue:empty-all --failed-only --apply` | second key | Deletes the failed-jobs list only. The Run box asks for confirmation | When failed jobs are only noise |
+| `php artisan queue:empty-all --apply` | second key | Deletes failed jobs **and every waiting job** (queued sends, automation runs, webhooks). Gone for good. Asks for confirmation. A connection that cannot be reached (Redis down) is reported and skipped | Only when the queue must start empty |
 | `php artisan media:fix-links` | second key | Counts saved photo links that use the integer conversation id (dry run) | Before a repair |
 | `php artisan media:fix-links --apply` | second key | Rewrites those links in the database (writes live data) | After the dry run and a deploy of 6282223 |
 | `php artisan media:make-private` | second key | Dry run: lists old public media files | Before a move |
 | `php artisan media:make-private --apply` | second key | Moves old public media to the private disk and rewrites links | Only after a dry run |
+
+**Empty reply from the deploy script (HTTP 200, empty body):** `public/deploy.php` `out()` used plain `json_encode`, which returns `false` for output that is not valid UTF-8, so nothing was sent. It now substitutes the bad bytes and, if encoding still fails, sends an error JSON (`DeployScriptTest::command_output_with_invalid_utf8_still_returns_json`). The fix only helps once `deploy.php` on the **target server** is updated. `DeployClient` also words an empty body differently from a non-JSON one. Unverified on live: which command log 192 was, and whether invalid UTF-8 was the cause there; a PHP fatal with errors hidden gives the same symptom.
 
 **Avoid on the Run box:** `queue:flush` and `queue:forget` (they delete failed jobs for good), and `tinker` (runs arbitrary PHP). With the second key, `public/deploy.php` runs any command, so nothing stops these there. Run them only from the cPanel terminal, after a backup.
 

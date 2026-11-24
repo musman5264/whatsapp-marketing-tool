@@ -98,7 +98,12 @@ function run(string $cmd, ?string $cwd = null): array
 
 function out(array $data): void
 {
-    echo json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
+    // Command output can hold bytes that are not valid UTF-8. Plain json_encode() then returns false
+    // and `echo false` sends an empty body with HTTP 200, so replace the bad bytes instead.
+    $json = json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE);
+    echo $json !== false
+        ? $json
+        : json_encode(['ok' => false, 'error' => 'deploy.php could not encode its result: ' . json_last_error_msg()]);
     exit;
 }
 

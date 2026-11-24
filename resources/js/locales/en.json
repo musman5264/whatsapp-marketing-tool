@@ -1961,6 +1961,7 @@
         "danger_zone": "Danger zone",
         "lock_down": "Lock down (remove risky helper files)",
         "remove_script": "Remove deploy script",
+        "confirm_empty_queues": "Delete queue jobs for good? This removes failed jobs and, unless the command says --failed-only, every waiting job (queued sends, automation runs, webhooks). It cannot be undone.",
         "confirm_cleanup": "Remove common risky helper files (adminer.php, phpinfo.php, etc.) from the server?",
         "confirm_selfdelete": "Delete deploy.php from the server? This disables the entire deployment manager until you re-upload it.",
         "history": "Deployment history",

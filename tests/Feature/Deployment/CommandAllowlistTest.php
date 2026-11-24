@@ -43,6 +43,7 @@ class CommandAllowlistTest extends TestCase
             // Re-sends webhooks or writes live data: always behind the second key.
             'queue retry all' => ['php artisan queue:retry all'],
             'queue flush' => ['php artisan queue:flush'],
+            'queue empty all' => ['php artisan queue:empty-all --apply'],
             'media fix links apply' => ['php artisan media:fix-links --apply'],
             'media make private apply' => ['php artisan media:make-private --apply'],
             'whatsapp web sync' => ['php artisan whatsapp-web:sync'],

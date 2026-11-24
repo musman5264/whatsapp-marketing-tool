@@ -32,6 +32,8 @@ _Last updated: 2026-10-29_
 ## Completed (most recent first)
 | ID | Task | Plan / Phase | Completed |
 |----|------|--------------|-----------|
+| T-0075 | Clear failed jobs and empty all queues from the Run box: queue:empty-all, dry run by default, behind the deploy key (tests green; browser, Redis and live check pending) | PLAN-000 / phase-01 | 2026-11-24 |
+| T-0074 | Deploy script sent an empty body (HTTP 200) when command output was not valid UTF-8; now valid JSON (test first; target-server update and live check pending) | PLAN-000 / phase-01 | 2026-11-24 |
 | T-0073 | RentOyee gets its own flow step, separate from E-POS (tests + build green; browser check at 360/1920px and live check pending) | PLAN-000 / phase-01 | 2026-11-02 |
 | T-0072 | A poll vote answers a RentOyee consent question (tests green; real RentOyee and live WAHA check pending) | PLAN-000 / phase-01 | 2026-11-02 |
 | T-0071 | RentOyee as a second linked system + per-client EPOS / RentOyee switches (built, tests/review skipped by request; migration, real-RentOyee and live check pending) | PLAN-003 / phase-01 | 2026-10-30 |
@@ -92,5 +94,5 @@ _Last updated: 2026-10-29_
 | PLAN-002-private-media | Chat media off the public disk; signed webhook media | phase-01-private-media | 4 / 5 |
 | PLAN-003-epos-integration | Manifest-driven EPOS link: API, executor, builder node, inbox panel | phase-01-integrations-api | 3 / 4 |
 
-Next task ID: T-0072   (T-0006 and T-0007 are also in tasks/working from another session; IDs are never reused)
+Next task ID: T-0076   (T-0006 and T-0007 are also in tasks/working from another session; IDs are never reused)
 Next plan ID: PLAN-004

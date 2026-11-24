@@ -45,7 +45,9 @@ class DeployClient
                 'ok' => false,
                 'configured' => true,
                 'status' => $resp->status(),
-                'error' => 'The deploy script returned a non-JSON response (HTTP '.$resp->status().'). Check the URL.',
+                'error' => trim($resp->body()) === ''
+                    ? 'The deploy script returned an empty response (HTTP '.$resp->status().'). The URL is reachable, so the script stopped without output (a PHP error or command output it could not encode). Check storage/logs and the web server error log on that server.'
+                    : 'The deploy script returned a non-JSON response (HTTP '.$resp->status().'). Check the URL.',
                 'body' => mb_substr((string) $resp->body(), 0, 1000),
             ];
         }

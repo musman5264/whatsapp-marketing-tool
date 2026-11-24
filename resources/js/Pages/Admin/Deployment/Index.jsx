@@ -149,10 +149,12 @@ export default function DeploymentIndex({ settings, localGit, lastDeploy, histor
         });
     };
 
-    const runCmd = () =>
-        run('cmd', async () =>
+    const runCmd = () => {
+        if (/queue:empty-all.*--apply/.test(cmd) && !confirm(t('deployment.confirm_empty_queues'))) return;
+        return run('cmd', async () =>
             api('admin.deployment.run-command', { method: 'POST', body: { command: cmd, confirm_key: confirmKey || undefined } }),
         );
+    };
 
     const copyKey = async () => {
         try {
@@ -374,6 +376,9 @@ export default function DeploymentIndex({ settings, localGit, lastDeploy, histor
                             <option>php artisan media:fix-links --apply</option>
                             <option>php artisan media:make-private</option>
                             <option>php artisan media:make-private --apply</option>
+                            <option>php artisan queue:empty-all</option>
+                            <option>php artisan queue:empty-all --failed-only --apply</option>
+                            <option>php artisan queue:empty-all --apply</option>
                         </optgroup>
                     </select>
 
